@@ -1,4 +1,3 @@
-
 ## PRD: Above Repo (VS Code Extension)
 
 **1. Introduction & Goal**
@@ -9,7 +8,7 @@ The goal is to create a Visual Studio Code extension that replicates the core fu
 
 Here are the essential features for the initial version:
 
-**2.1. File Selection (Activity Bar View)**
+**2.1. File Selection (Webview Panel - Explorer Tab)**
 
 Status: Done
 
@@ -26,29 +25,36 @@ Status: Done
 * **Requirement 2.1.4: Search/Filter (Basic):** Provide a search/filter bar within the custom view to filter the files/folders displayed in the tree by name.
 * **Requirement 2.1.5: Refresh Tree:** Include a refresh button in the view's toolbar to manually reload the file tree, reflecting external changes not automatically picked up by VS Code's file watcher.
 
-**2.2. Context Building & Prompt Generation (Webview Panel)**
+**2.2. Context Building & Prompt Generation (Webview Panel - Context Tab)**
 
 Status: In Progress
 
-* **Requirement 2.2.1: Open Composer Command:** Provide a command (e.g., `aboveRepo.openComposer`) accessible via the Command Palette and potentially a button in the Activity Bar view. This command opens a Webview Panel.
-* **Requirement 2.2.2: Selected Files Display:** The Webview Panel should display a list or summary of the currently selected files (from the Activity Bar view) that will be included in the context.
-* **Requirement 2.2.3: Generate `<file_map>`:** Automatically generate an XML `<file_map>` tag containing the hierarchical structure of *only* the selected files and folders, using relative paths from the workspace root (`vscode.workspace.workspaceFolders[0].uri.fsPath`).
-* **Requirement 2.2.4: Generate `<file_contents>`:**
+The **Context Tab** in the Webview Panel is dedicated to building the prompt for the LLM. It includes the following features:
+
+* **Requirement 2.2.1: Selected Files Display:** Display a list or summary of the currently selected files (from the Activity Bar view) that will be included in the context.
+* **Requirement 2.2.2: Generate `<file_map>`:** Automatically generate an XML `<file_map>` tag containing the hierarchical structure of *only* the selected files and folders, using relative paths from the workspace root (`vscode.workspace.workspaceFolders[0].uri.fsPath`).
+* **Requirement 2.2.3: Generate `<file_contents>`:**
   * Read the content of each *selected* file using `vscode.workspace.fs.readFile`.
   * Format the content within the `<file_contents>` tag, clearly marking each file with its relative path (consistent with `<file_map>`) and enclosing the content, potentially using markdown code fences.
-* **Requirement 2.2.5: Include `<xml_formatting_instructions>`:** Embed the fixed, detailed XML formatting instructions into the generated prompt within the Webview Panel.
-* **Requirement 2.2.6: User Instructions Input:** Provide a `<textarea>` in the Webview Panel for the user's specific instructions (`<user_instructions>` tag content).
-* **Requirement 2.2.7: Copy to Clipboard:**
-  * Implement a "Copy Prompt" button in the Webview Panel.
-  * When clicked, assemble the full prompt string: `<file_map>`, `<file_contents>`, `<xml_formatting_instructions>`, `<user_instructions>`.
-  * Copy the complete string to the system clipboard using `vscode.env.clipboard.writeText`.
-* **Requirement 2.2.8: Token Estimation (Optional but useful):** Display an approximate token count for the generated prompt context within the Webview Panel or the Status Bar.
+* **Requirement 2.2.4: Include `<xml_formatting_instructions>`:** Embed the fixed, detailed XML formatting instructions into the generated prompt within the Webview Panel (potentially hidden by default but included in one of the copy actions).
+* **Requirement 2.2.5: User Instructions Input & Management:**
+  * Provide a `<textarea>` in the Webview Panel for the user's specific instructions (`<user_instructions>` tag content).
+  * Implement a simple prompt management system:
+    * A way to save the current content of the instructions textarea as a named prompt.
+    * A dropdown or list to select from previously saved prompts, populating the textarea.
+    * A mechanism to delete saved prompts.
+* **Requirement 2.2.6: Copy to Clipboard Buttons:**
+  * Implement a "Copy" button: Copies `<file_map>`, `<file_contents>`, and `<user_instructions>` to the clipboard.
+  * Implement an "XML Copy" button: Copies `<file_map>`, `<file_contents>`, `<xml_formatting_instructions>`, and `<user_instructions>` to the clipboard. Use `vscode.env.clipboard.writeText` for both.
+* **Requirement 2.2.7: Token Estimation:** Display an approximate token count for the generated prompt context within the Webview Panel or the Status Bar.
 
-**2.3. Applying LLM Changes (Webview Panel)**
+**2.3. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: Todo
 
-* **Requirement 2.3.1: AI Response Input:** Provide a `<textarea>` in the Webview Panel (potentially in a separate "Apply Changes" tab or section) for the user to paste the XML-formatted LLM response.
+The **Apply Tab** in the Webview Panel is dedicated to applying changes suggested by the LLM. It includes the following features:
+
+* **Requirement 2.3.1: AI Response Input:** Provide a `<textarea>` in the Webview Panel for the user to paste the XML-formatted LLM response.
 * **Requirement 2.3.2: Parse LLM Response:**
   * Implement logic (within the Webview or extension host) to parse the pasted XML, specifically looking for `<file>` tags and their `path` and `action` attributes.
   * Extract `<search>` and `<content>` blocks for `modify` actions.
@@ -69,18 +75,17 @@ Status: Todo
 
 **3. User Interface (UI) / User Experience (UX)**
 
-Status: Todo
-
 * **Integration:** Leverage standard VS Code UI components: Activity Bar, Custom TreeView, Webview Panel, Status Bar, Notifications, Command Palette.
 * **Layout:**
-  * Activity Bar View for persistent file selection.
-  * Webview Panel (modal or editor tab) for composing prompts and applying changes.
+  * **Activity Bar View:** Persistent file selection.
+  * **Webview Panel (Tabs):**
+    * **Explorer Tab:** Displays the file tree for selection.
+    * **Context Tab:** Composes prompts for the LLM.
+    * **Apply Tab:** Applies changes from the LLM.
 * **Responsiveness:** Use asynchronous operations (`async/await`) for all file system access and potentially long-running tasks (parsing, context generation) to keep the UI responsive. Use `vscode.Progress` API for long operations.
 * **Consistency:** Follow VS Code UI/UX guidelines.
 
 **4. Technical Considerations**
-
-Status: Todo
 
 * **Language:** TypeScript (standard for VS Code extensions).
 * **Core API:** `vscode` namespace (especially `vscode.workspace`, `vscode.window`, `vscode.commands`, `vscode.Uri`, `vscode.TreeView`, `vscode.WebviewPanel`, `vscode.env`).
@@ -88,3 +93,80 @@ Status: Todo
 * **Webview Communication:** Use `webview.postMessage` and `extensionContext.webviewView.webview.onDidReceiveMessage` / `panel.webview.onDidReceiveMessage` for communication between the Webview UI and the extension host logic.
 * **XML Parsing:** Use a reliable JavaScript/Node.js XML parsing library (e.g., `fast-xml-parser` or standard `DOMParser` within the webview).
 * **State Management:** Manage the state of selected files effectively (e.g., using `extensionContext.workspaceState`).
+
+**5. Sample XML Output**
+
+``````xml
+<file_map>
+/Users/minhthanh/Work/Side/aboverepo
+└── src
+    ├── extension.ts
+    └── fileExplorerWebviewProvider.ts
+
+</file_map>
+</sample-file-map>
+
+<file_contents>
+File: /Users/minhthanh/Work/Side/aboverepo/src/extension.ts
+
+```ts
+import * as vscode from 'vscode'
+import { FileExplorerWebviewProvider } from './fileExplorerWebviewProvider'
+export function activate(context: vscode.ExtensionContext) {
+ console.log('Congratulations, your extension "aboverepo" is now active!')
+
+ const provider = new FileExplorerWebviewProvider(context.extensionUri)
+ context.subscriptions.push(
+  vscode.window.registerWebviewViewProvider(
+   FileExplorerWebviewProvider.viewType,
+   provider,
+  ),
+ )
+}
+```
+
+File: /Users/minhthanh/Work/Side/aboverepo/src/fileExplorerWebviewProvider.ts
+```ts
+// The module 'vscode' contains the VS Code extensibility API
+// Import the module and reference it with the alias vscode in your code below
+import * as vscode from 'vscode'
+import * as path from 'node:path'
+import * as fs from 'node:fs/promises' // Use promises version of fs
+
+// Define the structure expected by the vscode-tree component
+interface VscodeTreeAction {
+ icon: string
+ actionId: string
+ tooltip: string
+}
+
+interface VscodeTreeItem {
+ label: string // File/Folder name
+ value: string // Use relative path as the value
+ subItems?: VscodeTreeItem[] // Children for folders
+ open?: boolean // Default state for folders (optional)
+ selected?: boolean // Selection state (optional)
+ icons: {
+  branch: string
+  leaf: string
+  open: string
+ }
+ // Add decorations based on VS Code Tree item structure
+ decorations?: {
+  badge?: string | number
+  tooltip?: string
+  iconPath?:
+   | string
+   | vscode.Uri
+   | { light: string | vscode.Uri; dark: string | vscode.Uri }
+  color?: string | vscode.ThemeColor
+  // Any other properties the vscode-tree component might support for decorations
+ }
+ actions?: VscodeTreeAction[] // Actions for the item
+}
+```
+
+</file_contents>
+
+``````
+

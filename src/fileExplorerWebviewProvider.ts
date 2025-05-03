@@ -240,12 +240,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	<vscode-tabs selected-index="0">
 		<vscode-tab-header slot="header">Explorer</vscode-tab-header>
 		<vscode-tab-panel>
-			<div style="padding-top: 20px; padding-bottom: 10px;">
-				<button id="refresh-button">Refresh</button>
-				<input type="text" id="search-input" placeholder="Search files...">
-				<vscode-progress-ring id="progress-ring" style="display: none;"></vscode-progress-ring>
-				<vscode-tree id="file-tree-container"></vscode-tree>
-			</div>
+			<h2>Files Explorer</h2>
+			<button id="refresh-button" style="margin-right: 10px;">Refresh</button>
+			<input type="text" id="search-input" placeholder="Search files...">
+			<vscode-progress-ring id="progress-ring" style="display: none;"></vscode-progress-ring>
+			<vscode-tree id="file-tree-container"></vscode-tree>
 		</vscode-tab-panel>
 
 		<vscode-tab-header slot="header">Context</vscode-tab-header>
