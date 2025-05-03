@@ -11,7 +11,7 @@ Here are the essential features for the initial version:
 
 **2.1. File Selection (Activity Bar View)**
 
-Status: Todo
+Status: Done
 
 * **Requirement 2.1.1: Activate via Activity Bar:** The extension should add an icon to the VS Code Activity Bar. Clicking this icon reveals a custom view.
 * **Requirement 2.1.2: Workspace File Tree View:** Display the file and folder structure of the *currently opened* VS Code workspace in the custom view using the `vscode.TreeView` API.
@@ -28,7 +28,7 @@ Status: Todo
 
 **2.2. Context Building & Prompt Generation (Webview Panel)**
 
-Status: Todo
+Status: In Progress
 
 * **Requirement 2.2.1: Open Composer Command:** Provide a command (e.g., `aboveRepo.openComposer`) accessible via the Command Palette and potentially a button in the Activity Bar view. This command opens a Webview Panel.
 * **Requirement 2.2.2: Selected Files Display:** The Webview Panel should display a list or summary of the currently selected files (from the Activity Bar view) that will be included in the context.

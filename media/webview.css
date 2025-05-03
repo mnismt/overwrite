@@ -1,0 +1,88 @@
+/* Basic Reset */
+body,
+h1,
+button,
+input,
+div,
+ul,
+li,
+span {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+}
+
+body {
+  padding: 10px;
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+button,
+input[type='text'] {
+  /* Target text input specifically */
+  margin-bottom: 10px;
+  padding: 5px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground); /* Added for input text color */
+}
+
+button {
+  cursor: pointer;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+input[type='text'] {
+  width: calc(100% - 12px); /* Account for padding and border */
+}
+
+#file-tree-container {
+  margin-top: 10px;
+  /* Remove dashed border */
+  /* border: 1px dashed var(--vscode-editorHint-foreground); */
+  min-height: 100px;
+  padding: 0; /* Remove padding to align list */
+}
+
+/* File Tree Styles */
+.file-tree-list {
+  list-style: none;
+  padding-left: 0; /* Remove default ul padding */
+}
+
+.file-tree-item {
+  display: flex; /* Use flexbox for alignment */
+  align-items: center; /* Vertically center items */
+  padding: 2px 0; /* Add some vertical spacing */
+  cursor: default; /* Change cursor for items */
+}
+
+.file-checkbox {
+  margin-right: 6px; /* Space between checkbox and icon */
+  flex-shrink: 0; /* Prevent checkbox from shrinking */
+}
+
+.codicon {
+  margin-right: 4px; /* Space between icon and label */
+  font-size: var(--vscode-font-size); /* Match editor font size */
+  flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+.file-label {
+  white-space: nowrap; /* Prevent label wrapping */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Add ellipsis for long names */
+}
+
+/* TODO: Add indentation for nested levels */
+/* TODO: Add styles for folder expansion/collapse icons */
