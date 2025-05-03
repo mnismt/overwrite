@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Prompt Generation Rule
+
+This rule outlines the context building and prompt generation process in the VS Code extension, focusing on generating structured XML prompts from selected files (see [PRD.md](mdc:docs/PRD.md)).
+
+## Key Features
+- **Selected Files Display:** Show a list of selected files in the Webview Panel.
+- **XML Generation:** Automatically create `<file_map>` for hierarchical structure and `<file_contents>` with file contents using VS Code APIs.
+- **Fixed Instructions:** Include `<xml_formatting_instructions>` in the prompt.
+- **User Input:** Provide a textarea for user-specific instructions (`<user_instructions>`).
+- **Copy Functionality:** Add a button to copy the full assembled prompt to the clipboard, with optional token estimation.

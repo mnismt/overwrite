@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# File Selection Rule
+
+This rule covers the file selection features in the VS Code extension, including displaying the workspace file tree with checkboxes, search/filter options, and refresh functionality (see [PRD.md](mdc:docs/PRD.md)).
+
+## Key Features
+- **Activity Bar Integration:** Add an icon to the VS Code Activity Bar for accessing the file tree view.
+- **Tree View Display:** Show the file and folder structure, allowing expansion/collapsing and respecting `.gitignore` or `files.exclude` settings.
+- **Selection Mechanism:** Use checkboxes to select files or folders, with implicit selection of subitems in folders and persistence across sessions.
+- **Search and Refresh:** Include a search bar for filtering and a refresh button to update the tree.

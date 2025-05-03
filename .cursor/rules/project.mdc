@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Project Overview and Structure
+
+This project is a Visual Studio Code extension inspired by RepoPrompt, designed to help users select files/folders from their codebase, generate structured XML prompts for LLMs, and apply LLM-suggested changes back to local files.
+
+## Main Features (see [PRD.md](mdc:docs/PRD.md))
+- **Project & File Management:**
+  - Open a local project folder
+  - File tree view with selection (checkboxes), search/filter, and refresh
+- **Context Building & Prompt Generation (Compose Tab):**
+  - Display selected files
+  - Generate `<file_map>` and `<file_contents>` XML tags
+  - Include fixed XML formatting instructions
+  - User instructions input
+  - Copy full prompt to clipboard
+- **Applying LLM Changes (Apply Tab):**
+  - Paste and parse XML-formatted LLM responses
+  - Apply file actions: create, rewrite, modify, delete
+  - Feedback and error handling for each change
+
+## UI/UX
+- Integration with VS Code: Activity Bar for file selection, Webview Panel for composing and applying prompts
+- Clear separation between context building and change application
+- Responsive UI using VS Code APIs
+
+## Technical Stack
+- **Framework:** VS Code Extension with TypeScript
+- **File System:** VS Code APIs for file operations
+- **XML Parsing:** Use a suitable library like fast-xml-parser
+- **Package Manager:** PNPM
+
+## Important Notes
+- When updating permissions, update the extension's manifest or capabilities as needed

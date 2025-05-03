@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Applying Changes Rule
+
+This rule details the process for applying LLM-suggested changes in the VS Code extension, including parsing XML responses and executing file actions (see [PRD.md](mdc:docs/PRD.md)).
+
+## Key Features
+- **Input for LLM Response:** Provide a textarea for pasting XML-formatted responses.
+- **Parsing Logic:** Extract and parse `<file>` tags with attributes like `path` and `action`, including `<search>` and `<content>` blocks.
+- **File Actions:** Implement create, rewrite, modify, and delete operations using VS Code APIs, with error handling and feedback via notifications.
+- **Preview and Apply:** Include a button for previewing and applying changes, ensuring integration with VS Code's diff and undo features.
