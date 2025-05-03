@@ -11,6 +11,8 @@ Here are the essential features for the initial version:
 
 **2.1. File Selection (Activity Bar View)**
 
+Status: Todo
+
 * **Requirement 2.1.1: Activate via Activity Bar:** The extension should add an icon to the VS Code Activity Bar. Clicking this icon reveals a custom view.
 * **Requirement 2.1.2: Workspace File Tree View:** Display the file and folder structure of the *currently opened* VS Code workspace in the custom view using the `vscode.TreeView` API.
   * Should visually distinguish between files and folders (using standard VS Code icons).
@@ -25,6 +27,8 @@ Here are the essential features for the initial version:
 * **Requirement 2.1.5: Refresh Tree:** Include a refresh button in the view's toolbar to manually reload the file tree, reflecting external changes not automatically picked up by VS Code's file watcher.
 
 **2.2. Context Building & Prompt Generation (Webview Panel)**
+
+Status: Todo
 
 * **Requirement 2.2.1: Open Composer Command:** Provide a command (e.g., `aboveRepo.openComposer`) accessible via the Command Palette and potentially a button in the Activity Bar view. This command opens a Webview Panel.
 * **Requirement 2.2.2: Selected Files Display:** The Webview Panel should display a list or summary of the currently selected files (from the Activity Bar view) that will be included in the context.
@@ -41,6 +45,8 @@ Here are the essential features for the initial version:
 * **Requirement 2.2.8: Token Estimation (Optional but useful):** Display an approximate token count for the generated prompt context within the Webview Panel or the Status Bar.
 
 **2.3. Applying LLM Changes (Webview Panel)**
+
+Status: Todo
 
 * **Requirement 2.3.1: AI Response Input:** Provide a `<textarea>` in the Webview Panel (potentially in a separate "Apply Changes" tab or section) for the user to paste the XML-formatted LLM response.
 * **Requirement 2.3.2: Parse LLM Response:**
@@ -63,6 +69,8 @@ Here are the essential features for the initial version:
 
 **3. User Interface (UI) / User Experience (UX)**
 
+Status: Todo
+
 * **Integration:** Leverage standard VS Code UI components: Activity Bar, Custom TreeView, Webview Panel, Status Bar, Notifications, Command Palette.
 * **Layout:**
   * Activity Bar View for persistent file selection.
@@ -72,16 +80,11 @@ Here are the essential features for the initial version:
 
 **4. Technical Considerations**
 
+Status: Todo
+
 * **Language:** TypeScript (standard for VS Code extensions).
 * **Core API:** `vscode` namespace (especially `vscode.workspace`, `vscode.window`, `vscode.commands`, `vscode.Uri`, `vscode.TreeView`, `vscode.WebviewPanel`, `vscode.env`).
 * **File System:** Use `vscode.workspace.fs` for basic file operations (read, write, delete) and `vscode.workspace.applyEdit` with `vscode.WorkspaceEdit` for modifications to ensure integration with editor features (undo, dirty state).
 * **Webview Communication:** Use `webview.postMessage` and `extensionContext.webviewView.webview.onDidReceiveMessage` / `panel.webview.onDidReceiveMessage` for communication between the Webview UI and the extension host logic.
 * **XML Parsing:** Use a reliable JavaScript/Node.js XML parsing library (e.g., `fast-xml-parser` or standard `DOMParser` within the webview).
 * **State Management:** Manage the state of selected files effectively (e.g., using `extensionContext.workspaceState`).
-
-**5. Future Considerations (Optional)**
-
-* **Diff Preview:** Before applying `modify` or `rewrite` changes, show a diff view using `vscode.diff`.
-* **Direct LLM Integration:** Add settings for API keys and allow direct communication with LLMs instead of manual copy/paste.
-* **Configuration:** Add VS Code settings for customizing behavior (e.g., default exclusions, XML structure variations).
-* **Ignoring Files:** More robustly handle `.gitignore` and `files.exclude`.
