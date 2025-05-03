@@ -1,71 +1,92 @@
-# beyondrepo README
+# AboveRepo README
 
-This is the README for your extension "beyondrepo". After writing up a brief description, we recommend including the following sections.
+**AboveRepo** is a Visual Studio Code extension inspired by RepoPrompt. It helps you select files and folders from your workspace, build structured XML prompts for Large Language Models (LLMs) including code context, and apply LLM-suggested changes back to your local files.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+AboveRepo integrates directly into your VS Code workflow with a dedicated view in the Activity Bar.
 
-For example if there is an image subfolder under your extension project workspace:
+**1. File Selection (Explorer Tab)**
 
-\!\[feature X\]\(images/feature-x.png\)
+*   **Visual File Tree:** Browse your workspace files and folders in a familiar tree structure within the AboveRepo Webview Panel.
+*   **Flexible Selection:** Select individual files or entire folders. Folder selection implicitly includes all nested files and subfolders (respecting common exclusion settings like `.gitignore` and `node_modules`).
+*   **Search & Filter:** Quickly find specific files or folders using the integrated search bar.
+*   **Refresh:** Manually update the file tree to reflect external changes.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+**2. Context Building & Prompt Generation (Context Tab)**
+
+*   **Selected Files Summary:** See a clear list of files currently selected for inclusion in the prompt.
+*   **Automatic XML Generation:**
+    *   Generates a `<file_map>` showing the hierarchical structure of selected items.
+    *   Generates `<file_contents>` containing the full code of selected files, clearly marked with their paths.
+*   **User Instructions:** Add your specific instructions for the LLM in a dedicated text area (`<user_instructions>`).
+*   **Prompt Management:** Save frequently used instructions as named prompts, easily select and reuse them, and delete prompts you no longer need.
+*   **XML Formatting Instructions:** Includes the necessary `<xml_formatting_instructions>` required by some LLMs for structured input/output.
+*   **Copy Options:**
+    *   **Copy:** Copies the file map, file contents, and user instructions to the clipboard.
+    *   **XML Copy:** Copies the file map, file contents, user instructions, *and* the XML formatting instructions to the clipboard.
+*   **Token Estimation (Optional):** Provides an estimated token count for the generated context.
+
+**3. Applying LLM Changes (Apply Tab)**
+
+*   **Paste Response:** Paste the XML-formatted response from your LLM directly into the Apply tab.
+*   **Parse & Preview:** Parses the response, identifying file actions (`create`, `rewrite`, `modify`, `delete`) specified within `<file>` tags. (Preview functionality is planned).
+*   **Apply Changes:** Executes the identified file actions using VS Code APIs, integrating with features like undo/redo and source control.
+    *   Supports creating new files, rewriting existing ones, modifying specific code blocks (using `<search>` and `<content>`), and deleting files.
+*   **Feedback:** Provides notifications on the success or failure of applying changes.
+
+## How to Use
+
+1.  Click the **AboveRepo icon** in the VS Code Activity Bar to open the view.
+2.  Use the **Explorer Tab** to navigate and select the files and folders you want to include as context.
+3.  Switch to the **Context Tab**.
+    *   Review the selected files.
+    *   Enter your specific task instructions in the "User Instructions" text area.
+    *   (Optional) Save your instructions as a named prompt for later use.
+    *   Click **"Copy"** or **"XML Copy"** to copy the generated prompt to your clipboard.
+4.  Paste the prompt into your preferred LLM.
+5.  Once you receive the XML-formatted response from the LLM, switch to the **Apply Tab**.
+6.  Paste the response into the text area.
+7.  Click **"Preview & Apply Changes"** (or similar) to apply the suggested modifications to your workspace.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+*   Visual Studio Code version 1.85.0 or higher.
+*   A workspace/folder opened in VS Code.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+This extension does not currently contribute any specific VS Code settings.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+*   No known issues at this time. Please report any bugs or unexpected behavior on the project's issue tracker (link to be added).
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+*   Initial release.
+*   Features:
+    *   Activity Bar entry.
+    *   Webview Panel with Explorer, Context, and Apply tabs.
+    *   File tree display with selection (using vscode-elements tree).
+    *   Basic file exclusion (`.git`, `node_modules`, etc.).
+    *   Refresh and search functionality in Explorer tab.
+    *   Placeholder content for Context and Apply tabs.
+    *   Basic PRD documentation setup.
 
 ---
 
-## Following extension guidelines
+## Technical Stack
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+*   **Language:** TypeScript
+*   **Framework:** VS Code Extension API
+*   **UI Components:** VSCode Elements (`vscode-tree`, `vscode-tabs`, etc.)
+*   **Package Manager:** PNPM
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+## Contributing & Feedback
 
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+Contributions and feedback are welcome! Please refer to the project repository (link to be added) for contribution guidelines and issue tracking.
 
 **Enjoy!**

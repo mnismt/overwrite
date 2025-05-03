@@ -3,13 +3,23 @@ description:
 globs: 
 alwaysApply: false
 ---
-# Prompt Generation Rule
+# Rule: Prompt Generation (Context Tab)
 
-This rule outlines the context building and prompt generation process in the VS Code extension, focusing on generating structured XML prompts from selected files (see [PRD.md](mdc:docs/PRD.md)).
+This rule outlines the context building and prompt generation features within the **Context Tab** of the extension's Webview Panel. See section 2.2 in [PRD.md](mdc:docs/prd.md).
 
 ## Key Features
-- **Selected Files Display:** Show a list of selected files in the Webview Panel.
-- **XML Generation:** Automatically create `<file_map>` for hierarchical structure and `<file_contents>` with file contents using VS Code APIs.
-- **Fixed Instructions:** Include `<xml_formatting_instructions>` in the prompt.
-- **User Input:** Provide a textarea for user-specific instructions (`<user_instructions>`).
-- **Copy Functionality:** Add a button to copy the full assembled prompt to the clipboard, with optional token estimation.
+
+*   **UI Location:** Implemented within the "Context" `<vscode-tab-panel>` defined in `src/fileExplorerWebviewProvider.ts`. Logic will reside primarily in `media/webview.js` and potentially require new messages to the extension host.
+*   **Selected Files Display:** Needs to display a list/summary of files currently held in the `selectedPaths` Set from `media/webview.js`.
+*   **XML Generation:**
+    *   Requires logic (likely in the extension host `src/fileExplorerWebviewProvider.ts` upon request from the webview) to:
+        *   Generate `<file_map>` based on `selectedPaths` and the tree structure.
+        *   Generate `<file_contents>` by reading selected files using `vscode.workspace.fs.readFile`.
+*   **Fixed Instructions:** Embed static `<xml_formatting_instructions>` text into the tab.
+*   **User Input & Management:**
+    *   A `<textarea>` for `<user_instructions>`.
+    *   Requires UI elements (e.g., dropdown, save/delete buttons) and logic in `media/webview.js` to manage saving/loading prompts (potentially using `vscode.getState`/`vscode.setState` or messaging the extension host for persistence).
+*   **Copy Functionality:**
+    *   Two buttons ("Copy", "XML Copy") in the Context Tab.
+    *   Event listeners in `media/webview.js` will assemble the required XML parts (requesting generated map/contents from the host if necessary) and use `vscode.postMessage` to ask the extension host to copy text via `vscode.env.clipboard.writeText`.
+*   **Token Estimation:** (Optional) Requires implementing a token counting mechanism (client-side or server-side) and displaying the result.

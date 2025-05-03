@@ -1,14 +1,24 @@
 ---
 description: 
 globs: 
-alwaysApply: true
+alwaysApply: false
 ---
-# File Selection Rule
+# Rule: File Selection (Explorer Tab)
 
-This rule covers the file selection features in the VS Code extension, including displaying the workspace file tree with checkboxes, search/filter options, and refresh functionality (see [PRD.md](mdc:docs/PRD.md)).
+This rule describes the file selection process, primarily handled within the **Explorer Tab** of the extension's Webview Panel. See section 2.1 in [PRD.md](mdc:docs/prd.md).
 
 ## Key Features
-- **Activity Bar Integration:** Add an icon to the VS Code Activity Bar for accessing the file tree view.
-- **Tree View Display:** Show the file and folder structure, allowing expansion/collapsing and respecting `.gitignore` or `files.exclude` settings.
-- **Selection Mechanism:** Use checkboxes to select files or folders, with implicit selection of subitems in folders and persistence across sessions.
-- **Search and Refresh:** Include a search bar for filtering and a refresh button to update the tree.
+
+*   **Activation:** Accessed via the extension's icon in the VS Code Activity Bar, which opens the Webview Panel defaulted to the Explorer Tab.
+*   **Tree View Display:**
+    *   Renders the workspace file/folder structure using the `<vscode-tree>` element from `@vscode-elements`.
+    *   Located in `src/fileExplorerWebviewProvider.ts` which generates the HTML and handles tree data fetching.
+    *   Respects common ignores (`.git`, `node_modules`, etc.).
+*   **Selection Mechanism:**
+    *   Uses actions (add/remove buttons) on tree items, managed in `media/webview.js`.
+    *   Selection state (`selectedPaths` Set) is managed within the webview (`media/webview.js`).
+    *   Selecting/deselecting folders cascades to children.
+    *   Visual feedback (decorations 'F'/'H') indicates selection status.
+*   **Search and Refresh:**
+    *   A text input (`#search-input`) filters the tree view client-side (with debounce).
+    *   A refresh button (`#refresh-button`) triggers a message (`getFileTree`) to the extension host (`src/fileExplorerWebviewProvider.ts`) to refetch the directory structure.

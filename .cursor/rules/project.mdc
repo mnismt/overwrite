@@ -3,35 +3,47 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Project Overview and Structure
+# Project Overview: AboveRepo VS Code Extension
 
-This project is a Visual Studio Code extension inspired by RepoPrompt, designed to help users select files/folders from their codebase, generate structured XML prompts for LLMs, and apply LLM-suggested changes back to local files.
+This project is a Visual Studio Code extension inspired by RepoPrompt. Its goal is to streamline interaction with Large Language Models (LLMs) for code-related tasks.
 
-## Main Features (see [PRD.md](mdc:docs/PRD.md))
-- **Project & File Management:**
-  - Open a local project folder
-  - File tree view with selection (checkboxes), search/filter, and refresh
-- **Context Building & Prompt Generation (Compose Tab):**
-  - Display selected files
-  - Generate `<file_map>` and `<file_contents>` XML tags
-  - Include fixed XML formatting instructions
-  - User instructions input
-  - Copy full prompt to clipboard
-- **Applying LLM Changes (Apply Tab):**
-  - Paste and parse XML-formatted LLM responses
-  - Apply file actions: create, rewrite, modify, delete
-  - Feedback and error handling for each change
+## Core Functionality (See [PRD.md](mdc:docs/prd.md) for full details)
+
+The extension provides a multi-tab Webview Panel accessible via an Activity Bar icon:
+
+1.  **Explorer Tab:**
+    *   Displays the workspace file tree.
+    *   Allows users to select files/folders to include as context.
+    *   Features search/filter and refresh capabilities.
+2.  **Context Tab:**
+    *   Shows currently selected files.
+    *   Generates structured XML context:
+        *   `<file_map>`: Hierarchical view of selected items.
+        *   `<file_contents>`: Code content of selected files.
+    *   Includes a text area for `<user_instructions>`.
+    *   Provides prompt management (save/load/delete instructions).
+    *   Includes fixed `<xml_formatting_instructions>`.
+    *   Offers two copy buttons: one with and one without formatting instructions.
+    *   (Optional) Token count estimation.
+3.  **Apply Tab:**
+    *   Allows pasting an LLM's XML response.
+    *   Parses the response for file modification actions (`create`, `rewrite`, `modify`, `delete`).
+    *   Applies changes to the workspace using VS Code APIs (integrating with undo/redo).
+    *   Provides feedback on applied changes.
 
 ## UI/UX
-- Integration with VS Code: Activity Bar for file selection, Webview Panel for composing and applying prompts
-- Clear separation between context building and change application
-- Responsive UI using VS Code APIs
+
+*   Integrates with VS Code via Activity Bar and a Webview Panel with tabs.
+*   Uses standard VS Code UI components and styling (`@vscode-elements`).
 
 ## Technical Stack
-- **Framework:** VS Code Extension with TypeScript
-- **File System:** VS Code APIs for file operations
-- **XML Parsing:** Use a suitable library like fast-xml-parser
-- **Package Manager:** PNPM
+
+*   **Language:** TypeScript
+*   **Framework:** VS Code Extension API
+*   **UI:** HTML, CSS, JavaScript within Webview, using `@vscode-elements` components.
+*   **File System:** `vscode.workspace.fs` and `vscode.workspace.applyEdit`.
+*   **XML Parsing:** Requires a suitable library (e.g., `fast-xml-parser`).
+*   **Package Manager:** PNPM
 
 ## Important Notes
 - When updating permissions, update the extension's manifest or capabilities as needed
