@@ -31,22 +31,22 @@ Status: In Progress
 
 The **Context Tab** in the Webview Panel is dedicated to building the prompt for the LLM. It includes the following features:
 
-* **Requirement 2.2.1: Selected Files Display:** Display a list or summary of the currently selected files (from the Activity Bar view) that will be included in the context.
-* **Requirement 2.2.2: Generate `<file_map>`:** Automatically generate an XML `<file_map>` tag containing the hierarchical structure of *only* the selected files and folders, using relative paths from the workspace root (`vscode.workspace.workspaceFolders[0].uri.fsPath`).
-* **Requirement 2.2.3: Generate `<file_contents>`:**
-  * Read the content of each *selected* file using `vscode.workspace.fs.readFile`.
-  * Format the content within the `<file_contents>` tag, clearly marking each file with its relative path (consistent with `<file_map>`) and enclosing the content, potentially using markdown code fences.
-* **Requirement 2.2.4: Include `<xml_formatting_instructions>`:** Embed the fixed, detailed XML formatting instructions into the generated prompt within the Webview Panel (potentially hidden by default but included in one of the copy actions).
-* **Requirement 2.2.5: User Instructions Input & Management:**
+* **Requirement 2.2.1: Selected Files Summary:** Display a simple counter showing how many files are currently selected that will be included in the context.
+
+* **Requirement 2.2.2: User Instructions Input:**
   * Provide a `<textarea>` in the Webview Panel for the user's specific instructions (`<user_instructions>` tag content).
-  * Implement a simple prompt management system:
-    * A way to save the current content of the instructions textarea as a named prompt.
-    * A dropdown or list to select from previously saved prompts, populating the textarea.
-    * A mechanism to delete saved prompts.
-* **Requirement 2.2.6: Copy to Clipboard Buttons:**
-  * Implement a "Copy" button: Copies `<file_map>`, `<file_contents>`, and `<user_instructions>` to the clipboard.
-  * Implement an "XML Copy" button: Copies `<file_map>`, `<file_contents>`, `<xml_formatting_instructions>`, and `<user_instructions>` to the clipboard. Use `vscode.env.clipboard.writeText` for both.
-* **Requirement 2.2.7: Token Estimation:** Display an approximate token count for the generated prompt context within the Webview Panel or the Status Bar.
+
+* **Requirement 2.2.3: Copy to Clipboard Buttons:**
+  * Implement a "Copy" button: Dynamically generates and copies `<file_map>`, `<file_contents>`, and `<user_instructions>` to the clipboard when clicked.
+  * Implement an "XML Copy" button: Dynamically generates and copies `<file_map>`, `<file_contents>`, `<xml_formatting_instructions>`, and `<user_instructions>` to the clipboard when clicked. 
+  * Both buttons should use `vscode.env.clipboard.writeText` for the clipboard operations.
+  * The actual XML content should be generated at copy time, not displayed in the UI.
+* **Requirement 2.2.4: Background Processing:** The extension should still implement the logic to:
+  * Generate the `<file_map>` tag containing the hierarchical structure of selected files
+  * Read and format the content of each selected file for the `<file_contents>` tag
+  * Include the fixed `<xml_formatting_instructions>` tag
+  * These components should be generated only when copying to clipboard, not displayed in the UI.
+
 
 **2.3. Applying LLM Changes (Webview Panel - Apply Tab)**
 

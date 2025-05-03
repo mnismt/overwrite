@@ -18,6 +18,12 @@ function debounce(func, wait) {
   const searchInput = document.getElementById('search-input')
   const progressRing = document.getElementById('progress-ring')
 
+  // Context Tab Elements
+  const selectedCountSpan = document.getElementById('selected-count')
+  const userInstructionsTextarea = document.getElementById('user-instructions')
+  const copyButton = document.getElementById('copy-button')
+  const copyXmlButton = document.getElementById('copy-xml-button')
+
   function sendMessageToExtension(message) {
     progressRing.style.display = 'block'
     vscode.postMessage(message)
@@ -106,6 +112,11 @@ function debounce(func, wait) {
       recalcDecorations(fileTreeContainer.data)
       // Force the tree to pick up our changes
       fileTreeContainer.data = [...fileTreeContainer.data]
+
+      // Update the selected count display
+      if (selectedCountSpan) {
+        selectedCountSpan.textContent = selectedPaths.size.toString()
+      }
     }
   }
 
@@ -161,6 +172,42 @@ function debounce(func, wait) {
       default:
         console.log('Unknown action', ev.detail)
     }
+  });
+
+  // Listener for Copy Button
+  copyButton?.addEventListener('click', () => {
+    const originalButtonText = copyButton.innerText; // Store original text
+    const userInstructions = userInstructionsTextarea.value;
+    sendMessageToExtension({
+      command: 'copyContext',
+      selectedPaths: Array.from(selectedPaths),
+      userInstructions: userInstructions
+    });
+    // Change button text to indicate success
+    copyButton.innerText = 'Copied!';
+    // Change button text back after 2 seconds
+    setTimeout(() => {
+      copyButton.innerText = originalButtonText;
+    }, 2000);
+    // TODO: Add more robust feedback if needed
+  });
+
+  // Listener for Copy XML Button
+  copyXmlButton?.addEventListener('click', () => {
+    const originalButtonText = copyXmlButton.innerText; // Store original text
+    const userInstructions = userInstructionsTextarea.value;
+    sendMessageToExtension({
+      command: 'copyContextXml',
+      selectedPaths: Array.from(selectedPaths),
+      userInstructions: userInstructions
+    });
+    // Change button text to indicate success
+    copyXmlButton.innerText = 'Copied!';
+    // Change button text back after 2 seconds
+    setTimeout(() => {
+      copyXmlButton.innerText = originalButtonText;
+    }, 2000);
+    // TODO: Add more robust feedback if needed
   });
 
   // Request the initial file tree when the webview loads
