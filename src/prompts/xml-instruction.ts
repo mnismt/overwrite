@@ -21,7 +21,7 @@ export const XML_FORMATTING_INSTRUCTIONS: string = `<xml_formatting_instructions
 4. **\`delete\`**: Removes the file at the specified \`path\`. Requires an empty \`<content>\` block.
 5. **\`rename\`**: Moves or renames the file at \`path\`. Requires a \`<new path="..."/>\` tag *instead* of \`<change>\`. The content of the file remains the same during the rename operation itself.
 
-### **Format to Follow: Repo Prompt's Diff Protocol**
+### **Format to Follow: Diff Protocol**
 
 <Plan>
 Clearly and concisely describe your step-by-step approach or reasoning for the changes you are about to make. Explain *why* you chose specific actions (e.g., "Using modify for a small change," "Using rewrite due to significant structural changes").
