@@ -106,3 +106,25 @@ declare module 'react' {
 		}
 	}
 }
+
+// --- VS Code API Type within Webview ---
+// Define the structure of the message payload if known
+// interface VsCodeMessagePayload { [key: string]: any; }
+
+interface VsCodeMessage {
+	command: string
+	payload?: unknown // Use unknown for better type safety than any
+}
+
+// Define the interface for the VS Code API object provided in the webview
+interface VsCodeApi {
+	postMessage: (message: VsCodeMessage) => void
+	getState: () => unknown
+	setState: (newState: unknown) => void
+}
+
+declare global {
+	interface Window {
+		acquireVsCodeApi: () => VsCodeApi
+	}
+}

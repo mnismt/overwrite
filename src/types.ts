@@ -1,4 +1,5 @@
 import type * as vscode from 'vscode'
+import type { Uri, ThemeColor } from 'vscode'
 
 // Define the structure expected by the vscode-tree component
 export interface VscodeTreeAction {
@@ -13,21 +14,17 @@ export interface VscodeTreeItem {
 	subItems?: VscodeTreeItem[] // Children for folders
 	open?: boolean // Default state for folders (optional)
 	selected?: boolean // Selection state (optional)
-	icons: {
+	icons?: {
 		branch: string
 		leaf: string
 		open: string
 	}
+	actions?: VscodeTreeAction[] // Actions for the item
 	// Add decorations based on VS Code Tree item structure
 	decorations?: {
-		badge?: string | number
+		content?: string
+		appearance?: 'counter-badge' | 'filled-circle'
+		color?: string | ThemeColor
 		tooltip?: string
-		iconPath?:
-			| string
-			| vscode.Uri
-			| { light: string | vscode.Uri; dark: string | vscode.Uri }
-		color?: string | vscode.ThemeColor
-		// Any other properties the vscode-tree component might support for decorations
-	}
-	actions?: VscodeTreeAction[] // Actions for the item
+	}[]
 }

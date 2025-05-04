@@ -5,17 +5,16 @@ alwaysApply: true
 ---
 # Project Overview: AboveRepo VS Code Extension
 
-This project is a Visual Studio Code extension inspired by RepoPrompt. Its goal is to streamline interaction with Large Language Models (LLMs) for code-related tasks.
+This project is a Visual Studio Code extension designed to streamline the process of packing the context of the entire repository into a single file, with the ability to copy it to the clipboard for easy sharing or further processing.
 
-## Core Functionality (See [PRD.md](mdc:docs/prd.md) for full details)
+## Core Functionality
 
 The extension provides a multi-tab Webview Panel accessible via an Activity Bar icon:
 
-1.  **Explorer Tab:**
+2.  **Context Tab:**
     *   Displays the workspace file tree.
     *   Allows users to select files/folders to include as context.
     *   Features search/filter and refresh capabilities.
-2.  **Context Tab:**
     *   Shows currently selected files.
     *   Generates structured XML context:
         *   `<file_map>`: Hierarchical view of selected items.
@@ -34,15 +33,14 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 ## UI/UX
 
 *   Integrates with VS Code via Activity Bar and a Webview Panel with tabs.
-*   Uses standard VS Code UI components and styling (`@vscode-elements`).
+*   Uses standard VS Code UI components and styling (`@vscode-elements/elements`).
 
 ## Technical Stack
 
 *   **Language:** TypeScript
 *   **Framework:** VS Code Extension API
-*   **UI:** HTML, CSS, JavaScript within Webview, using `@vscode-elements` components.
+*   **UI:** HTML, CSS, JavaScript within Webview, using `@vscode-elements/elements` components. The project uses React 19, which supports web components directly from the `@vscode-elements/elements` package. Type definitions for these components can be found in [global.d.ts](mdc:src/webview-ui/src/global.d.ts).
 *   **File System:** `vscode.workspace.fs` and `vscode.workspace.applyEdit`.
-*   **XML Parsing:** Requires a suitable library (e.g., `fast-xml-parser`).
 *   **Package Manager:** PNPM
 
 ## Important Notes
@@ -51,4 +49,4 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 ## Additional Rules
 
 - **Rule: Use Kebab-Case for File Names**  
-  All new file names in the project must use kebab-case (e.g., `explorer-tab.tsx`) to maintain consistency and ease of use in URLs and imports. When renaming existing files, update references in [ExplorerTab.tsx](mdc:src/webview-ui/src/components/ExplorerTab.tsx) and other related files.
+  All new file names in the project must use kebab-case (e.g., `context-tab.tsx`, `file-system.ts`) to maintain consistency and ease of use in URLs and imports

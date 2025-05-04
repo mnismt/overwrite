@@ -21,14 +21,19 @@
 		"rules": {
 			"recommended": true,
 			"style": {
-				"noNonNullAssertion": "off"
+				"noNonNullAssertion": "off",
+				"useSelfClosingElements": "off"
 			},
 			"a11y": {
 				"noBlankTarget": "off",
-				"useButtonType": "off"
+				"useButtonType": "off",
+				"useKeyWithClickEvents": "off"
 			},
 			"correctness": {
 				"useExhaustiveDependencies": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "warn"
 			}
 		}
 	},

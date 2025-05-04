@@ -27,6 +27,9 @@ importers:
       '@vitejs/plugin-react-swc':
         specifier: ^3.8.0
         version: 3.9.0(vite@6.3.4)
+      '@vscode-elements/webview-playground':
+        specifier: ^1.6.0
+        version: 1.6.0
       globals:
         specifier: ^16.0.0
         version: 16.0.0
@@ -518,6 +521,9 @@ packages:
 
   '@vscode-elements/elements@1.15.0':
     resolution: {integrity: sha512-H+Ky/NqqhgaqdyoFR0np1OSL4n9x4acNR3jRHKP8x8jXGj8Gtw3ZoGV0PAMiVYKeyhwW0Yz3RRONtp6S49cMFA==}
+
+  '@vscode-elements/webview-playground@1.6.0':
+    resolution: {integrity: sha512-PGOecKbzEI+ZU1UEhS5RwdbPMxKljB6w4+fs1+8oGBGaVVOxVBB9hLaRtuIHIzGBiqV99uM0veJ4cQtQ3//4IA==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -1649,6 +1655,8 @@ snapshots:
   '@vscode-elements/elements@1.15.0':
     dependencies:
       lit: 3.3.0
+
+  '@vscode-elements/webview-playground@1.6.0': {}
 
   accepts@2.0.0:
     dependencies:

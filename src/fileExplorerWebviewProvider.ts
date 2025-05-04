@@ -51,6 +51,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		const localResourceRoots = [
 			vscode.Uri.joinPath(this._extensionUri, 'media'),
 			vscode.Uri.joinPath(this._extensionUri, 'dist'),
+			vscode.Uri.joinPath(this._extensionUri, 'node_modules'),
 		]
 		if (isDevelopment) {
 			// Allow connection to Vite dev server
@@ -75,10 +76,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 					try {
 						// Use the imported function, passing exclusions
 						const workspaceFiles = await getWorkspaceFileTree(this.excludedDirs)
+
 						fullTreeCache = workspaceFiles // Cache the full tree
 						webviewView.webview.postMessage({
 							command: 'updateFileTree',
-							data: workspaceFiles, // This will now be VscodeTreeItem[]
+							payload: workspaceFiles,
 						})
 					} catch (error: unknown) {
 						const errorMessage =
@@ -158,14 +160,25 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		isDevelopment: boolean,
 	): string {
 		if (isDevelopment) {
-			return this._getDevHtml()
+			return this._getDevHtml(webview)
 		}
 		// If not development, return production HTML
 		return this._getProdHtml(webview)
 	}
 
-	private _getDevHtml(): string {
+	private _getDevHtml(webview: vscode.Webview): string {
 		const nonce = getNonce()
+		// Path to codicons from the extension's node_modules
+		const codiconUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				'node_modules',
+				'@vscode',
+				'codicons',
+				'dist',
+				'codicon.css',
+			),
+		)
 		// Slightly less strict CSP for development to allow HMR, eval source maps etc.
 		return `
 <!doctype html>
@@ -173,8 +186,8 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link href="${DEV_WEBVIEW_URL}/node_modules/@vscode/codicons/dist/codicon.css" rel="stylesheet" id="vscode-codicon-stylesheet" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${DEV_WEBVIEW_URL} data:; connect-src ${DEV_WEBVIEW_URL} ws://localhost:5173; img-src ${DEV_WEBVIEW_URL} https: data:; script-src 'unsafe-eval' 'unsafe-inline' ${DEV_WEBVIEW_URL}; style-src 'unsafe-inline' ${DEV_WEBVIEW_URL};">
+    <link href="${codiconUri}" rel="stylesheet" id="vscode-codicon-stylesheet" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${DEV_WEBVIEW_URL} data: ${webview.cspSource}; connect-src ${DEV_WEBVIEW_URL} ws://localhost:5173; img-src ${DEV_WEBVIEW_URL} https: data:; script-src 'unsafe-eval' 'unsafe-inline' ${DEV_WEBVIEW_URL}; style-src 'unsafe-inline' ${DEV_WEBVIEW_URL} ${webview.cspSource};">
     <script type="module">
       // Manual React Refresh preamble injection
       import { injectIntoGlobalHook } from "${DEV_WEBVIEW_URL}/@react-refresh"
@@ -193,7 +206,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
     <script nonce="${nonce}">
       // Pass vscode API and nonce to the webview
       window.nonce = "${nonce}"
-      window.vscode = acquireVsCodeApi()
+      window.vscodeApi = acquireVsCodeApi()
     </script>
   </body>
 </html>`
@@ -251,7 +264,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
   <script nonce="${nonce}">
     // Pass vscode API and nonce to the webview
     window.nonce = "${nonce}"
-    window.vscode = acquireVsCodeApi()
+    window.vscodeApi = acquireVsCodeApi()
   </script>
 </body>
 </html>`

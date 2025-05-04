@@ -1,40 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react'
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
+import { useCallback, useEffect, useState } from 'react'
 import type { VscodeTreeItem } from '../../types' // Import tree item type from root
-import ExplorerTab from './components/explorer-tab'
-import ContextTab from './components/context-tab'
-import ApplyTab from './components/apply-tab'
-import { getVsCodeApi } from './utils/vscode' // Import the new utility
 import './App.css' // We'll add styles later
+import ApplyTab from './components/apply-tab'
+import ContextTab from './components/context-tab'
+import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
-// // Add acquireVsCodeApi declaration - REMOVED
-// declare const acquireVsCodeApi: () => {
-// 	getState: () => unknown
-// 	setState: (newState: unknown) => void
-// 	postMessage: (message: unknown) => void
-// };
-
-// // Acquire the VS Code API instance *once* outside the component - REMOVED
-// const vscode = acquireVsCodeApi();
-
-// Define the structure for messages to/from the extension
 interface VsCodeMessage {
 	command: string
 	payload?: unknown // Use unknown instead of any for better type safety
 }
 
 function App() {
-	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index
+	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index (0: Context, 1: Apply)
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
 	const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
 	const [userInstructions, setUserInstructions] = useState<string>('')
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 
-	// --- Communication Handlers ---
-
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
-		const vscode = getVsCodeApi() // Get API instance via utility
+		const vscode = getVsCodeApi()
+
+		if (command === 'getFileTree') {
+			setIsLoading(true)
+		}
 		vscode.postMessage({ command, payload })
 	}, [])
 
@@ -77,6 +67,19 @@ function App() {
 		setActiveTabIndex(event.detail.selectedIndex)
 	}, [])
 
+	// Refresh handler for the file tree (moved from potential ExplorerTab)
+	const handleRefresh = useCallback(() => {
+		setIsLoading(true)
+		sendMessage('getFileTree')
+	}, [sendMessage])
+
+	// Selection handler (assuming it will be needed in the combined ContextTab)
+	const handleSelect = useCallback((paths: Set<string>) => {
+		setSelectedPaths(paths)
+		// Potentially send updates to the extension if needed, or handle locally
+		console.log('Selected paths updated:', paths)
+	}, [])
+
 	// Context Tab: Handle copying
 	const handleCopy = useCallback(
 		(includeXml: boolean) => {
@@ -103,38 +106,29 @@ function App() {
 		[sendMessage],
 	)
 
-	// TODO: Implement handleSelect for ExplorerTab to update selectedPaths
-	const handleSelectionChange = useCallback((newSelectedPaths: Set<string>) => {
-		setSelectedPaths(newSelectedPaths)
-	}, [])
-
 	return (
 		<main>
 			<vscode-tabs
 				selected-index={activeTabIndex}
 				onvsc-tabs-select={handleTabChange}
 			>
-				{/* Explorer Tab */}
-				<vscode-tab-header slot="header" id="explorer-tab">
-					Explorer
-				</vscode-tab-header>
-				<vscode-tab-panel
-					id="explorer-tab-panel"
-					style={{ display: 'flex', flexDirection: 'column' }}
-				>
-					<ExplorerTab />
-				</vscode-tab-panel>
-
-				{/* Context Tab */}
 				<vscode-tab-header slot="header" id="context-tab">
 					Context
 				</vscode-tab-header>
 				<vscode-tab-panel id="context-tab-panel">
 					<ContextTab
+						// Props for original Context functionality
 						selectedCount={selectedPaths.size}
 						userInstructions={userInstructions}
 						onUserInstructionsChange={setUserInstructions}
 						onCopy={handleCopy}
+						// Props for Explorer functionality
+						fileTreeData={fileTreeData}
+						selectedPaths={selectedPaths} // Pass the actual set for potential tree updates
+						onSelect={handleSelect} // Pass the handler
+						onRefresh={handleRefresh}
+						isLoading={isLoading}
+						// TODO: Add search/filter props and handler
 					/>
 				</vscode-tab-panel>
 

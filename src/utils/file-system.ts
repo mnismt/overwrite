@@ -62,21 +62,6 @@ async function readDirectoryRecursive(
 			const item: VscodeTreeItem = {
 				label: entry.name,
 				value: relativePath,
-				icons: entry.isDirectory()
-					? { ...icons, open: 'folder-opened' } // Default open icon for folders
-					: { ...icons }, // Default leaf icon for files
-				actions: [
-					{
-						icon: 'add',
-						actionId: 'add',
-						tooltip: 'Add File/Folder',
-					},
-					{
-						icon: 'remove',
-						actionId: 'remove',
-						tooltip: 'Remove File/Folder',
-					},
-				],
 			}
 
 			if (entry.isDirectory()) {
