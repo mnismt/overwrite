@@ -1,4 +1,6 @@
 const esbuild = require("esbuild");
+const path = require("node:path");
+const { execSync } = require("node:child_process");
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -14,14 +16,27 @@ const esbuildProblemMatcherPlugin = {
 			console.log('[watch] build started');
 		});
 		build.onEnd((result) => {
-			result.errors.forEach(({ text, location }) => {
+			for (const { text, location } of result.errors) {
 				console.error(`✘ [ERROR] ${text}`);
 				console.error(`    ${location.file}:${location.line}:${location.column}:`);
-			});
+			}
 			console.log('[watch] build finished');
 		});
 	},
 };
+
+// Run Vite build for webview UI before building the extension
+try {
+	console.log('Building webview UI with Vite...');
+	execSync('pnpm --filter webview-ui build', {
+		stdio: 'inherit',
+		cwd: path.resolve(__dirname),
+	});
+	console.log('Webview UI build complete.');
+} catch (err) {
+	console.error('Vite build failed:', err);
+	process.exit(1);
+}
 
 async function main() {
 	const ctx = await esbuild.context({

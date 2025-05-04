@@ -3,6 +3,7 @@
 import * as vscode from 'vscode'
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises' // Use promises version of fs
+import type { Uri } from 'vscode' // Import Uri as type
 
 // Import prompt generation functions
 import {
@@ -19,10 +20,13 @@ import { getWorkspaceFileTree } from './utils/fileSystemUtils' // Import file tr
 // Store the full tree data in the provider instance
 let fullTreeCache: VscodeTreeItem[] = []
 
+const DEV_WEBVIEW_URL = 'http://localhost:5173'
+
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'aboveRepoFilesWebview'
 
 	private _view?: vscode.WebviewView
+	private _context: vscode.ExtensionContext
 	private excludedDirs = [
 		'.git',
 		'node_modules',
@@ -32,7 +36,12 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		'out',
 	] // Directories to exclude
 
-	constructor(private readonly _extensionUri: vscode.Uri) {}
+	constructor(
+		private readonly _extensionUri: vscode.Uri,
+		context: vscode.ExtensionContext,
+	) {
+		this._context = context
+	}
 
 	public resolveWebviewView(
 		webviewView: vscode.WebviewView,
@@ -41,16 +50,27 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	) {
 		this._view = webviewView
 
-		webviewView.webview.options = {
-			// Allow scripts in the webview
-			enableScripts: true,
-			localResourceRoots: [
-				vscode.Uri.joinPath(this._extensionUri, 'media'),
-				vscode.Uri.joinPath(this._extensionUri, 'node_modules'),
-			],
+		// Allow scripts and setup resource roots
+		const isDevelopment =
+			this._context.extensionMode === vscode.ExtensionMode.Development
+		const localResourceRoots = [
+			vscode.Uri.joinPath(this._extensionUri, 'media'),
+			vscode.Uri.joinPath(this._extensionUri, 'dist'),
+		]
+		if (isDevelopment) {
+			// Allow connection to Vite dev server
+			localResourceRoots.push(vscode.Uri.parse('http://localhost:5173'))
 		}
 
-		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview)
+		webviewView.webview.options = {
+			enableScripts: true,
+			localResourceRoots: localResourceRoots,
+		}
+
+		webviewView.webview.html = this._getHtmlForWebview(
+			webviewView.webview,
+			isDevelopment,
+		)
 
 		// Handle messages from the webview
 		webviewView.webview.onDidReceiveMessage(async (message) => {
@@ -138,111 +158,107 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		})
 	}
 
-	private _getHtmlForWebview(webview: vscode.Webview): string {
-		// Get paths to local resources
-		const scriptPath = vscode.Uri.joinPath(
-			this._extensionUri,
-			'media',
-			'webview.js',
-		)
-		const stylePath = vscode.Uri.joinPath(
-			this._extensionUri,
-			'media',
-			'webview.css',
-		)
+	private _getHtmlForWebview(
+		webview: vscode.Webview,
+		isDevelopment: boolean,
+	): string {
+		if (isDevelopment) {
+			return this._getDevHtml()
+		}
+		// If not development, return production HTML
+		return this._getProdHtml(webview)
+	}
 
-		const elementsBundlePath = vscode.Uri.joinPath(
-			this._extensionUri,
-			'node_modules',
-			'@vscode-elements',
-			'elements',
-			'dist',
-			'bundled.js',
-		)
-		const codiconsPath = vscode.Uri.joinPath(
-			this._extensionUri,
-			'node_modules',
-			'@vscode',
-			'codicons',
-			'dist',
-			'codicon.css',
-		)
-
-		// Convert resource URIs to webview URIs
-		const scriptUri = webview.asWebviewUri(scriptPath)
-		const styleUri = webview.asWebviewUri(stylePath)
-		const elementsBundleUri = webview.asWebviewUri(elementsBundlePath)
-		const codiconsUri = webview.asWebviewUri(codiconsPath)
-
-		// Use a nonce to only allow specific scripts to be run
+	private _getDevHtml(): string {
 		const nonce = getNonce()
-
-		// NOTE: The extensive linter errors for the HTML string below are likely due to
-		// the linter misinterpreting the embedded HTML as TypeScript code.
-		// These errors can usually be ignored if the HTML itself is valid.
-		return `<!DOCTYPE html>
+		// Slightly less strict CSP for development to allow HMR, eval source maps etc.
+		return `
+<!doctype html>
 <html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<!--
-	Use a content security policy to only allow loading styles from our extension directory,
-	and only allow running scripts with the specified nonce.
-	(Allowing 'unsafe-inline' for style-src is required for vscode-elements theming)
-	-->
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link href="${styleUri}" rel="stylesheet">
-	<link href="${codiconsUri}" rel="stylesheet" id="vscode-codicon-stylesheet">
-	<title>Above Repo Files</title>
-</head>
-<body>
-	<h1>Above Repo</h1>
-
-	<vscode-tabs selected-index="0">
-		<vscode-tab-header slot="header">Explorer</vscode-tab-header>
-		<vscode-tab-panel>
-			<h2>Files Explorer</h2>
-			<button id="refresh-button" style="margin-right: 10px;">Refresh</button>
-			<input type="text" id="search-input" placeholder="Search files...">
-			<vscode-progress-ring id="progress-ring" style="display: none;"></vscode-progress-ring>
-			<vscode-tree id="file-tree-container"></vscode-tree>
-		</vscode-tab-panel>
-
-		<vscode-tab-header slot="header">Context</vscode-tab-header>
-		<vscode-tab-panel>
-			<!-- Content for Context tab (PRD 2.2) -->
-			<p>Selected files: <span id="selected-count">0</span></p>
-			<h3>User Instructions</h3>
-			<vscode-textarea id="user-instructions" placeholder="Enter instructions for the AI..." style="width: 100%;" rows="5"></vscode-textarea>
-			<div style="margin-top: 10px;">
-				<vscode-button id="copy-button">Copy Context</vscode-button>
-				<vscode-button id="copy-xml-button" style="margin-left: 5px;">Copy Context with XML Instructions</vscode-button>
-			</div>
-		</vscode-tab-panel>
-
-		<vscode-tab-header slot="header">Apply</vscode-tab-header>
-		<vscode-tab-panel>
-			<!-- Content for Apply tab (PRD 3.3) -->
-			<p>Applying LLM changes features will go here.</p>
-		</vscode-tab-panel>
-	</vscode-tabs>
-
-	<vscode-divider />
-
-	<script nonce="${nonce}" src="${scriptUri}"></script>
-	<script
-		src="${elementsBundleUri}"
-		type="module"
-		nonce="${nonce}"
-	></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="${DEV_WEBVIEW_URL}/node_modules/@vscode/codicons/dist/codicon.css" rel="stylesheet" id="vscode-codicon-stylesheet" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${DEV_WEBVIEW_URL} data:; connect-src ${DEV_WEBVIEW_URL} ws://localhost:5173; img-src ${DEV_WEBVIEW_URL} https: data:; script-src 'unsafe-eval' 'unsafe-inline' ${DEV_WEBVIEW_URL}; style-src 'unsafe-inline' ${DEV_WEBVIEW_URL};">
+    <script type="module">
+      // Manual React Refresh preamble injection
+      import { injectIntoGlobalHook } from "${DEV_WEBVIEW_URL}/@react-refresh"
+      injectIntoGlobalHook(window)
+      window.$RefreshReg$ = () => {}
+      window.$RefreshSig$ = () => (type) => type
+      window.__vite_plugin_react_preamble_installed__ = true
+    </script>
+    <script type="module" src="${DEV_WEBVIEW_URL}/@vite/client"></script>
+    <link rel="icon" type="image/svg+xml" href="${DEV_WEBVIEW_URL}/vite.svg" />
+    <title>Above Repo (Dev)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="${DEV_WEBVIEW_URL}/src/main.tsx"></script>
+    <script nonce="${nonce}">
+      // Pass vscode API and nonce to the webview
+      window.nonce = "${nonce}"
+      window.vscode = acquireVsCodeApi()
+    </script>
+  </body>
 </html>`
 	}
 
-	// --- Removed Helper Functions for Context Generation ---
-	// (Moved to src/prompts/index.ts)
-	// --- Removed File System Functions ---
-	// (Moved to src/utils/fileSystemUtils.ts)
-}
+	private _getProdHtml(webview: vscode.Webview): string {
+		const nonce = getNonce()
+		const cspSource = webview.cspSource
 
-// Generates a random nonce string for CSP
+		// Paths to built assets, referencing the structure defined in vite.config.ts
+		const scriptUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				'dist',
+				'webview-ui',
+				'assets',
+				'index.js',
+			),
+		)
+		const styleUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				'dist',
+				'webview-ui',
+				'assets',
+				'index.css',
+			),
+		)
+
+		// Path to codicons from the extension's node_modules
+		const codiconUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				'node_modules',
+				'@vscode',
+				'codicons',
+				'dist',
+				'codicon.css',
+			),
+		)
+
+		return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="${codiconUri}" rel="stylesheet" id="vscode-codicon-stylesheet" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${cspSource}; img-src ${cspSource} https: data:; script-src 'nonce-${nonce}'; style-src ${cspSource} 'unsafe-inline';">
+  <link rel="stylesheet" type="text/css" href="${styleUri}">
+  <title>Above Repo</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
+  <script nonce="${nonce}">
+    // Pass vscode API and nonce to the webview
+    window.nonce = "${nonce}"
+    window.vscode = acquireVsCodeApi()
+  </script>
+</body>
+</html>`
+	}
+}

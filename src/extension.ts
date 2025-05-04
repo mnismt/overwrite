@@ -11,7 +11,10 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "aboverepo" is now active!')
 
 	// Register the Webview View Provider
-	const provider = new FileExplorerWebviewProvider(context.extensionUri)
+	const provider = new FileExplorerWebviewProvider(
+		context.extensionUri,
+		context,
+	)
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			FileExplorerWebviewProvider.viewType,

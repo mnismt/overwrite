@@ -3,3 +3,13 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# Webview build output
+/dist/webview-ui/
+
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

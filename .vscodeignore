@@ -1,13 +1,28 @@
 .vscode/**
 .vscode-test/**
-out/**
-node_modules/**
+.github/**
 src/**
+!dist/extension.js
+node_modules/**
+*.vsix
+.vscodeignore
+
+# Ignore webview source code and dev dependencies
+src/webview-ui/src/**
+src/webview-ui/public/**
+src/webview-ui/index.html
+src/webview-ui/vite.config.ts
+src/webview-ui/tsconfig.json
+src/webview-ui/package.json
+src/webview-ui/pnpm-lock.yaml
+src/webview-ui/node_modules/**
+
+# But DO include the built webview assets
+!dist/webview-ui/**
+
+out/**
 .gitignore
-.yarnrc
-esbuild.js
-vsc-extension-quickstart.md
-**/.eslintrc.json
-**/*.map
-**/*.ts
-**/.vscode-test.*
+README.md
+pnpm-lock.yaml
+tsconfig.json
+package.json
