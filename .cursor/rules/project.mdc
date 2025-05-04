@@ -47,3 +47,8 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 
 ## Important Notes
 - When updating permissions, update the extension's manifest or capabilities as needed
+
+## Additional Rules
+
+- **Rule: Use Kebab-Case for File Names**  
+  All new file names in the project must use kebab-case (e.g., `explorer-tab.tsx`) to maintain consistency and ease of use in URLs and imports. When renaming existing files, update references in [ExplorerTab.tsx](mdc:src/webview-ui/src/components/ExplorerTab.tsx) and other related files.

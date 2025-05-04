@@ -1,21 +1,16 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode'
-import * as path from 'node:path'
-import * as fs from 'node:fs/promises' // Use promises version of fs
-import type { Uri } from 'vscode' // Import Uri as type
 
 // Import prompt generation functions
 import {
-	generateFileMap,
 	generateFileContents,
+	generateFileMap,
 	generatePrompt,
 } from './prompts' // Assuming prompts/index.ts is in the same dir
 import type { VscodeTreeItem } from './types' // Import types
-import { getNonce } from './utils/webviewUtils' // Import getNonce
-import { getWorkspaceFileTree } from './utils/fileSystemUtils' // Import file tree function
-
-// Define the structure expected by the vscode-tree component
+import { getWorkspaceFileTree } from './utils/file-system' // Import file tree function
+import { getNonce } from './utils/webview' // Import getNonce
 
 // Store the full tree data in the provider instance
 let fullTreeCache: VscodeTreeItem[] = []
