@@ -26,6 +26,9 @@
 			"a11y": {
 				"noBlankTarget": "off",
 				"useButtonType": "off"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": "off"
 			}
 		}
 	},
