@@ -181,8 +181,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				lastClickedItem === clickedPath &&
 				currentTime - lastClickTime < 500
 			) {
-				// It's a double-click - determine if it's a file or folder
-				if (!item.subItems || item.subItems.length === 0) {
+				// It's a double-click - determine if it's a file or folder (leaf or branch)
+				if ((item as any).itemType === 'leaf') {
 					// It's a file, send message to open it
 					const vscode = getVsCodeApi()
 					vscode.postMessage({

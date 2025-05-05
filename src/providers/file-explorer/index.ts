@@ -17,14 +17,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _view?: vscode.WebviewView
 	private _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
-	private readonly _excludedDirs = [
-		'.git',
-		'node_modules',
-		'.vscode',
-		'.cursor',
-		'dist',
-		'out',
-	] // Directories to exclude
+	private readonly _excludedDirs = [] // Directories to exclude
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
