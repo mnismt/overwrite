@@ -55,10 +55,8 @@ export function generateFileMap(
 ): string {
 	const selectedTree = filterSelectedTree(fullTree, selectedPaths)
 	const lines: string[] = []
-	lines.push('<file_map>')
 	lines.push(rootPath) // Start with the absolute root path
 	buildTreeString(selectedTree, '', lines)
-	lines.push('</file_map>')
 	return lines.join('\n')
 }
 
@@ -94,12 +92,15 @@ export async function generateFileContents(
 
 	for (const relativePath of sortedPaths) {
 		const absolutePath = path.join(rootPath, relativePath)
+
 		try {
 			const stat = await fs.stat(absolutePath)
 			if (stat.isFile()) {
 				const content = await fs.readFile(absolutePath, 'utf-8')
 				// Use relative path in the header
 				contentsStr += `File: ${relativePath}\n\`\`\`\n${content}\n\`\`\`\n\n`
+			} else {
+				console.log('Not a file (possibly a directory):', relativePath)
 			}
 		} catch (error: unknown) {
 			let errorMessage = 'Unknown error'
@@ -115,6 +116,7 @@ export async function generateFileContents(
 			contentsStr += `File: ${relativePath}\n*** Error reading file: ${errorMessage} ***\n\n`
 		}
 	}
+
 	// Trim the trailing newlines
 	return contentsStr.trim()
 }
@@ -133,13 +135,14 @@ export function generatePrompt(
 	userInstructions: string,
 	includeXmlFormatting: boolean,
 ): string {
-	let prompt = `${fileMap}
+	let prompt = `<file_map>
+${fileMap}
+</file_map>
 
 <file_contents>
 ${fileContents}
 </file_contents>
 `
-
 	if (includeXmlFormatting) {
 		prompt += `\n${XML_FORMATTING_INSTRUCTIONS}`
 	}

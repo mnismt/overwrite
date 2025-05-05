@@ -15,7 +15,6 @@ function App() {
 	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index (0: Context, 1: Apply)
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
 	const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
-	const [userInstructions, setUserInstructions] = useState<string>('')
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 
 	// Send message to extension using the utility
@@ -37,7 +36,6 @@ function App() {
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent<VsCodeMessage>) => {
 			const message = event.data
-			console.log('Message from extension:', message)
 
 			switch (message.command) {
 				case 'updateFileTree':
@@ -76,25 +74,27 @@ function App() {
 	// Selection handler (assuming it will be needed in the combined ContextTab)
 	const handleSelect = useCallback((paths: Set<string>) => {
 		setSelectedPaths(paths)
-		// Potentially send updates to the extension if needed, or handle locally
-		console.log('Selected paths updated:', paths)
 	}, [])
 
 	// Context Tab: Handle copying
 	const handleCopy = useCallback(
-		(includeXml: boolean) => {
-			sendMessage('copyContext', {
+		({
+			includeXml,
+			userInstructions,
+		}: { includeXml: boolean; userInstructions: string }) => {
+			if (selectedPaths.size === 0) {
+				// Display warning in the UI since we can't show VS Code notifications from webview
+				console.warn('No files selected. Please select files before copying.')
+				return
+			}
+
+			// Send message to extension with payload
+			sendMessage(includeXml ? 'copyContextXml' : 'copyContext', {
 				selectedPaths: Array.from(selectedPaths),
 				userInstructions,
-				includeXml, // Determine command in extension based on this?
 			})
-			// Or send different commands:
-			// sendMessage(includeXml ? 'copyContextXml' : 'copyContext', {
-			//   selectedPaths: Array.from(selectedPaths),
-			//   userInstructions,
-			// });
 		},
-		[selectedPaths, userInstructions, sendMessage],
+		[selectedPaths, sendMessage],
 	)
 
 	// Apply Tab: Handle applying changes
@@ -119,8 +119,6 @@ function App() {
 					<ContextTab
 						// Props for original Context functionality
 						selectedCount={selectedPaths.size}
-						userInstructions={userInstructions}
-						onUserInstructionsChange={setUserInstructions}
 						onCopy={handleCopy}
 						// Props for Explorer functionality
 						fileTreeData={fileTreeData}

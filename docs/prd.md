@@ -10,7 +10,7 @@ Here are the essential features for the initial version:
 
 **2.1. Context Generation & File Selection (Webview Panel - Context Tab)**
 
-Status: In Progress (UI Merged)
+Status: Done
 
 The **Context Tab** in the Webview Panel is the primary interface for selecting files and preparing the prompt context.
 
