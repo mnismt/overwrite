@@ -1,0 +1,28 @@
+---
+description: 
+globs: src/test/**/*.ts
+alwaysApply: false
+---
+# Testing Rules Guide
+
+This rule provides an overview of the testing setup for the AboveRepo VS Code extension, including unit and integration tests.
+
+## Key Concepts
+- **Testing Framework:** Uses Mocha for writing tests, integrated with VS Code's testing tools via `@vscode/test-cli`.
+- **Test Structure:** Tests are located in the `src/test/` directory. The main test file is [src/test/suite/extension.test.ts](mdc:src/test/suite/extension.test.ts), which includes sample tests for the extension.
+- **Configuration Files:** 
+  - [.vscode-test.mjs](mdc:.vscode-test.mjs) defines the test runner configuration, specifying files like 'out/test/**/*.test.js'.
+  - [tsconfig.json](mdc:tsconfig.json) includes test files under 'src/**/*.ts' and sets output to 'out/'.
+  - [esbuild.js](mdc:esbuild.js) bundles test files into the 'out/' directory.
+- **Scripts:** 
+  - Run tests with the command `pnpm test`, which compiles code, runs linting with Biome, and executes tests.
+  - Pretest script in [package.json](mdc:package.json) ensures compilation and linting before testing.
+
+## How to Run Tests
+- **Command Line:** Execute `pnpm test` from the root directory.
+- **In VS Code:** Use the Test Explorer view or run the 'Extension Tests' launch configuration from .vscode/launch.json.
+
+## Best Practices
+- Write tests in `src/test/suite/` using assertions from 'node:assert'.
+- Ensure tests import from 'vscode' for extension API interactions.
+- Debug tests via the 'Extension Tests' configuration in [.vscode/launch.json](mdc:.vscode/launch.json).

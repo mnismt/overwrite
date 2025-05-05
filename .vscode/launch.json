@@ -13,7 +13,28 @@
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
 			"outFiles": [
-				"${workspaceFolder}/dist/**/*.js"
+				"${workspaceFolder}/out/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			"name": "Extension Tests",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				// The path to the test runner script. 
+				// This should point to the compiled JS file in the 'out' directory
+				// that corresponds to your test entry point logic (if using advanced setup),
+				// or is not strictly needed if just running tests via CLI/UI directly.
+				// For simplicity with the CLI approach, we can initially omit or point it
+				// generally to the test output directory, but the Test Explorer or 
+				// 'npm run test' will handle invoking correctly via `@vscode/test-cli`.
+				// Example if using advanced setup: "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
+				"--extensionTestsPath=${workspaceFolder}/out/test/suite/extension.test.js" // Point to a specific test file or the test suite index
+			],
+			"outFiles": [
+				"${workspaceFolder}/out/test/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
 		}

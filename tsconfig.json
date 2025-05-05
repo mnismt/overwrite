@@ -1,22 +1,31 @@
 {
 	"compilerOptions": {
-		"module": "Node16",
-		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"target": "ES2020",
 		"lib": [
-			"ES2022"
+			"ES2020",
+			"DOM"
 		],
 		"sourceMap": true,
 		"rootDir": "src",
 		"strict": true,
-		"noImplicitAny": true,
-		"noImplicitReturns": true,
-		"noFallthroughCasesInSwitch": true,
-		"forceConsistentCasingInFileNames": true
-		/* Additional Checks */
-		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
-		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
-		// "noUnusedParameters": true,  /* Report errors on unused parameters. */
+		"outDir": "out",
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"jsx": "react-jsx",
+		"jsxImportSource": "@emotion/react",
+		"types": [
+			"node",
+			"@types/mocha"
+		]
 	},
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"global.d.ts"
+	],
 	"exclude": [
 		"node_modules",
 		".vscode-test",

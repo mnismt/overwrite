@@ -1,10 +1,19 @@
-const esbuild = require("esbuild");
-const path = require("node:path");
-const { execSync } = require("node:child_process");
+const { build } = require('esbuild');
+const path = require('node:path');
+const glob = require('glob');
+const { execSync } = require('node:child_process');
 const fs = require('node:fs');
 
-const production = process.argv.includes('--production');
-const watch = process.argv.includes('--watch');
+const isProduction = process.argv.includes('--production');
+const isWatch = process.argv.includes('--watch');
+
+const extensionEntryPoints = ['./src/extension.ts'];
+
+// Find all test files
+const testFiles = glob.sync('./src/test/**/*.ts');
+
+// Combine extension and test entry points
+const allEntryPoints = [...extensionEntryPoints, ...testFiles];
 
 /**
  * @type {import('esbuild').Plugin}
@@ -25,6 +34,60 @@ const esbuildProblemMatcherPlugin = {
 		});
 	},
 };
+
+/**
+ * @type {import('esbuild').BuildOptions}
+ */
+const sharedConfig = {
+	bundle: true,
+	minify: isProduction,
+	sourcemap: !isProduction,
+	external: ['vscode'], // Keep vscode external
+	platform: 'node',
+	logLevel: 'info',
+	initialOptions: {
+		incremental: isWatch,
+	},
+	// Add other necessary shared configurations
+};
+
+// Build script for the extension
+build({
+	...sharedConfig,
+	entryPoints: allEntryPoints, // Use combined entry points
+	outdir: './out',
+	format: 'cjs',
+})
+	.then(() => {
+		if (isWatch) {
+			console.log('[watch] build finished, watching for changes...');
+		}
+	})
+	.catch((e) => {
+		console.error(e);
+		process.exit(1);
+	});
+
+// Build script for the webview UI
+const webviewEntryPoints = ['./src/webview-ui/src/main.tsx'];
+
+build({
+	...sharedConfig,
+	entryPoints: webviewEntryPoints,
+	outdir: './dist/webview-ui',
+	format: 'esm',
+	platform: 'browser',
+	// Add specific webview build configurations here if needed
+})
+	.then(() => {
+		if (isWatch) {
+			console.log('[watch] webview build finished, watching for changes...');
+		}
+	})
+	.catch((e) => {
+		console.error(e);
+		process.exit(1);
+	});
 
 // Run Vite build for webview UI before building the extension
 try {
@@ -52,35 +115,3 @@ try {
 	console.error('Vite build failed:', err);
 	process.exit(1);
 }
-
-async function main() {
-	const ctx = await esbuild.context({
-		entryPoints: [
-			'src/extension.ts'
-		],
-		bundle: true,
-		format: 'cjs',
-		minify: production,
-		sourcemap: !production,
-		sourcesContent: false,
-		platform: 'node',
-		outfile: 'dist/extension.js',
-		external: ['vscode'],
-		logLevel: 'silent',
-		plugins: [
-			/* add to the end of plugins array */
-			esbuildProblemMatcherPlugin,
-		],
-	});
-	if (watch) {
-		await ctx.watch();
-	} else {
-		await ctx.rebuild();
-		await ctx.dispose();
-	}
-}
-
-main().catch(e => {
-	console.error(e);
-	process.exit(1);
-});
