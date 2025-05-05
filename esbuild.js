@@ -45,10 +45,6 @@ const sharedConfig = {
 	external: ['vscode'], // Keep vscode external
 	platform: 'node',
 	logLevel: 'info',
-	initialOptions: {
-		incremental: isWatch,
-	},
-	// Add other necessary shared configurations
 };
 
 // Build script for the extension

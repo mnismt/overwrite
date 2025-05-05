@@ -14,6 +14,9 @@ importers:
       '@vscode/codicons':
         specifier: ^0.0.36
         version: 0.0.36
+      fast-xml-parser:
+        specifier: ^5.2.2
+        version: 5.2.2
       ignore:
         specifier: ^7.0.4
         version: 7.0.4
@@ -572,6 +575,10 @@ packages:
   escape-string-regexp@4.0.0:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
+
+  fast-xml-parser@5.2.2:
+    resolution: {integrity: sha512-ZaCmslH75Jkfowo/x44Uq8KT5SutC5BFxHmY61nmTXPccw11PVuIXKUqC2hembMkJ3nPwTkQESXiUlsKutCbMg==}
+    hasBin: true
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -1280,6 +1287,9 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
+  strnum@2.1.0:
+    resolution: {integrity: sha512-w0S//9BqZZGw0L0Y8uLSelFGnDJgTyyNQLmSlPnVz43zPAiqu3w4t8J8sDqqANOGeZIZ/9jWuPguYcEnsoHv4A==}
+
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
     engines: {node: '>=4'}
@@ -1947,6 +1957,10 @@ snapshots:
   escape-string-regexp@1.0.5: {}
 
   escape-string-regexp@4.0.0: {}
+
+  fast-xml-parser@5.2.2:
+    dependencies:
+      strnum: 2.1.0
 
   fill-range@7.1.1:
     dependencies:
@@ -2761,6 +2775,8 @@ snapshots:
   strip-bom@3.0.0: {}
 
   strip-json-comments@3.1.1: {}
+
+  strnum@2.1.0: {}
 
   supports-color@5.5.0:
     dependencies:

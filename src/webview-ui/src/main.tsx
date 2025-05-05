@@ -12,6 +12,14 @@ import '@vscode-elements/elements/dist/vscode-textfield'
 import '@vscode-elements/elements/dist/vscode-textarea'
 import '@vscode-elements/elements/dist/vscode-label'
 import '@vscode-elements/elements/dist/vscode-form-container'
+import '@vscode-elements/elements/dist/vscode-table'
+import '@vscode-elements/elements/dist/vscode-table-body'
+import '@vscode-elements/elements/dist/vscode-table-cell'
+import '@vscode-elements/elements/dist/vscode-table-header'
+import '@vscode-elements/elements/dist/vscode-table-header-cell'
+import '@vscode-elements/elements/dist/vscode-table-row'
+import '@vscode-elements/elements/dist/vscode-badge'
+import '@vscode-elements/elements/dist/vscode-divider'
 
 if (import.meta.env.DEV) {
 	await import('@vscode-elements/webview-playground')
