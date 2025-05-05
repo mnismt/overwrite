@@ -1,6 +1,3 @@
-import type * as vscode from 'vscode'
-import type { Uri, ThemeColor } from 'vscode'
-
 // Define the structure expected by the vscode-tree component
 export interface VscodeTreeAction {
 	icon: string
@@ -24,7 +21,7 @@ export interface VscodeTreeItem {
 	decorations?: {
 		content?: string
 		appearance?: 'counter-badge' | 'filled-circle'
-		color?: string | ThemeColor
+		color?: string | any
 		tooltip?: string
 	}[]
 }

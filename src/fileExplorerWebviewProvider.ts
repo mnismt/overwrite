@@ -11,6 +11,7 @@ import {
 import type { VscodeTreeItem } from './types' // Import types
 import { getWorkspaceFileTree } from './utils/file-system' // Import file tree function
 import { getNonce } from './utils/webview' // Import getNonce
+import path from 'node:path'
 
 // Store the full tree data in the provider instance
 let fullTreeCache: VscodeTreeItem[] = []
@@ -94,79 +95,126 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 							message: `Error getting workspace files: ${errorMessage}`,
 						})
 					}
+					break
+				case 'openFile':
+					try {
+						const payload = message.payload || {}
+						const filePath = payload.filePath
+
+						if (!filePath) {
+							throw new Error('No file path provided')
+						}
+
+						// Get the workspace folders
+						const workspaceFolders = vscode.workspace.workspaceFolders
+						if (!workspaceFolders || workspaceFolders.length === 0) {
+							throw new Error('No workspace folder open.')
+						}
+
+						// Resolve the absolute file path
+						const rootPath = workspaceFolders[0].uri.fsPath
+						const absoluteFilePath = path.isAbsolute(filePath)
+							? filePath
+							: path.join(rootPath, filePath)
+
+						// Create a VS Code URI for the file
+						const fileUri = vscode.Uri.file(absoluteFilePath)
+
+						// Check if the path is a file
+						const fileStat = await vscode.workspace.fs.stat(fileUri)
+						if (fileStat.type === vscode.FileType.File) {
+							// Open the file in the editor
+							const document = await vscode.workspace.openTextDocument(fileUri)
+							await vscode.window.showTextDocument(document)
+						} else {
+							// Ignore directories
+							vscode.window.showWarningMessage(
+								`Ignoring directory: ${filePath}`,
+							)
+						}
+					} catch (error: unknown) {
+						const errorMessage =
+							error instanceof Error ? error.message : String(error)
+						vscode.window.showErrorMessage(
+							`Error opening file: ${errorMessage}`,
+						)
+					}
+					break
+				case 'copyContext':
+				case 'copyContextXml':
+					try {
+						const workspaceFolders = vscode.workspace.workspaceFolders
+						if (!workspaceFolders || workspaceFolders.length === 0) {
+							throw new Error('No workspace folder open.')
+						}
+						const rootPath = workspaceFolders[0].uri.fsPath
+
+						// Get selected paths from message payload
+						const payload = message.payload || {}
+						const selectedPathsArray = Array.isArray(payload.selectedPaths)
+							? payload.selectedPaths
+							: []
+						const selectedPaths = new Set<string>(selectedPathsArray)
+
+						// Check if selectedPaths is empty and show warning
+						if (selectedPaths.size === 0) {
+							vscode.window.showWarningMessage(
+								'No files selected. Please select files before copying.',
+							)
+							return
+						}
+
+						// Get user instructions from payload
+						const userInstructions =
+							typeof payload.userInstructions === 'string'
+								? payload.userInstructions
+								: ''
+						const includeXml = message.command === 'copyContextXml'
+
+						console.log({
+							selectedPaths: Array.from(selectedPaths),
+							userInstructions,
+							includeXml,
+						})
+
+						// Ensure fullTreeCache is populated
+						if (fullTreeCache.length === 0) {
+							console.log('Full tree cache empty, fetching...')
+							// Use imported function if cache is empty
+							fullTreeCache = await getWorkspaceFileTree(this.excludedDirs)
+						}
+
+						// Generate components using imported functions
+						const fileMap = generateFileMap(
+							fullTreeCache,
+							selectedPaths,
+							rootPath,
+						)
+						const fileContents = await generateFileContents(
+							selectedPaths,
+							rootPath,
+						)
+
+						// Generate the final prompt
+						const prompt = generatePrompt(
+							fileMap,
+							fileContents,
+							userInstructions,
+							includeXml,
+						)
+
+						// Copy to clipboard
+						await vscode.env.clipboard.writeText(prompt)
+						vscode.window.showInformationMessage('Context copied to clipboard!')
+					} catch (error: unknown) {
+						const errorMessage =
+							error instanceof Error ? error.message : String(error)
+						console.error('Error generating or copying context:', error)
+						vscode.window.showErrorMessage(
+							`Error generating context: ${errorMessage}`,
+						)
+					}
 					break // Use break instead of return inside block scope
-case 'copyContext':
-case 'copyContextXml':
-	try {
-		const workspaceFolders = vscode.workspace.workspaceFolders
-		if (!workspaceFolders || workspaceFolders.length === 0) {
-			throw new Error('No workspace folder open.')
-		}
-		const rootPath = workspaceFolders[0].uri.fsPath
-		
-		// Get selected paths from message payload
-		const payload = message.payload || {}
-		const selectedPathsArray = Array.isArray(payload.selectedPaths) ? payload.selectedPaths : []
-		const selectedPaths = new Set<string>(selectedPathsArray)
-		
-		console.log('Message payload:', payload)
-		console.log('Selected paths array:', selectedPathsArray)
-		console.log('Selected paths Set size:', selectedPaths.size)
-		
-		// Check if selectedPaths is empty and show warning
-		if (selectedPaths.size === 0) {
-			vscode.window.showWarningMessage('No files selected. Please select files before copying.')
-			return
-		}
-		
-		// Get user instructions from payload
-		const userInstructions = typeof payload.userInstructions === 'string' ? payload.userInstructions : ''
-		const includeXml = message.command === 'copyContextXml'
-
-		console.log({
-			selectedPaths: Array.from(selectedPaths),
-			userInstructions,
-			includeXml,
-		})
-
-		// Ensure fullTreeCache is populated
-		if (fullTreeCache.length === 0) {
-			console.log('Full tree cache empty, fetching...')
-			// Use imported function if cache is empty
-			fullTreeCache = await getWorkspaceFileTree(this.excludedDirs)
-		}
-
-		// Generate components using imported functions
-		const fileMap = generateFileMap(
-			fullTreeCache,
-			selectedPaths,
-			rootPath,
-		)
-		const fileContents = await generateFileContents(
-			selectedPaths,
-			rootPath,
-		)
-
-		// Generate the final prompt
-		const prompt = generatePrompt(
-			fileMap,
-			fileContents,
-			userInstructions,
-			includeXml,
-		)
-
-		// Copy to clipboard
-		await vscode.env.clipboard.writeText(prompt)
-		vscode.window.showInformationMessage('Context copied to clipboard!')
-	} catch (error: unknown) {
-		const errorMessage =
-			error instanceof Error ? error.message : String(error)
-		console.error('Error generating or copying context:', error)
-		vscode.window.showErrorMessage(
-			`Error generating context: ${errorMessage}`,
-		)
-	}
-	break // Use break instead of return inside block scope
 				// Add cases for selection, etc. later
 			}
 		})

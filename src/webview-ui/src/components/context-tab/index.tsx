@@ -1,7 +1,15 @@
-import type { VscTreeActionEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import type {
+	VscTreeActionEvent,
+	VscTreeSelectEvent,
+} from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
-import { getAllDescendantPaths, transformTreeData } from './utils'
+import { getVsCodeApi } from '../../utils/vscode'
+import {
+	getAllDescendantPaths,
+	transformTreeData,
+	filterTreeData,
+} from './utils'
 
 interface ContextTabProps {
 	selectedCount: number
@@ -30,16 +38,25 @@ const ContextTab: React.FC<ContextTabProps> = ({
 }) => {
 	// Ref for the vscode-tree element to update its data in place
 	const [userInstructions, setUserInstructions] = useState('')
+	// State for search query
+	const [searchQuery, setSearchQuery] = useState('')
 	const treeRef = useRef<any>(null)
 
-	// Initialize tree data when fileTreeData loads
+	// State for tracking double-clicks
+	const [lastClickedItem, setLastClickedItem] = useState<string | null>(null)
+	const [lastClickTime, setLastClickTime] = useState<number>(0)
+
+	// Initialize tree data when fileTreeData loads or searchQuery changes
 	useEffect(() => {
 		if (treeRef.current) {
-			// Generate initial tree with actions & decorations
-			const initialData = transformTreeData(fileTreeData, selectedPaths)
+			// Filter based on search query, then generate tree with actions & decorations
+			const baseItems = searchQuery
+				? filterTreeData(fileTreeData, searchQuery)
+				: fileTreeData
+			const initialData = transformTreeData(baseItems, selectedPaths)
 			treeRef.current.data = initialData
 		}
-	}, [fileTreeData])
+	}, [fileTreeData, searchQuery])
 
 	// Update only actions & decorations when selection changes, preserving expanded states
 	useEffect(() => {
@@ -97,11 +114,11 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const handleRefreshClick = useCallback(() => onRefresh(), [onRefresh])
 	const handleCopyContextClick = useCallback(
 		() => onCopy({ includeXml: false, userInstructions }),
-		[onCopy],
+		[onCopy, userInstructions],
 	)
 	const handleCopyContextXmlClick = useCallback(
 		() => onCopy({ includeXml: true, userInstructions }),
-		[onCopy],
+		[onCopy, userInstructions],
 	)
 
 	// Handler for clicking the action icon - Toggles ONLY the clicked item
@@ -150,6 +167,42 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		[selectedPaths, onSelect],
 	)
 
+	// Handle tree item selection with double-click detection
+	const handleTreeSelect = useCallback(
+		(event: VscTreeSelectEvent) => {
+			const item = event.detail as VscodeTreeItem
+			if (!item?.value) return
+
+			const clickedPath = item.value
+			const currentTime = Date.now()
+
+			// Check if this is a double-click (same item clicked within 500ms)
+			if (
+				lastClickedItem === clickedPath &&
+				currentTime - lastClickTime < 500
+			) {
+				// It's a double-click - determine if it's a file or folder
+				if (!item.subItems || item.subItems.length === 0) {
+					// It's a file, send message to open it
+					const vscode = getVsCodeApi()
+					vscode.postMessage({
+						command: 'openFile',
+						payload: { filePath: clickedPath },
+					})
+				}
+
+				// Reset tracking after processing double-click
+				setLastClickedItem(null)
+				setLastClickTime(0)
+			} else {
+				// It's a single click - update tracking
+				setLastClickedItem(clickedPath)
+				setLastClickTime(currentTime)
+			}
+		},
+		[lastClickedItem, lastClickTime],
+	)
+
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 			{/* --- Explorer Top Bar --- */}
@@ -168,6 +221,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				<vscode-textfield
 					placeholder="Search files..."
 					style={{ marginLeft: '10px', flexGrow: 1 }}
+					value={searchQuery}
+					onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
 				>
 					<span slot="start" className="codicon codicon-search" />
 				</vscode-textfield>
@@ -190,6 +245,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 					<vscode-tree
 						ref={treeRef}
 						onvsc-tree-action={handleTreeAction}
+						onvsc-tree-select={handleTreeSelect}
 						arrows
 						indent-guides
 					/>

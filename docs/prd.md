@@ -39,6 +39,8 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
   * Generate the `<file_map>` tag (hierarchical structure).
   * Read and format the content for `<file_contents>`.
   * Include the fixed `<xml_formatting_instructions>` when requested.
+* **Requirement 2.1.10: Double click on the selected files in the tree view should open the file in the editor.**
+  * Implement a double click handler on the tree view to open the selected file in the editor.
 
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 

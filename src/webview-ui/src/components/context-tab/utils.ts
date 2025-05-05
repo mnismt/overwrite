@@ -119,3 +119,28 @@ export const transformTreeData = (
 	const itemsWithActions = addActionsToTree(items, selectedPaths)
 	return addDecorationsToTree(itemsWithActions, selectedPaths)
 }
+
+// Helper function to filter tree items based on a search query, keeping ancestors of matched items
+export const filterTreeData = (
+	items: VscodeTreeItem[],
+	query: string,
+): VscodeTreeItem[] => {
+	if (!query) return items
+	const lowerQuery = query.toLowerCase()
+	return items.reduce((acc: VscodeTreeItem[], item) => {
+		const label = item.label || ''
+		const labelMatches = label.toLowerCase().includes(lowerQuery)
+		let filteredSubs: VscodeTreeItem[] | undefined
+		if (item.subItems && item.subItems.length > 0) {
+			filteredSubs = filterTreeData(item.subItems, query)
+		}
+		if (labelMatches) {
+			// If label matches, include entire subtree
+			acc.push(item)
+		} else if (filteredSubs && filteredSubs.length > 0) {
+			// If any descendants match, include item with filtered children
+			acc.push({ ...item, subItems: filteredSubs })
+		}
+		return acc
+	}, [])
+}
