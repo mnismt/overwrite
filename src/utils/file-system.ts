@@ -1,7 +1,7 @@
-import * as vscode from 'vscode'
-import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
+import * as path from 'node:path'
 import ignore from 'ignore' // Import the ignore package
+import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
 
 /**

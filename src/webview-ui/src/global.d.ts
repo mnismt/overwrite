@@ -20,13 +20,13 @@ import type {
 	VscodeScrollable,
 	VscodeSingleSelect,
 	VscodeTabHeader,
+	VscodeTabPanel,
 	VscodeTable,
 	VscodeTableBody,
 	VscodeTableCell,
 	VscodeTableHeader,
 	VscodeTableHeaderCell,
 	VscodeTableRow,
-	VscodeTabPanel,
 	VscodeTabs,
 	VscodeTextarea,
 	VscodeTextfield,
@@ -35,8 +35,8 @@ import type {
 import type { VscCollapsibleToggleEvent } from '@vscode-elements/elements/dist/vscode-collapsible/vscode-collapsible'
 import type { VscContextMenuSelectEvent } from '@vscode-elements/elements/dist/vscode-context-menu/vscode-context-menu'
 import type {
-	VscodeSplitLayout,
 	VscSplitLayoutChangeEvent,
+	VscodeSplitLayout,
 } from '@vscode-elements/elements/dist/vscode-split-layout/vscode-split-layout'
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
 import type {

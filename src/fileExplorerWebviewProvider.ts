@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode'
 
+import path from 'node:path'
 // Import prompt generation functions
 import {
 	generateFileContents,
@@ -11,7 +12,6 @@ import {
 import type { VscodeTreeItem } from './types' // Import types
 import { getWorkspaceFileTree } from './utils/file-system' // Import file tree function
 import { getNonce } from './utils/webview' // Import getNonce
-import path from 'node:path'
 
 // Store the full tree data in the provider instance
 let fullTreeCache: VscodeTreeItem[] = []
@@ -301,14 +301,13 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			),
 		)
 
-		// Path to codicons from the extension's node_modules
+		// Path to codicons from the built assets directory
 		const codiconUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(
 				this._extensionUri,
-				'node_modules',
-				'@vscode',
-				'codicons',
 				'dist',
+				'webview-ui',
+				'assets',
 				'codicon.css',
 			),
 		)

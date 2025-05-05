@@ -6,9 +6,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 import {
+	filterTreeData,
 	getAllDescendantPaths,
 	transformTreeData,
-	filterTreeData,
 } from './utils'
 
 interface ContextTabProps {

@@ -1,6 +1,7 @@
 const esbuild = require("esbuild");
 const path = require("node:path");
 const { execSync } = require("node:child_process");
+const fs = require('node:fs');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -33,6 +34,20 @@ try {
 		cwd: path.resolve(__dirname),
 	});
 	console.log('Webview UI build complete.');
+
+	// Copy codicons.css & codicon.ttf from node_modules to dist/webview-ui/assets
+	const codiconsSource = path.join(__dirname, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css');
+	const codiconsDest = path.join(__dirname, 'dist', 'webview-ui', 'assets', 'codicon.css');
+	const codiconTtfSource = path.join(__dirname, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.ttf');
+	const codiconTtfDest = path.join(__dirname, 'dist', 'webview-ui', 'assets', 'codicon.ttf');
+
+	// Ensure the destination directory exists
+	fs.mkdirSync(path.dirname(codiconsDest), { recursive: true });
+	fs.mkdirSync(path.dirname(codiconTtfDest), { recursive: true });
+	// Copy the file
+	fs.copyFileSync(codiconsSource, codiconsDest);
+	fs.copyFileSync(codiconTtfSource, codiconTtfDest);
+	console.log('Copied codicons.css & codicon.ttf to dist/webview-ui/assets');
 } catch (err) {
 	console.error('Vite build failed:', err);
 	process.exit(1);

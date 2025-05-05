@@ -1,32 +1,32 @@
 {
-  "name": "webview-ui",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "test": "vitest"
-  },
-  "dependencies": {
-    "@vscode-elements/elements": "^1.15.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.3.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react-swc": "^3.8.0",
-    "@vscode-elements/webview-playground": "^1.6.0",
-    "globals": "^16.0.0",
-    "jsdom": "^26.1.0",
-    "typescript": "~5.7.2",
-    "typescript-eslint": "^8.26.1",
-    "vite": "^6.3.1",
-    "vitest": "^3.1.2"
-  }
+	"name": "webview-ui",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"lint": "eslint .",
+		"preview": "vite preview",
+		"test": "vitest"
+	},
+	"dependencies": {
+		"@vscode-elements/elements": "^1.15.0",
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0"
+	},
+	"devDependencies": {
+		"@testing-library/jest-dom": "^6.6.3",
+		"@testing-library/react": "^16.3.0",
+		"@types/react": "^19.0.10",
+		"@types/react-dom": "^19.0.4",
+		"@vitejs/plugin-react-swc": "^3.8.0",
+		"@vscode-elements/webview-playground": "^1.6.0",
+		"globals": "^16.0.0",
+		"jsdom": "^26.1.0",
+		"typescript": "~5.7.2",
+		"typescript-eslint": "^8.26.1",
+		"vite": "^6.3.1",
+		"vitest": "^3.1.2"
+	}
 }
