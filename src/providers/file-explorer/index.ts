@@ -10,7 +10,11 @@ import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
 import { parseXmlResponse } from '../../utils/xml-parser'
 import { getHtmlForWebview } from './html-generator'
-import type { CopyContextPayload, OpenFilePayload } from './types'
+import type {
+	CopyContextPayload,
+	GetTokenCountsPayload,
+	OpenFilePayload,
+} from './types'
 import { applyFileActions } from './file-action-handler'
 
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
@@ -100,18 +104,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	// --- Private Helper Methods ---
 
 	/**
-	 * Gets the root path of the first workspace folder.
-	 * Throws an error if no workspace is open.
-	 */
-	private _getWorkspaceRootPath(): string {
-		const workspaceFolders = vscode.workspace.workspaceFolders
-		if (!workspaceFolders || workspaceFolders.length === 0) {
-			throw new Error('No workspace folder is open.')
-		}
-		return workspaceFolders[0].uri.fsPath
-	}
-
-	/**
 	 * Handles errors by showing an error message to the user.
 	 */
 	private _handleError(
@@ -154,26 +146,26 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	 */
 	private async _handleOpenFile(payload: OpenFilePayload): Promise<void> {
 		try {
-			const filePath = payload?.filePath
+			const fileUriString = payload?.fileUri
 
-			if (!filePath) {
-				throw new Error('No file path provided')
+			if (!fileUriString) {
+				throw new Error('No file URI provided')
 			}
 
-			const rootPath = this._getWorkspaceRootPath()
-			const absoluteFilePath = path.isAbsolute(filePath)
-				? filePath
-				: path.join(rootPath, filePath)
-
-			const fileUri = vscode.Uri.file(absoluteFilePath)
+			const fileUri = vscode.Uri.parse(fileUriString)
 
 			// Check if the path is a file
+			// No need to check if it's a directory, openTextDocument will handle it or error appropriately.
+			// However, stat can confirm existence and type if needed before attempting to open.
 			const fileStat = await vscode.workspace.fs.stat(fileUri)
 			if (fileStat.type === vscode.FileType.File) {
 				const document = await vscode.workspace.openTextDocument(fileUri)
 				await vscode.window.showTextDocument(document)
 			} else {
-				vscode.window.showWarningMessage(`Ignoring directory: ${filePath}`)
+				// This case should ideally not be reached if the tree only allows selecting files for "openFile"
+				vscode.window.showWarningMessage(
+					`Cannot open: ${fileUri.fsPath} is not a file.`,
+				)
 			}
 		} catch (error) {
 			this._handleError(error, 'Error opening file')
@@ -188,14 +180,15 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		includeXml: boolean,
 	): Promise<void> {
 		try {
-			const rootPath = this._getWorkspaceRootPath()
+			// const rootPath = this._getWorkspaceRootPath() // This will be removed or re-evaluated
 
-			const selectedPathsArray = Array.isArray(payload?.selectedPaths)
-				? payload.selectedPaths
+			const selectedUrisArray = Array.isArray(payload?.selectedUris)
+				? payload.selectedUris
 				: []
-			const selectedPaths = new Set<string>(selectedPathsArray)
+			// Store URIs as strings, as they come from webview. Parsing will happen as needed.
+			const selectedUriStrings = new Set<string>(selectedUrisArray)
 
-			if (selectedPaths.size === 0) {
+			if (selectedUriStrings.size === 0) {
 				vscode.window.showWarningMessage(
 					'No files selected. Please select files before copying.',
 				)
@@ -208,7 +201,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 					: ''
 
 			console.log('Copy context details:', {
-				selectedPaths: Array.from(selectedPaths),
+				selectedUris: Array.from(selectedUriStrings),
 				userInstructions,
 				includeXml,
 			})
@@ -224,12 +217,15 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			// Generate components using imported functions
+			// TODO: Update generateFileMap and generateFileContents to handle selectedUriStrings and multi-root logic
+			// For now, this will likely break or produce incorrect results until those functions are updated.
 			const fileMap = generateFileMap(
-				this._fullTreeCache, // Use cached tree
-				selectedPaths,
-				rootPath,
+				this._fullTreeCache, // Use cached tree, which is now multi-root
+				selectedUriStrings, // Pass Set of URI strings
 			)
-			const fileContents = await generateFileContents(selectedPaths, rootPath)
+			const fileContents = await generateFileContents(
+				selectedUriStrings, // Pass Set of URI strings
+			)
 
 			// Generate the final prompt
 			const prompt = generatePrompt(
@@ -259,9 +255,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		}
 
 		try {
-			// Get the workspace root path
-			const rootPath = this._getWorkspaceRootPath()
-
 			// Parse the XML response
 			const parseResult = parseXmlResponse(payload.responseText)
 
@@ -302,7 +295,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			// Process each file action
 			const results = await applyFileActions(
 				parseResult.fileActions,
-				rootPath,
+				// rootPath, // Removed rootPath argument
 				this._view,
 			)
 
@@ -339,14 +332,13 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	/**
 	 * Handles the 'getTokenCounts' message from the webview.
 	 */
-	private async _handleGetTokenCounts(payload: {
-		selectedPaths: string[]
-	}): Promise<void> {
+	private async _handleGetTokenCounts(
+		payload: GetTokenCountsPayload,
+	): Promise<void> {
 		if (!this._view) return
 
-		const tokenCounts: Record<string, number> = {}
+		const tokenCounts: Record<string, number> = {} // Keys will be URI strings
 		const errors: string[] = []
-		let rootPath: string
 
 		// Dynamically import Tiktoken and ranks, and create encoder
 		const { Tiktoken } = await import('js-tiktoken/lite')
@@ -360,40 +352,35 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		}
 
 		try {
-			rootPath = this._getWorkspaceRootPath()
-
-			const pathsToCount = Array.isArray(payload?.selectedPaths)
-				? payload.selectedPaths
+			const urisToCount = Array.isArray(payload?.selectedUris)
+				? payload.selectedUris
 				: []
 
-			console.log('Calculating token counts for:', pathsToCount)
+			console.log('Calculating token counts for URIs:', urisToCount)
 
-			// Process paths concurrently
+			// Process URIs concurrently
 			await Promise.all(
-				pathsToCount.map(async (relativePath) => {
+				urisToCount.map(async (uriString) => {
 					try {
-						const absolutePath = path.isAbsolute(relativePath)
-							? relativePath
-							: path.join(rootPath, relativePath)
-						const fileUri = vscode.Uri.file(absolutePath)
+						const fileUri = vscode.Uri.parse(uriString)
 
 						// Ensure it's a file before attempting to read
 						const stats = await vscode.workspace.fs.stat(fileUri)
 						if (stats.type === vscode.FileType.File) {
 							const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
-							const content = Buffer.from(contentBuffer).toString('utf8') // Fix Buffer.from
-							tokenCounts[relativePath] = countTokensLocal(content) // Use local countTokens
+							const content = Buffer.from(contentBuffer).toString('utf8')
+							tokenCounts[uriString] = countTokensLocal(content) // Use URI string as key
 						} else {
 							// It's a directory or something else, assign 0 tokens
-							tokenCounts[relativePath] = 0
+							tokenCounts[uriString] = 0
 						}
 					} catch (error) {
 						// Log error but continue processing other files
-						const errorMsg = `Error counting tokens for ${relativePath}: ${error instanceof Error ? error.message : String(error)}`
+						const errorMsg = `Error counting tokens for ${uriString}: ${error instanceof Error ? error.message : String(error)}`
 						console.error(errorMsg)
 						errors.push(errorMsg)
 						// Set token count to 0 on error to avoid issues in the UI
-						tokenCounts[relativePath] = 0
+						tokenCounts[uriString] = 0
 					}
 				}),
 			)
@@ -407,11 +394,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			// Optionally report errors
 			if (errors.length > 0) {
 				console.warn('Errors encountered during token counting:', errors)
-				// You might want to display a non-blocking warning
-				// vscode.window.showWarningMessage(`Could not count tokens for ${errors.length} file(s).`);
 			}
 		} catch (error) {
-			// Handle errors getting root path or other general errors
+			// Handle general errors (e.g., Tiktoken import failure)
 			this._handleError(error, 'Error calculating token counts')
 			// Send empty counts back on error
 			this._view.webview.postMessage({

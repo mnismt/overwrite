@@ -52,6 +52,14 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
 * **Requirement 2.1.12: Preserve the selection state when the webview is reopened.**
   * When the webview is reopened, it should restore the previously selected files (use `retainContextWhenHidden` option in the webview options)
 
+* **Requirement 2.1.13: Multi-Root Workspace Support.**
+  * The extension must correctly handle VS Code workspaces with multiple root folders.
+  * **File Tree:** The TreeView in the Context Tab should display a clear separation or grouping for each root folder in the workspace. For example, each root folder could be a top-level expandable item.
+  * **Path Resolution:** All file paths (for selection, context generation, and applying changes) must be resolved correctly relative to their respective workspace folder. The generated `<file_map>` and `<file>` paths in the XML should reflect this, possibly by prefixing paths with the root folder name or using a scheme that uniquely identifies the root.
+  * **File Operations:** All `vscode.workspace.fs` operations and `vscode.workspace.applyEdit` must target files within the correct workspace folder.
+  * **Selection Persistence:** The selection state should be maintained correctly across multiple roots.
+  * **Search/Filter:** The search/filter functionality should apply across all root folders
+  
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: In Progress

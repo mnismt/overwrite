@@ -1,32 +1,33 @@
-import * as fs from 'node:fs/promises'
-import * as path from 'node:path'
-import type { VscodeTreeItem } from '../types' // Corrected import path
+import * as vscode from 'vscode' // For vscode.workspace.fs and vscode.Uri
+import * as path from 'node:path' // Still needed for path.relative for file map display logic
+import type { VscodeTreeItem } from '../types'
 import { XML_FORMATTING_INSTRUCTIONS } from './xml-instruction'
+
+// Helper function moved to module scope
+function hasSelectedDescendant(
+	item: VscodeTreeItem,
+	selectedUris: Set<string>,
+): boolean {
+	if (selectedUris.has(item.value)) return true // item.value is a URI string
+	if (item.subItems) {
+		for (const subItem of item.subItems) {
+			if (hasSelectedDescendant(subItem, selectedUris)) return true
+		}
+	}
+	return false
+}
 
 function filterSelectedTree(
 	items: VscodeTreeItem[],
-	selectedPaths: Set<string>,
+	selectedUris: Set<string>, // Changed from selectedPaths to selectedUris
 ): VscodeTreeItem[] {
-	function hasSelectedDescendant(
-		item: VscodeTreeItem,
-		selectedPaths: Set<string>,
-	): boolean {
-		if (selectedPaths.has(item.value)) return true
-		if (item.subItems) {
-			for (const subItem of item.subItems) {
-				if (hasSelectedDescendant(subItem, selectedPaths)) return true
-			}
-		}
-		return false
-	}
-
-	const filterItems = (items: VscodeTreeItem[]): VscodeTreeItem[] => {
-		return items
+	const filterItems = (currentItems: VscodeTreeItem[]): VscodeTreeItem[] => {
+		return currentItems
 			.filter((item) => {
-				const isSelected = selectedPaths.has(item.value)
+				const isSelected = selectedUris.has(item.value) // item.value is a URI string
 				const hasSelectedSubItems =
 					item.subItems?.some((subItem) =>
-						hasSelectedDescendant(subItem, selectedPaths),
+						hasSelectedDescendant(subItem, selectedUris),
 					) || false
 				return isSelected || hasSelectedSubItems
 			})
@@ -42,21 +43,56 @@ function filterSelectedTree(
 // --- Exported Functions ---
 
 /**
- * Generates the hierarchical file map string for selected items.
- * @param fullTree - The complete file tree structure.
- * @param selectedPaths - A set of selected relative paths.
- * @param rootPath - The absolute path to the workspace root.
+ * Generates the hierarchical file map string for selected items across multiple workspace roots.
+ * @param fullTreeRoots - An array of VscodeTreeItem, where each item is a root of a workspace folder.
+ *                        The `value` of these root items and their children is their full URI string.
+ * @param selectedUris - A set of selected URI strings.
  * @returns The formatted file map string.
  */
 export function generateFileMap(
-	fullTree: VscodeTreeItem[],
-	selectedPaths: Set<string>,
-	rootPath: string,
+	fullTreeRoots: VscodeTreeItem[],
+	selectedUris: Set<string>,
 ): string {
-	const selectedTree = filterSelectedTree(fullTree, selectedPaths)
 	const lines: string[] = []
-	lines.push(rootPath) // Start with the absolute root path
-	buildTreeString(selectedTree, '', lines)
+
+	for (const rootTreeItem of fullTreeRoots) {
+		// Check if this root or any of its descendants are selected
+		const isRootSelectedOrHasSelectedDescendants =
+			selectedUris.has(rootTreeItem.value) ||
+			rootTreeItem.subItems?.some(
+				(
+					subItem, // Applied optional chaining
+				) => hasSelectedDescendant(subItem, selectedUris),
+			)
+
+		if (isRootSelectedOrHasSelectedDescendants) {
+			const rootUri = vscode.Uri.parse(rootTreeItem.value)
+			lines.push(rootUri.fsPath) // Add the root's fsPath as a top-level entry
+
+			// Filter only the children of the current root
+			// If the root itself is selected, all its children that are not explicitly unselected by not being in selectedUris
+			// (though filterSelectedTree handles this by inclusion) should be part of the map.
+			// If the root is not selected, but descendants are, filterSelectedTree will pick them up.
+			const childrenToDisplay = rootTreeItem.subItems
+				? filterSelectedTree(rootTreeItem.subItems, selectedUris)
+				: []
+
+			// Only build tree string if there are children to display for this root
+			if (childrenToDisplay.length > 0) {
+				buildTreeString(childrenToDisplay, '', lines) // Initial prefix is empty for children of a root
+			} else if (
+				selectedUris.has(rootTreeItem.value) &&
+				(!rootTreeItem.subItems || rootTreeItem.subItems.length === 0)
+			) {
+				// This case handles if a root folder itself is selected and it's empty or all its children are filtered out
+				// The root path itself is already added. No further sub-tree needed.
+			}
+			lines.push('') // Add a blank line between root sections for readability, if desired
+		}
+	}
+	if (lines.length > 0 && lines[lines.length - 1] === '') {
+		lines.pop() // Remove trailing blank line
+	}
 	return lines.join('\n')
 }
 
@@ -79,28 +115,29 @@ function buildTreeString(
 
 /**
  * Generates the file contents string for selected files.
- * @param selectedPaths - A set of selected relative paths.
- * @param rootPath - The absolute path to the workspace root.
+ * @param selectedUris - A set of selected URI strings.
  * @returns The formatted file contents string.
  */
 export async function generateFileContents(
-	selectedPaths: Set<string>,
-	rootPath: string,
+	selectedUris: Set<string>,
 ): Promise<string> {
 	let contentsStr = ''
-	const sortedPaths = Array.from(selectedPaths).sort() // Ensure consistent order
+	// Sort URI strings for consistent order. fsPath might be better for sorting if paths are complex.
+	const sortedUriStrings = Array.from(selectedUris).sort()
 
-	for (const relativePath of sortedPaths) {
-		const absolutePath = path.join(rootPath, relativePath)
-
+	for (const uriString of sortedUriStrings) {
+		const fileUri = vscode.Uri.parse(uriString)
 		try {
-			const stat = await fs.stat(absolutePath)
-			if (stat.isFile()) {
-				const content = await fs.readFile(absolutePath, 'utf-8')
-				// Use relative path in the header
-				contentsStr += `File: ${relativePath}\n\`\`\`\n${content}\n\`\`\`\n\n`
+			// Ensure it's a file using vscode.workspace.fs.stat
+			const stat = await vscode.workspace.fs.stat(fileUri)
+			if (stat.type === vscode.FileType.File) {
+				const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
+				const content = Buffer.from(contentBuffer).toString('utf8')
+				// Use full fsPath in the header as per user's example
+				contentsStr += `File: ${fileUri.fsPath}\n\`\`\`\n${content}\n\`\`\`\n\n`
 			} else {
-				console.log('Not a file (possibly a directory):', relativePath)
+				// This case should ideally not happen if only files are in selectedUris for contents
+				console.log('Not a file (possibly a directory):', fileUri.fsPath)
 			}
 		} catch (error: unknown) {
 			let errorMessage = 'Unknown error'
@@ -110,10 +147,10 @@ export async function generateFileContents(
 				errorMessage = error
 			}
 			console.warn(
-				`Could not read file ${relativePath} for context: ${errorMessage}`,
+				`Could not read file ${fileUri.fsPath} for context: ${errorMessage}`,
 			)
 			// Add a note about the missing/unreadable file in the context
-			contentsStr += `File: ${relativePath}\n*** Error reading file: ${errorMessage} ***\n\n`
+			contentsStr += `File: ${fileUri.fsPath}\n*** Error reading file: ${errorMessage} ***\n\n`
 		}
 	}
 

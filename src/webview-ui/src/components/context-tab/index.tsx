@@ -23,8 +23,8 @@ interface ContextTabProps {
 		userInstructions: string
 	}) => void
 	fileTreeData: VscodeTreeItem[]
-	selectedPaths: Set<string> // For displaying/managing selection in tree
-	onSelect: (paths: Set<string>) => void // Handler for selection changes
+	selectedUris: Set<string> // Changed from selectedPaths
+	onSelect: (uris: Set<string>) => void // Changed from paths
 	onRefresh: () => void // Handler for refresh button
 	isLoading: boolean // To show loading state
 }
@@ -33,7 +33,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	selectedCount,
 	onCopy,
 	fileTreeData,
-	selectedPaths,
+	selectedUris, // Changed from selectedPaths
 	onSelect,
 	onRefresh,
 	isLoading,
@@ -67,10 +67,10 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			const baseItems = searchQuery
 				? filterTreeData(fileTreeData, searchQuery)
 				: fileTreeData
-			const initialData = transformTreeData(baseItems, selectedPaths)
+			const initialData = transformTreeData(baseItems, selectedUris) // Use selectedUris
 			treeRef.current.data = initialData
 		}
-	}, [fileTreeData, searchQuery])
+	}, [fileTreeData, searchQuery, selectedUris]) // Added selectedUris to dependency array for transformTreeData
 
 	// Update only actions & decorations when selection changes
 	useEffect(() => {
@@ -79,7 +79,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 			const updateItems = (nodes: VscodeTreeItem[]) => {
 				for (const node of nodes) {
-					const isSelected = selectedPaths.has(node.value)
+					const isSelected = selectedUris.has(node.value) // Use selectedUris
 					node.actions = [
 						{
 							icon: isSelected ? 'close' : 'add',
@@ -99,8 +99,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 						const childDescendants = allDescendants.filter(
 							(p) => p !== node.value,
 						)
-						const selectedChildDescendantsCount = childDescendants.filter((p) =>
-							selectedPaths.has(p),
+						const selectedChildDescendantsCount = childDescendants.filter(
+							(uri) => selectedUris.has(uri), // Use selectedUris
 						).length
 
 						// Determine F/H selection status
@@ -117,7 +117,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 								content: 'H',
 								color: 'var(--vscode-testing-iconQueued)',
 							})
-						} else if (selectedPaths.has(node.value)) {
+						} else if (selectedUris.has(node.value)) {
+							// Use selectedUris
 							// Folder itself is selected (e.g., an empty selected folder)
 							folderDecorations.push({
 								content: 'F',
@@ -127,12 +128,12 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 						// Calculate total tokens for selected files within this folder
 						let folderTotalTokens = 0
-						for (const descendantPath of allDescendants) {
+						for (const descendantUri of allDescendants) {
 							if (
-								selectedPaths.has(descendantPath) &&
-								actualTokenCounts[descendantPath] !== undefined
+								selectedUris.has(descendantUri) && // Use selectedUris
+								actualTokenCounts[descendantUri] !== undefined
 							) {
-								folderTotalTokens += actualTokenCounts[descendantPath]
+								folderTotalTokens += actualTokenCounts[descendantUri]
 							}
 						}
 
@@ -164,7 +165,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			updateItems(items)
 			treeRef.current.data = [...items]
 		}
-	}, [selectedPaths, actualTokenCounts])
+	}, [selectedUris, actualTokenCounts]) // Depend on selectedUris
 
 	// Effect to calculate total tokens based on actual file counts and instructions
 	useEffect(() => {
@@ -189,18 +190,18 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	useEffect(() => {
 		const vscode = getVsCodeApi()
 		// Convert Set to Array before sending
-		const pathsArray = Array.from(selectedPaths)
-		if (pathsArray.length > 0) {
-			// Only send if there are selected paths
+		const urisArray = Array.from(selectedUris) // Use selectedUris
+		if (urisArray.length > 0) {
+			// Only send if there are selected URIs
 			vscode.postMessage({
 				command: 'getTokenCounts',
-				payload: { selectedPaths: pathsArray },
+				payload: { selectedUris: urisArray }, // Use selectedUris key
 			})
 		} else {
-			// If no paths are selected, clear the actualTokenCounts
+			// If no URIs are selected, clear the actualTokenCounts
 			setActualTokenCounts({})
 		}
-	}, [selectedPaths])
+	}, [selectedUris]) // Depend on selectedUris
 
 	// Effect to listen for token count updates from the extension
 	useEffect(() => {
@@ -230,68 +231,68 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const handleTreeAction = useCallback(
 		(event: VscTreeActionEvent) => {
 			const actionId = event.detail.actionId
-			const item = event.detail.item as VscodeTreeItem
+			const item = event.detail.item as VscodeTreeItem // item.value is a URI string
 
 			if (actionId === 'toggle-select' && item?.value) {
-				const newSelectedPaths = new Set(selectedPaths)
-				const path = item.value
-				const isCurrentlySelected = newSelectedPaths.has(path)
+				const newSelectedUris = new Set(selectedUris) // Use selectedUris
+				const uri = item.value // This is a URI string
+				const isCurrentlySelected = newSelectedUris.has(uri)
 
 				// Check if it's a folder (has subItems)
 				if (item.subItems && item.subItems.length > 0) {
 					// It's a folder - apply recursive logic
-					const allPaths = getAllDescendantPaths(item) // Includes the folder itself
+					const allUris = getAllDescendantPaths(item) // Assumes this now returns URI strings
 
 					if (isCurrentlySelected) {
 						// Deselecting the folder and all its descendants
-						for (const p of allPaths) {
-							newSelectedPaths.delete(p)
+						for (const u of allUris) {
+							newSelectedUris.delete(u)
 						}
 					} else {
 						// Selecting the folder and all its descendants
-						for (const p of allPaths) {
-							newSelectedPaths.add(p)
+						for (const u of allUris) {
+							newSelectedUris.add(u)
 						}
 					}
 				} else {
 					// It's a file - simple toggle
 					if (isCurrentlySelected) {
-						newSelectedPaths.delete(path)
+						newSelectedUris.delete(uri)
 					} else {
-						newSelectedPaths.add(path)
+						newSelectedUris.add(uri)
 					}
 				}
 
 				// Notify parent with the updated set
-				onSelect(newSelectedPaths)
+				onSelect(newSelectedUris)
 			}
 		},
-		// Include getAllDescendantPaths in dependency array if it were not defined
-		// outside the component, but since it is, only selectedPaths and onSelect matter.
-		[selectedPaths, onSelect],
+		[selectedUris, onSelect], // Depend on selectedUris
 	)
 
 	// Handle tree item selection with double-click detection
 	const handleTreeSelect = useCallback(
 		(event: VscTreeSelectEvent) => {
-			const item = event.detail as VscodeTreeItem
+			const item = event.detail as VscodeTreeItem // item.value is a URI string
 			if (!item?.value) return
 
-			const clickedPath = item.value
+			const clickedUri = item.value // This is a URI string
 			const currentTime = Date.now()
 
 			// Check if this is a double-click (same item clicked within 500ms)
-			if (
-				lastClickedItem === clickedPath &&
-				currentTime - lastClickTime < 500
-			) {
+			if (lastClickedItem === clickedUri && currentTime - lastClickTime < 500) {
 				// It's a double-click - determine if it's a file or folder (leaf or branch)
-				if ((item as any).itemType === 'leaf') {
+				// Assuming itemType 'leaf' correctly identifies files.
+				// The tree data generation in file-system.ts sets icons, but not itemType explicitly.
+				// This might need adjustment if itemType is not reliably set by vscode-tree based on subItems.
+				// For now, we assume files won't have subItems.
+				if (!item.subItems || item.subItems.length === 0) {
+					// A more robust check for file-like items
 					// It's a file, send message to open it
 					const vscode = getVsCodeApi()
 					vscode.postMessage({
 						command: 'openFile',
-						payload: { filePath: clickedPath },
+						payload: { fileUri: clickedUri }, // Use fileUri key
 					})
 				}
 
@@ -300,7 +301,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				setLastClickTime(0)
 			} else {
 				// It's a single click - update tracking
-				setLastClickedItem(clickedPath)
+				setLastClickedItem(clickedUri)
 				setLastClickTime(currentTime)
 			}
 		},

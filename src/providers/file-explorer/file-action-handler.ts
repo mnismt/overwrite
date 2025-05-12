@@ -15,17 +15,20 @@ interface FileActionResult {
  */
 export async function applyFileActions(
 	fileActions: FileAction[],
-	rootPath: string,
+	// rootPath: string, // Removed rootPath parameter
 	view?: vscode.WebviewView, // Optional: if direct webview interaction is needed from handlers
 ): Promise<FileActionResult[]> {
 	const results: FileActionResult[] = []
 
 	for (const fileAction of fileActions) {
 		try {
-			const absolutePath = path.isAbsolute(fileAction.path)
-				? fileAction.path
-				: path.join(rootPath, fileAction.path)
-			const fileUri = vscode.Uri.file(absolutePath)
+			// Assuming fileAction.path is an absolute fsPath from the XML parser
+			if (!path.isAbsolute(fileAction.path)) {
+				throw new Error(
+					`File path must be absolute: ${fileAction.path}. Ensure LLM provides full paths.`,
+				)
+			}
+			const fileUri = vscode.Uri.file(fileAction.path)
 
 			switch (fileAction.action) {
 				case 'create':
@@ -41,7 +44,8 @@ export async function applyFileActions(
 					await handleDeleteAction(fileAction, fileUri, results)
 					break
 				case 'rename':
-					await handleRenameAction(fileAction, fileUri, rootPath, results)
+					// await handleRenameAction(fileAction, fileUri, rootPath, results) // rootPath removed
+					await handleRenameAction(fileAction, fileUri, results)
 					break
 				default:
 					results.push({
@@ -289,17 +293,20 @@ async function handleDeleteAction(
 async function handleRenameAction(
 	fileAction: FileAction,
 	fileUri: vscode.Uri,
-	rootPath: string,
+	// rootPath: string, // Removed rootPath parameter
 	results: FileActionResult[],
 ): Promise<void> {
 	try {
 		if (!fileAction.newPath) {
 			throw new Error('Missing new path for rename operation.')
 		}
-		const newUri = vscode.Uri.joinPath(
-			vscode.Uri.file(rootPath),
-			fileAction.newPath,
-		)
+		// Assuming fileAction.newPath is an absolute fsPath from the XML parser
+		if (!path.isAbsolute(fileAction.newPath)) {
+			throw new Error(
+				`New path for rename must be absolute: ${fileAction.newPath}. Ensure LLM provides full paths.`,
+			)
+		}
+		const newUri = vscode.Uri.file(fileAction.newPath)
 
 		try {
 			await vscode.workspace.fs.stat(fileUri)

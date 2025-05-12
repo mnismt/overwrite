@@ -14,10 +14,11 @@ interface VsCodeMessage {
 function App() {
 	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index (0: Context, 1: Apply)
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
-	const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
+	// selectedPaths renamed to selectedUris, stores Set of URI strings
+	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 
-	console.log('selectedPaths', selectedPaths)
+	console.log('selectedUris', selectedUris)
 
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
@@ -74,8 +75,9 @@ function App() {
 	}, [sendMessage])
 
 	// Selection handler (assuming it will be needed in the combined ContextTab)
-	const handleSelect = useCallback((paths: Set<string>) => {
-		setSelectedPaths(paths)
+	// Renamed paths to uris, expects a Set of URI strings
+	const handleSelect = useCallback((uris: Set<string>) => {
+		setSelectedUris(uris)
 	}, [])
 
 	// Context Tab: Handle copying
@@ -84,7 +86,8 @@ function App() {
 			includeXml,
 			userInstructions,
 		}: { includeXml: boolean; userInstructions: string }) => {
-			if (selectedPaths.size === 0) {
+			if (selectedUris.size === 0) {
+				// Use selectedUris
 				// Display warning in the UI since we can't show VS Code notifications from webview
 				console.warn('No files selected. Please select files before copying.')
 				return
@@ -92,11 +95,11 @@ function App() {
 
 			// Send message to extension with payload
 			sendMessage(includeXml ? 'copyContextXml' : 'copyContext', {
-				selectedPaths: Array.from(selectedPaths),
+				selectedUris: Array.from(selectedUris), // Use selectedUris and correct payload key
 				userInstructions,
 			})
 		},
-		[selectedPaths, sendMessage],
+		[selectedUris, sendMessage], // Depend on selectedUris
 	)
 
 	// Apply Tab: Handle applying changes
@@ -120,11 +123,11 @@ function App() {
 				<vscode-tab-panel id="context-tab-panel">
 					<ContextTab
 						// Props for original Context functionality
-						selectedCount={selectedPaths.size}
+						selectedCount={selectedUris.size} // Use selectedUris
 						onCopy={handleCopy}
 						// Props for Explorer functionality
 						fileTreeData={fileTreeData}
-						selectedPaths={selectedPaths} // Pass the actual set for potential tree updates
+						selectedUris={selectedUris} // Pass selectedUris
 						onSelect={handleSelect} // Pass the handler
 						onRefresh={handleRefresh}
 						isLoading={isLoading}
