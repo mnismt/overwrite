@@ -49,6 +49,9 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
     * Show the total tokens + user instructions textarea content (for Copy Context button)
     * Show the total tokens + user instructions textarea content + xml formatting instructions (for Copy Context + XML Instructions button)
 
+* **Requirement 2.1.12: Preserve the selection state when the webview is reopened.**
+  * When the webview is reopened, it should restore the previously selected files (use `retainContextWhenHidden` option in the webview options)
+
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: In Progress

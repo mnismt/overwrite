@@ -19,6 +19,11 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(
 			FileExplorerWebviewProvider.viewType,
 			provider,
+			{
+				webviewOptions: {
+					retainContextWhenHidden: true,
+				},
+			},
 		),
 	)
 }
