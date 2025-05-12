@@ -9,6 +9,8 @@ import {
 	filterTreeData,
 	getAllDescendantPaths,
 	transformTreeData,
+	countTokens,
+	formatTokenCount,
 } from './utils'
 
 interface ContextTabProps {
@@ -41,10 +43,22 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	// State for search query
 	const [searchQuery, setSearchQuery] = useState('')
 	const treeRef = useRef<any>(null)
+	const [tokenStats, setTokenStats] = useState({
+		fileTokensEstimate: 0,
+		userInstructionsTokens: 0,
+		totalTokens: 0,
+		totalWithXmlTokens: 0,
+	})
+	const [actualTokenCounts, setActualTokenCounts] = useState<
+		Record<string, number>
+	>({})
 
 	// State for tracking double-clicks
 	const [lastClickedItem, setLastClickedItem] = useState<string | null>(null)
 	const [lastClickTime, setLastClickTime] = useState<number>(0)
+
+	// Constant for XML formatting instructions
+	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
 
 	// Initialize tree data when fileTreeData loads or searchQuery changes
 	useEffect(() => {
@@ -58,16 +72,14 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		}
 	}, [fileTreeData, searchQuery])
 
-	// Update only actions & decorations when selection changes, preserving expanded states
+	// Update only actions & decorations when selection changes
 	useEffect(() => {
 		if (treeRef.current) {
 			const items: VscodeTreeItem[] = treeRef.current.data
 
-			// Recursive update of actions & decorations in place
 			const updateItems = (nodes: VscodeTreeItem[]) => {
 				for (const node of nodes) {
 					const isSelected = selectedPaths.has(node.value)
-					// Update action icon
 					node.actions = [
 						{
 							icon: isSelected ? 'close' : 'add',
@@ -75,7 +87,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 							tooltip: isSelected ? 'Deselect' : 'Select',
 						},
 					]
-					// Update decorations (leaf or folder)
+
 					if (node.subItems && node.subItems.length > 0) {
 						updateItems(node.subItems)
 						const allDesc = getAllDescendantPaths(node).filter(
@@ -98,18 +110,67 @@ const ContextTab: React.FC<ContextTabProps> = ({
 							node.decorations = undefined
 						}
 					} else {
+						// Only show token count for selected files
 						node.decorations = isSelected
-							? [{ content: 'F', color: 'var(--vscode-testing-iconPassed)' }]
+							? [
+									{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
+									{
+										content: formatTokenCount(
+											actualTokenCounts[node.value] || 0,
+										),
+										color: 'var(--vscode-testing-iconPassed)',
+									},
+								]
 							: undefined
 					}
 				}
 			}
 
 			updateItems(items)
-			// Trigger tree update
 			treeRef.current.data = [...items]
 		}
+	}, [selectedPaths, actualTokenCounts])
+
+	// Effect to calculate total tokens based on actual file counts and instructions
+	useEffect(() => {
+		// Calculate total from actualTokenCounts
+		const fileTotal = Object.values(actualTokenCounts).reduce(
+			(sum, count) => sum + count,
+			0,
+		)
+
+		const instructionsTokens = countTokens(userInstructions)
+
+		setTokenStats({
+			fileTokensEstimate: fileTotal,
+			userInstructionsTokens: instructionsTokens,
+			totalTokens: fileTotal + instructionsTokens,
+			totalWithXmlTokens:
+				fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
+		})
+	}, [actualTokenCounts, userInstructions])
+
+	// Effect to request token counts when selection changes
+	useEffect(() => {
+		const vscode = getVsCodeApi()
+		vscode.postMessage({
+			command: 'getTokenCounts',
+			payload: { selectedPaths },
+		})
 	}, [selectedPaths])
+
+	// Effect to listen for token count updates from the extension
+	useEffect(() => {
+		const handleMessage = (event: MessageEvent) => {
+			const message = event.data
+			if (message.command === 'updateTokenCounts') {
+				setActualTokenCounts(message.payload.tokenCounts || {})
+			}
+		}
+
+		window.addEventListener('message', handleMessage)
+		return () => window.removeEventListener('message', handleMessage)
+	}, [])
 
 	const handleRefreshClick = useCallback(() => onRefresh(), [onRefresh])
 	const handleCopyContextClick = useCallback(
@@ -253,8 +314,24 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			</div>
 
 			{/* --- Original Context Elements Below Tree --- */}
-			<div>Selected files/folders: {selectedCount}</div>
-			<vscode-divider style={{ height: '5px', color: 'red' }} />
+			<vscode-divider />
+			<div>Selected files: {selectedCount}</div>
+
+			{/* Token Count Information */}
+			<div
+				style={{
+					marginTop: '10px',
+					fontSize: '0.9em',
+					color: 'var(--vscode-descriptionForeground)',
+				}}
+			>
+				<div>File tokens (actual): {tokenStats.fileTokensEstimate}</div>
+				<div>User instruction tokens: {tokenStats.userInstructionsTokens}</div>
+				<div>Total tokens (Copy Context): {tokenStats.totalTokens}</div>
+				<div>
+					Total tokens (Copy Context + XML): {tokenStats.totalWithXmlTokens}
+				</div>
+			</div>
 
 			<div
 				style={{ marginTop: '10px', display: 'flex', flexDirection: 'column' }}

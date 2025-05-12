@@ -1,4 +1,20 @@
 import type { VscodeTreeItem } from '../../../../types'
+import { Tiktoken } from 'js-tiktoken/lite'
+import o200k_base from 'js-tiktoken/ranks/o200k_base'
+
+// Initialize tokenizer once
+const enc = new Tiktoken(o200k_base)
+
+// Count tokens in a string
+export function countTokens(text: string): number {
+	if (!text) return 0
+	return enc.encode(text).length
+}
+
+// Format token count in 'k' units for display
+export function formatTokenCount(count: number): string {
+	return `${(count / 1000).toFixed(1)}k`
+}
 
 // Helper function to recursively gather all descendant paths
 export const getAllDescendantPaths = (item: VscodeTreeItem): string[] => {
@@ -79,6 +95,31 @@ export const addDecorationsToTree = (
 	})
 }
 
+// Helper function to filter tree items based on a search query, keeping ancestors of matched items
+export const filterTreeData = (
+	items: VscodeTreeItem[],
+	query: string,
+): VscodeTreeItem[] => {
+	if (!query) return items
+	const lowerQuery = query.toLowerCase()
+	return items.reduce((acc: VscodeTreeItem[], item) => {
+		const label = item.label || ''
+		const labelMatches = label.toLowerCase().includes(lowerQuery)
+		let filteredSubs: VscodeTreeItem[] | undefined
+		if (item.subItems && item.subItems.length > 0) {
+			filteredSubs = filterTreeData(item.subItems, query)
+		}
+		if (labelMatches) {
+			// If label matches, include entire subtree
+			acc.push(item)
+		} else if (filteredSubs && filteredSubs.length > 0) {
+			// If any descendants match, include item with filtered children
+			acc.push({ ...item, subItems: filteredSubs })
+		}
+		return acc
+	}, [])
+}
+
 // Helper function to recursively add actions to tree data
 export const addActionsToTree = (
 	items: VscodeTreeItem[],
@@ -118,29 +159,4 @@ export const transformTreeData = (
 ): VscodeTreeItem[] => {
 	const itemsWithActions = addActionsToTree(items, selectedPaths)
 	return addDecorationsToTree(itemsWithActions, selectedPaths)
-}
-
-// Helper function to filter tree items based on a search query, keeping ancestors of matched items
-export const filterTreeData = (
-	items: VscodeTreeItem[],
-	query: string,
-): VscodeTreeItem[] => {
-	if (!query) return items
-	const lowerQuery = query.toLowerCase()
-	return items.reduce((acc: VscodeTreeItem[], item) => {
-		const label = item.label || ''
-		const labelMatches = label.toLowerCase().includes(lowerQuery)
-		let filteredSubs: VscodeTreeItem[] | undefined
-		if (item.subItems && item.subItems.length > 0) {
-			filteredSubs = filterTreeData(item.subItems, query)
-		}
-		if (labelMatches) {
-			// If label matches, include entire subtree
-			acc.push(item)
-		} else if (filteredSubs && filteredSubs.length > 0) {
-			// If any descendants match, include item with filtered children
-			acc.push({ ...item, subItems: filteredSubs })
-		}
-		return acc
-	}, [])
 }

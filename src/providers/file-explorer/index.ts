@@ -8,10 +8,10 @@ import {
 } from '../../prompts'
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
-import type { FileAction } from '../../utils/xml-parser'
 import { parseXmlResponse } from '../../utils/xml-parser'
 import { getHtmlForWebview } from './html-generator'
 import type { CopyContextPayload, OpenFilePayload } from './types'
+import { applyFileActions } from './file-action-handler'
 
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'aboveRepoFilesWebview'
@@ -66,6 +66,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 					case 'getFileTree':
 						// No payload expected for getFileTree
 						await this._handleGetFileTree()
+						break
+					case 'getTokenCounts': // Add handler for new command
+						await this._handleGetTokenCounts(message.payload)
 						break
 					case 'openFile':
 						// Type assertion or validation recommended here
@@ -297,9 +300,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			// Process each file action
-			const results = await this._processFileActions(
+			const results = await applyFileActions(
 				parseResult.fileActions,
 				rootPath,
+				this._view,
 			)
 
 			// Send results to webview
@@ -333,437 +337,86 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	/**
-	 * Processes the file actions extracted from the XML.
+	 * Handles the 'getTokenCounts' message from the webview.
 	 */
-	private async _processFileActions(
-		fileActions: FileAction[],
-		rootPath: string,
-	): Promise<
-		Array<{ path: string; action: string; success: boolean; message: string }>
-	> {
-		const results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-		}> = []
+	private async _handleGetTokenCounts(payload: {
+		selectedPaths: string[]
+	}): Promise<void> {
+		if (!this._view) return
 
-		for (const fileAction of fileActions) {
-			try {
-				const absolutePath = path.isAbsolute(fileAction.path)
-					? fileAction.path
-					: path.join(rootPath, fileAction.path)
+		const tokenCounts: Record<string, number> = {}
+		const errors: string[] = []
+		let rootPath: string
 
-				const fileUri = vscode.Uri.file(absolutePath)
+		// Dynamically import Tiktoken and ranks, and create encoder
+		const { Tiktoken } = await import('js-tiktoken/lite')
+		const { default: o200k_base } = await import('js-tiktoken/ranks/o200k_base')
+		const enc = new Tiktoken(o200k_base)
 
-				switch (fileAction.action) {
-					case 'create':
-						await this._handleCreateAction(
-							fileAction,
-							fileUri,
-							rootPath,
-							results,
-						)
-						break
-
-					case 'rewrite':
-						await this._handleRewriteAction(
-							fileAction,
-							fileUri,
-							rootPath,
-							results,
-						)
-						break
-
-					case 'modify':
-						await this._handleModifyAction(
-							fileAction,
-							fileUri,
-							rootPath,
-							results,
-						)
-						break
-
-					case 'delete':
-						await this._handleDeleteAction(
-							fileAction,
-							fileUri,
-							rootPath,
-							results,
-						)
-						break
-
-					case 'rename':
-						await this._handleRenameAction(
-							fileAction,
-							fileUri,
-							rootPath,
-							results,
-						)
-						break
-
-					default:
-						results.push({
-							path: fileAction.path,
-							action: fileAction.action,
-							success: false,
-							message: `Unknown action: ${fileAction.action}`,
-						})
-				}
-			} catch (error) {
-				results.push({
-					path: fileAction.path,
-					action: fileAction.action,
-					success: false,
-					message: error instanceof Error ? error.message : String(error),
-				})
-			}
+		// Define countTokens locally within the async function scope
+		const countTokensLocal = (text: string): number => {
+			if (!text) return 0
+			return enc.encode(text).length
 		}
-
-		return results
-	}
-
-	/**
-	 * Handles the 'create' file action.
-	 */
-	private async _handleCreateAction(
-		fileAction: FileAction,
-		fileUri: vscode.Uri,
-		rootPath: string,
-		results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-		}>,
-	): Promise<void> {
-		try {
-			// Ensure we have a content block
-			if (!fileAction.changes || fileAction.changes.length === 0) {
-				throw new Error('No content provided for create action')
-			}
-
-			// Get the content from the first change block
-			const content = fileAction.changes[0].content
-
-			// Check if file already exists
-			try {
-				await vscode.workspace.fs.stat(fileUri)
-				// If we get here, the file exists
-				throw new Error('File already exists, cannot create')
-			} catch (error) {
-				// If error is because file doesn't exist, that's what we want
-				if (
-					!(
-						error instanceof vscode.FileSystemError &&
-						error.code === 'FileNotFound'
-					)
-				) {
-					throw error
-				}
-			}
-
-			// Ensure parent directory exists
-			const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
-			try {
-				await vscode.workspace.fs.stat(dirUri)
-			} catch (error) {
-				// If directory doesn't exist, create it
-				if (
-					error instanceof vscode.FileSystemError &&
-					error.code === 'FileNotFound'
-				) {
-					await vscode.workspace.fs.createDirectory(dirUri)
-				} else {
-					throw error
-				}
-			}
-
-			// Write the file content
-			await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'))
-
-			results.push({
-				path: fileAction.path,
-				action: 'create',
-				success: true,
-				message: 'File created successfully',
-			})
-		} catch (error) {
-			results.push({
-				path: fileAction.path,
-				action: 'create',
-				success: false,
-				message: error instanceof Error ? error.message : String(error),
-			})
-		}
-	}
-
-	/**
-	 * Handles the 'modify' file action.
-	 */
-	private async _handleModifyAction(
-		fileAction: FileAction,
-		fileUri: vscode.Uri,
-		rootPath: string,
-		results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-		}>,
-	): Promise<void> {
-		if (!fileAction.changes || fileAction.changes.length === 0) {
-			results.push({
-				path: fileAction.path,
-				action: 'modify',
-				success: false,
-				message: 'No changes provided for modify action',
-			})
-			return
-		}
-
-		let successCount = 0
-		const changeResults: string[] = []
-
-		// Create a workspace edit to batch all changes
-		const workspaceEdit = new vscode.WorkspaceEdit()
 
 		try {
-			// Open the document to modify
-			const document = await vscode.workspace.openTextDocument(fileUri)
-			const fullText = document.getText()
+			rootPath = this._getWorkspaceRootPath()
 
-			// Process each change block
-			for (const change of fileAction.changes) {
-				try {
-					if (!change.search) {
-						changeResults.push('Error: Search block missing in a change')
-						continue
+			const pathsToCount = Array.isArray(payload?.selectedPaths)
+				? payload.selectedPaths
+				: []
+
+			console.log('Calculating token counts for:', pathsToCount)
+
+			// Process paths concurrently
+			await Promise.all(
+				pathsToCount.map(async (relativePath) => {
+					try {
+						const absolutePath = path.isAbsolute(relativePath)
+							? relativePath
+							: path.join(rootPath, relativePath)
+						const fileUri = vscode.Uri.file(absolutePath)
+
+						// Ensure it's a file before attempting to read
+						const stats = await vscode.workspace.fs.stat(fileUri)
+						if (stats.type === vscode.FileType.File) {
+							const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
+							const content = Buffer.from(contentBuffer).toString('utf8') // Fix Buffer.from
+							tokenCounts[relativePath] = countTokensLocal(content) // Use local countTokens
+						} else {
+							// It's a directory or something else, assign 0 tokens
+							tokenCounts[relativePath] = 0
+						}
+					} catch (error) {
+						// Log error but continue processing other files
+						const errorMsg = `Error counting tokens for ${relativePath}: ${error instanceof Error ? error.message : String(error)}`
+						console.error(errorMsg)
+						errors.push(errorMsg)
+						// Set token count to 0 on error to avoid issues in the UI
+						tokenCounts[relativePath] = 0
 					}
-
-					// Find the search text in the document
-					const searchPos = fullText.indexOf(change.search)
-					if (searchPos === -1) {
-						changeResults.push(
-							`Error: Search text not found: "${change.search.slice(0, 20)}..."`,
-						)
-						continue
-					}
-
-					// Check for ambiguous matches
-					const nextPos = fullText.indexOf(change.search, searchPos + 1)
-					if (nextPos !== -1) {
-						changeResults.push(
-							`Error: Ambiguous search text - found multiple matches: "${change.search.slice(0, 20)}..."`,
-						)
-						continue
-					}
-
-					// Calculate range of the text to replace
-					const startPos = document.positionAt(searchPos)
-					const endPos = document.positionAt(searchPos + change.search.length)
-					const range = new vscode.Range(startPos, endPos)
-
-					// Add the replacement to the workspace edit
-					workspaceEdit.replace(fileUri, range, change.content)
-
-					successCount++
-					changeResults.push(`Success: Applied change: "${change.description}"`)
-				} catch (changeError) {
-					changeResults.push(
-						`Error with change: ${changeError instanceof Error ? changeError.message : String(changeError)}`,
-					)
-				}
-			}
-
-			// Apply all changes if we have any successful ones
-			if (successCount > 0) {
-				await vscode.workspace.applyEdit(workspaceEdit)
-
-				results.push({
-					path: fileAction.path,
-					action: 'modify',
-					success: true,
-					message: `Applied ${successCount}/${fileAction.changes.length} modifications. ${changeResults.join('; ')}`,
-				})
-			} else {
-				results.push({
-					path: fileAction.path,
-					action: 'modify',
-					success: false,
-					message: `Failed to apply any modifications. ${changeResults.join('; ')}`,
-				})
-			}
-		} catch (error) {
-			results.push({
-				path: fileAction.path,
-				action: 'modify',
-				success: false,
-				message: error instanceof Error ? error.message : String(error),
-			})
-		}
-	}
-
-	/**
-	 * Handles the 'rewrite' file action.
-	 */
-	private async _handleRewriteAction(
-		fileAction: FileAction,
-		fileUri: vscode.Uri,
-		rootPath: string,
-		results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-		}>,
-	): Promise<void> {
-		try {
-			// Ensure we have a content block
-			if (!fileAction.changes || fileAction.changes.length === 0) {
-				throw new Error('No content provided for rewrite action')
-			}
-
-			// Get the content from the first change block
-			const content = fileAction.changes[0].content
-
-			// Check if file exists
-			try {
-				await vscode.workspace.fs.stat(fileUri)
-			} catch (error) {
-				throw new Error('File does not exist, cannot rewrite')
-			}
-
-			// Rewrite the file content
-			await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'))
-
-			results.push({
-				path: fileAction.path,
-				action: 'rewrite',
-				success: true,
-				message: 'File rewritten successfully',
-			})
-		} catch (error) {
-			results.push({
-				path: fileAction.path,
-				action: 'rewrite',
-				success: false,
-				message: error instanceof Error ? error.message : String(error),
-			})
-		}
-	}
-
-	/**
-	 * Handles the 'delete' file action.
-	 */
-	private async _handleDeleteAction(
-		fileAction: FileAction,
-		fileUri: vscode.Uri,
-		rootPath: string,
-		results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-		}>,
-	): Promise<void> {
-		try {
-			// Check if file exists
-			try {
-				await vscode.workspace.fs.stat(fileUri)
-			} catch (error) {
-				throw new Error('File does not exist, cannot delete')
-			}
-
-			// Delete the file
-			await vscode.workspace.fs.delete(fileUri, {
-				recursive: true,
-				useTrash: true, // Move to trash instead of permanently deleting
-			})
-
-			results.push({
-				path: fileAction.path,
-				action: 'delete',
-				success: true,
-				message: 'File deleted successfully (moved to trash)',
-			})
-		} catch (error) {
-			results.push({
-				path: fileAction.path,
-				action: 'delete',
-				success: false,
-				message: error instanceof Error ? error.message : String(error),
-			})
-		}
-	}
-
-	/**
-	 * Handles the 'rename' file action.
-	 */
-	private async _handleRenameAction(
-		fileAction: FileAction,
-		fileUri: vscode.Uri,
-		rootPath: string,
-		results: Array<{
-			path: string
-			action: string
-			success: boolean
-			message: string
-			newPath?: string
-		}>,
-	): Promise<void> {
-		try {
-			if (!fileAction.newPath) {
-				throw new Error('Missing new path for rename operation.')
-			}
-			const newUri = vscode.Uri.joinPath(
-				vscode.Uri.file(rootPath),
-				fileAction.newPath,
+				}),
 			)
 
-			// Check if original file exists
-			try {
-				await vscode.workspace.fs.stat(fileUri)
-			} catch (error) {
-				throw new Error(
-					`Original file '${fileAction.path}' does not exist, cannot rename.`,
-				)
-			}
-
-			// Check if target path already exists
-			try {
-				await vscode.workspace.fs.stat(newUri)
-				// If stat succeeds, the file exists
-				throw new Error(`Target path '${fileAction.newPath}' already exists.`)
-			} catch (error) {
-				// If stat fails with 'FileNotFound' or similar, it's good.
-				// If it's the "already exists" error we threw, re-throw it.
-				if (
-					error instanceof Error &&
-					error.message.includes('already exists')
-				) {
-					throw error
-				}
-				// Otherwise, assume file not found, which is the desired state to proceed.
-			}
-
-			// Perform the rename
-			await vscode.workspace.fs.rename(fileUri, newUri, { overwrite: false })
-
-			results.push({
-				path: fileAction.path,
-				action: 'rename',
-				success: true,
-				message: `File renamed successfully to '${fileAction.newPath}'`,
-				newPath: fileAction.newPath,
+			// Send the results back to the webview
+			this._view.webview.postMessage({
+				command: 'updateTokenCounts',
+				payload: { tokenCounts },
 			})
+
+			// Optionally report errors
+			if (errors.length > 0) {
+				console.warn('Errors encountered during token counting:', errors)
+				// You might want to display a non-blocking warning
+				// vscode.window.showWarningMessage(`Could not count tokens for ${errors.length} file(s).`);
+			}
 		} catch (error) {
-			results.push({
-				path: fileAction.path,
-				action: 'rename',
-				success: false,
-				message: error instanceof Error ? error.message : String(error),
-				newPath: fileAction.newPath,
+			// Handle errors getting root path or other general errors
+			this._handleError(error, 'Error calculating token counts')
+			// Send empty counts back on error
+			this._view.webview.postMessage({
+				command: 'updateTokenCounts',
+				payload: { tokenCounts: {} }, // Send empty on failure
 			})
 		}
 	}

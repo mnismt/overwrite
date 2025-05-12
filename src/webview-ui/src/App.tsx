@@ -17,6 +17,8 @@ function App() {
 	const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 
+	console.log('selectedPaths', selectedPaths)
+
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
 		const vscode = getVsCodeApi()

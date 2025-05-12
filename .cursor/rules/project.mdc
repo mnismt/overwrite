@@ -48,5 +48,5 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 
 ## Additional Rules
 
-- **Rule: Use Kebab-Case for File Names**  
-  All new file names in the project must use kebab-case (e.g., `context-tab.tsx`, `file-system.ts`) to maintain consistency and ease of use in URLs and imports
+- All file names in the project must use kebab-case (e.g., `context-tab.tsx`, `file-system.ts`) to maintain consistency and ease of use in URLs and imports
+- Always use for .. of instead of forEach
