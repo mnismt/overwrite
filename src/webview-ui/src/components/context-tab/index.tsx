@@ -89,35 +89,70 @@ const ContextTab: React.FC<ContextTabProps> = ({
 					]
 
 					if (node.subItems && node.subItems.length > 0) {
-						updateItems(node.subItems)
-						const allDesc = getAllDescendantPaths(node).filter(
+						updateItems(node.subItems) // Recursively update children first
+
+						const folderDecorations: Array<{
+							content: string
+							color?: string
+						}> = []
+						const allDescendants = getAllDescendantPaths(node) // Includes the folder itself
+						const childDescendants = allDescendants.filter(
 							(p) => p !== node.value,
 						)
-						const selCount = allDesc.filter((p) => selectedPaths.has(p)).length
-						if (selCount === allDesc.length && allDesc.length > 0) {
-							node.decorations = [
-								{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
-							]
-						} else if (selCount > 0) {
-							node.decorations = [
-								{ content: 'H', color: 'var(--vscode-testing-iconQueued)' },
-							]
+						const selectedChildDescendantsCount = childDescendants.filter((p) =>
+							selectedPaths.has(p),
+						).length
+
+						// Determine F/H selection status
+						if (
+							selectedChildDescendantsCount === childDescendants.length &&
+							childDescendants.length > 0
+						) {
+							folderDecorations.push({
+								content: 'F',
+								color: 'var(--vscode-testing-iconPassed)',
+							})
+						} else if (selectedChildDescendantsCount > 0) {
+							folderDecorations.push({
+								content: 'H',
+								color: 'var(--vscode-testing-iconQueued)',
+							})
 						} else if (selectedPaths.has(node.value)) {
-							node.decorations = [
-								{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
-							]
-						} else {
-							node.decorations = undefined
+							// Folder itself is selected (e.g., an empty selected folder)
+							folderDecorations.push({
+								content: 'F',
+								color: 'var(--vscode-testing-iconPassed)',
+							})
 						}
+
+						// Calculate total tokens for selected files within this folder
+						let folderTotalTokens = 0
+						for (const descendantPath of allDescendants) {
+							if (
+								selectedPaths.has(descendantPath) &&
+								actualTokenCounts[descendantPath] !== undefined
+							) {
+								folderTotalTokens += actualTokenCounts[descendantPath]
+							}
+						}
+
+						if (folderTotalTokens > 0) {
+							folderDecorations.push({
+								content: `(${formatTokenCount(folderTotalTokens)})`,
+								color: 'var(--vscode-testing-iconPassed)', // Same color as file tokens
+							})
+						}
+						node.decorations =
+							folderDecorations.length > 0 ? folderDecorations : undefined
 					} else {
-						// Only show token count for selected files
+						// It's a file
 						node.decorations = isSelected
 							? [
 									{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
 									{
-										content: formatTokenCount(
+										content: `(${formatTokenCount(
 											actualTokenCounts[node.value] || 0,
-										),
+										)})`,
 										color: 'var(--vscode-testing-iconPassed)',
 									},
 								]
@@ -153,10 +188,18 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	// Effect to request token counts when selection changes
 	useEffect(() => {
 		const vscode = getVsCodeApi()
-		vscode.postMessage({
-			command: 'getTokenCounts',
-			payload: { selectedPaths },
-		})
+		// Convert Set to Array before sending
+		const pathsArray = Array.from(selectedPaths)
+		if (pathsArray.length > 0) {
+			// Only send if there are selected paths
+			vscode.postMessage({
+				command: 'getTokenCounts',
+				payload: { selectedPaths: pathsArray },
+			})
+		} else {
+			// If no paths are selected, clear the actualTokenCounts
+			setActualTokenCounts({})
+		}
 	}, [selectedPaths])
 
 	// Effect to listen for token count updates from the extension

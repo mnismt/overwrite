@@ -42,7 +42,9 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
 * **Requirement 2.1.10: Double click on the selected files in the tree view should open the file in the editor.**
   * Implement a double click handler on the tree view to open the selected file in the editor.
 * **Requirement 2.1.11: Count and display the tokens number of files selected.**
-  * When a file is selected, the extension should count the tokens number of the file and display it in the tree view (use js-tiktoken library).
+  * When a file is selected, the extension should count the tokens number of the file and display it in the tree view:
+    * If the file is a folder, the extension should count the tokens number of all files in the folder
+    * If the file is a file, the extension should count the tokens number of the file
   * Below the User instructions textarea, display two text lines:
     * Show the total tokens + user instructions textarea content (for Copy Context button)
     * Show the total tokens + user instructions textarea content + xml formatting instructions (for Copy Context + XML Instructions button)
