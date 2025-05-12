@@ -60,17 +60,48 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
 
-	// Initialize tree data when fileTreeData loads or searchQuery changes
+	// Function to merge previous open state into new tree items
+	const mergeOpenState = useCallback(
+		(
+			prevItems: VscodeTreeItem[],
+			newItems: VscodeTreeItem[],
+		): VscodeTreeItem[] => {
+			// Map previous items by value
+			const prevMap = new Map<string, VscodeTreeItem>()
+			for (const item of prevItems) {
+				prevMap.set(item.value, item)
+			}
+			// Recursive merge
+			const mergeItem = (item: VscodeTreeItem): VscodeTreeItem => {
+				const prev = prevMap.get(item.value)
+				const openState = prev?.open ?? false
+				const merged: VscodeTreeItem = { ...item, open: openState }
+				if (item.subItems) {
+					merged.subItems = item.subItems.map(mergeItem)
+				}
+				return merged
+			}
+			return newItems.map(mergeItem)
+		},
+		[],
+	)
+
+	// Replace the existing useEffect for initializing tree data
 	useEffect(() => {
 		if (treeRef.current) {
 			// Filter based on search query, then generate tree with actions & decorations
 			const baseItems = searchQuery
 				? filterTreeData(fileTreeData, searchQuery)
 				: fileTreeData
-			const initialData = transformTreeData(baseItems, selectedUris) // Use selectedUris
-			treeRef.current.data = initialData
+			// Transform data with actions/decorations
+			const transformed = transformTreeData(baseItems, selectedUris)
+			// Preserve expansion (open) state from previous data
+			const dataToSet = treeRef.current.data
+				? mergeOpenState(treeRef.current.data as VscodeTreeItem[], transformed)
+				: transformed
+			treeRef.current.data = dataToSet
 		}
-	}, [fileTreeData, searchQuery, selectedUris]) // Added selectedUris to dependency array for transformTreeData
+	}, [fileTreeData, searchQuery])
 
 	// Update only actions & decorations when selection changes
 	useEffect(() => {

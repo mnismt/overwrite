@@ -356,8 +356,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				? payload.selectedUris
 				: []
 
-			console.log('Calculating token counts for URIs:', urisToCount)
-
 			// Process URIs concurrently
 			await Promise.all(
 				urisToCount.map(async (uriString) => {

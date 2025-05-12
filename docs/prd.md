@@ -59,7 +59,7 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
   * **File Operations:** All `vscode.workspace.fs` operations and `vscode.workspace.applyEdit` must target files within the correct workspace folder.
   * **Selection Persistence:** The selection state should be maintained correctly across multiple roots.
   * **Search/Filter:** The search/filter functionality should apply across all root folders
-  
+
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: In Progress
@@ -84,6 +84,15 @@ The **Apply Tab** in the Webview Panel is dedicated to applying changes suggeste
     * Handle errors: file not found, search block not found, multiple ambiguous matches.
   * **`delete`:** Use `vscode.workspace.fs.delete` to delete the file at the specified relative `path`. Use `{ recursive: true, useTrash: true }` options for safety.
 * **Requirement 2.2.5: Feedback & Error Handling:** Provide clear feedback using VS Code notifications (`vscode.window.showInformationMessage`, `vscode.window.showWarningMessage`, `vscode.window.showErrorMessage`) and potentially status updates within the Webview Panel. Report success/failure for each action.
+
+**2.3. Ignore / Allow List**
+
+Status: In Progress
+
+Read a .aboveignore file in the root of the workspace and use it as the ignore list.
+
+* **Requirement 2.3.1: Ignore / Allow List:**
+  * The extension should support an `.aboveignore` file, it will prioritize even over the `.gitignore` file.
 
 **3. User Interface (UI) / User Experience (UX)**
 
