@@ -1,5 +1,5 @@
-import * as vscode from 'vscode' // For vscode.workspace.fs and vscode.Uri
 import * as path from 'node:path' // Still needed for path.relative for file map display logic
+import * as vscode from 'vscode' // For vscode.workspace.fs and vscode.Uri
 import type { VscodeTreeItem } from '../types'
 import { XML_FORMATTING_INSTRUCTIONS } from './xml-instruction'
 

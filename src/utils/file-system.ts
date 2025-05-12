@@ -1,6 +1,6 @@
-import * as vscode from 'vscode'
 import * as path from 'node:path' // Still needed for path.relative and path.join for ignore patterns
 import ignore from 'ignore'
+import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
 
 // Define icons for files and folders (can be customized further)

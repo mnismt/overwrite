@@ -9,13 +9,13 @@ import {
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
 import { parseXmlResponse } from '../../utils/xml-parser'
+import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
 	GetTokenCountsPayload,
 	OpenFilePayload,
 } from './types'
-import { applyFileActions } from './file-action-handler'
 
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'aboveRepoFilesWebview'
@@ -162,10 +162,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				const document = await vscode.workspace.openTextDocument(fileUri)
 				await vscode.window.showTextDocument(document)
 			} else {
-				// This case should ideally not be reached if the tree only allows selecting files for "openFile"
-				vscode.window.showWarningMessage(
-					`Cannot open: ${fileUri.fsPath} is not a file.`,
-				)
+				console.log('File is not a file:', fileUri.fsPath)
 			}
 		} catch (error) {
 			this._handleError(error, 'Error opening file')
