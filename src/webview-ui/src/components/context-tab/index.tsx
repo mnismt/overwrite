@@ -1,17 +1,12 @@
-import type {
-	VscTreeActionEvent,
-	VscTreeSelectEvent,
-} from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
-import {
-	countTokens,
-	filterTreeData,
-	formatTokenCount,
-	getAllDescendantPaths,
-	transformTreeData,
-} from './utils'
+import { countTokens } from './utils'
+import CopyActions from './copy-actions'
+import ExcludedFolders from './excluded-folders'
+import FileExplorer from './file-explorer'
+import TokenStats from './token-stats'
+import UserInstructions from './user-instructions'
 
 interface ContextTabProps {
 	selectedCount: number
@@ -23,30 +18,27 @@ interface ContextTabProps {
 		userInstructions: string
 	}) => void
 	fileTreeData: VscodeTreeItem[]
-	selectedUris: Set<string> // Changed from selectedPaths
-	onSelect: (uris: Set<string>) => void // Changed from paths
-	onRefresh: (excludedFolders?: string) => void // Handler for refresh button with optional excluded folders
-	isLoading: boolean // To show loading state
-	excludedFolders: string // Persisted excluded folders
-	onSaveExcludedFolders: (excludedFolders: string) => void // Handler to save excluded folders
+	selectedUris: Set<string>
+	onSelect: (uris: Set<string>) => void
+	onRefresh: (excludedFolders?: string) => void
+	isLoading: boolean
+	excludedFolders: string
+	onSaveExcludedFolders: (excludedFolders: string) => void
 }
 
 const ContextTab: React.FC<ContextTabProps> = ({
 	selectedCount,
 	onCopy,
 	fileTreeData,
-	selectedUris, // Changed from selectedPaths
+	selectedUris,
 	onSelect,
 	onRefresh,
 	isLoading,
 	excludedFolders,
 	onSaveExcludedFolders,
 }) => {
-	// Ref for the vscode-tree element to update its data in place
 	const [userInstructions, setUserInstructions] = useState('')
-	// State for search query
 	const [searchQuery, setSearchQuery] = useState('')
-	const treeRef = useRef<any>(null)
 	const [tokenStats, setTokenStats] = useState({
 		fileTokensEstimate: 0,
 		userInstructionsTokens: 0,
@@ -55,14 +47,10 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	})
 	const [actualTokenCounts, setActualTokenCounts] = useState<
 		Record<string, number>
-	>({}) // Actual token counts from extension
+	>({})
 	const [skippedFiles, setSkippedFiles] = useState<
 		Array<{ uri: string; reason: string; message?: string }>
-	>([]) // Files that were skipped during token counting
-
-	// State for tracking double-clicks
-	const [lastClickedItem, setLastClickedItem] = useState<string | null>(null)
-	const [lastClickTime, setLastClickTime] = useState<number>(0)
+	>([])
 
 	// Debounce timer for user instructions token counting
 	const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(
@@ -71,184 +59,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
-
-	// Function to merge previous open state into new tree items
-	const mergeOpenState = useCallback(
-		(
-			prevItems: VscodeTreeItem[],
-			newItems: VscodeTreeItem[],
-		): VscodeTreeItem[] => {
-			// Map previous items by value
-			const prevMap = new Map<string, VscodeTreeItem>()
-			for (const item of prevItems) {
-				prevMap.set(item.value, item)
-			}
-			// Recursive merge with depth tracking
-			const mergeItem = (item: VscodeTreeItem, depth = 0): VscodeTreeItem => {
-				const prev = prevMap.get(item.value)
-				// For first level (depth 0), default to open; otherwise default to closed
-				const openState = prev?.open ?? depth === 0
-				const merged: VscodeTreeItem = { ...item, open: openState }
-				if (item.subItems) {
-					merged.subItems = item.subItems.map((subItem) =>
-						mergeItem(subItem, depth + 1),
-					)
-				}
-				return merged
-			}
-			return newItems.map((item) => mergeItem(item, 0))
-		},
-		[],
-	)
-
-	// Replace the existing useEffect for initializing tree data
-	useEffect(() => {
-		if (treeRef.current) {
-			// Filter based on search query, then generate tree with actions & decorations
-			const baseItems = searchQuery
-				? filterTreeData(fileTreeData, searchQuery)
-				: fileTreeData
-			// Transform data with actions/decorations
-			const transformed = transformTreeData(baseItems, selectedUris)
-			// Preserve expansion (open) state from previous data
-			const dataToSet = treeRef.current.data
-				? mergeOpenState(treeRef.current.data as VscodeTreeItem[], transformed)
-				: transformed
-			treeRef.current.data = dataToSet
-		}
-	}, [fileTreeData, searchQuery])
-
-	// Update only actions & decorations when selection changes
-	useEffect(() => {
-		if (treeRef.current) {
-			const items: VscodeTreeItem[] = treeRef.current.data
-
-			const updateItems = (nodes: VscodeTreeItem[]) => {
-				for (const node of nodes) {
-					const isSelected = selectedUris.has(node.value) // Use selectedUris
-
-					if (node.subItems && node.subItems.length > 0) {
-						updateItems(node.subItems) // Recursively update children first
-
-						const folderDecorations: Array<{
-							content: string
-							color?: string
-						}> = []
-						const allDescendants = getAllDescendantPaths(node) // Includes the folder itself
-						const childDescendants = allDescendants.filter(
-							(p) => p !== node.value,
-						)
-						const selectedChildDescendantsCount = childDescendants.filter(
-							(uri) => selectedUris.has(uri), // Use selectedUris
-						).length
-
-						// Determine F/H selection status and set appropriate actions
-						if (
-							selectedChildDescendantsCount === childDescendants.length &&
-							childDescendants.length > 0
-						) {
-							folderDecorations.push({
-								content: 'F',
-								color: 'var(--vscode-testing-iconPassed)',
-							})
-							// For fully selected folders, show close (deselect all) action
-							node.actions = [
-								{
-									icon: 'close',
-									actionId: 'toggle-select',
-									tooltip: 'Deselect all',
-								},
-							]
-						} else if (selectedChildDescendantsCount > 0) {
-							folderDecorations.push({
-								content: 'H',
-								color: 'var(--vscode-testing-iconQueued)',
-							})
-							// For half-selected folders, show both add (select all) and close (deselect all) actions
-							node.actions = [
-								{
-									icon: 'add',
-									actionId: 'toggle-select',
-									tooltip: 'Select all',
-								},
-								{
-									icon: 'close',
-									actionId: 'deselect-all',
-									tooltip: 'Deselect all selected',
-								},
-							]
-						} else if (selectedUris.has(node.value)) {
-							// Use selectedUris
-							// Folder itself is selected (e.g., an empty selected folder)
-							folderDecorations.push({
-								content: 'F',
-								color: 'var(--vscode-testing-iconPassed)',
-							})
-							node.actions = [
-								{
-									icon: 'close',
-									actionId: 'toggle-select',
-									tooltip: 'Deselect',
-								},
-							]
-						} else {
-							// Empty folder with no selections
-							node.actions = [
-								{
-									icon: 'add',
-									actionId: 'toggle-select',
-									tooltip: 'Select all',
-								},
-							]
-						}
-
-						// Calculate total tokens for selected files within this folder
-						let folderTotalTokens = 0
-						for (const descendantUri of allDescendants) {
-							if (
-								selectedUris.has(descendantUri) && // Use selectedUris
-								actualTokenCounts[descendantUri] !== undefined
-							) {
-								folderTotalTokens += actualTokenCounts[descendantUri]
-							}
-						}
-
-						if (folderTotalTokens > 0) {
-							folderDecorations.push({
-								content: `(${formatTokenCount(folderTotalTokens)})`,
-								color: 'var(--vscode-testing-iconPassed)', // Same color as file tokens
-							})
-						}
-						node.decorations =
-							folderDecorations.length > 0 ? folderDecorations : undefined
-					} else {
-						// It's a file
-						node.actions = [
-							{
-								icon: isSelected ? 'close' : 'add',
-								actionId: 'toggle-select',
-								tooltip: isSelected ? 'Deselect' : 'Select',
-							},
-						]
-						node.decorations = isSelected
-							? [
-									{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
-									{
-										content: `(${formatTokenCount(
-											actualTokenCounts[node.value] || 0,
-										)})`,
-										color: 'var(--vscode-testing-iconPassed)',
-									},
-								]
-							: undefined
-					}
-				}
-			}
-
-			updateItems(items)
-			treeRef.current.data = [...items]
-		}
-	}, [selectedUris, actualTokenCounts]) // Depend on selectedUris
 
 	// Effect to calculate total tokens based on actual file counts and instructions
 	useEffect(() => {
@@ -293,25 +103,25 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				clearTimeout(timer)
 			}
 		}
-	}, [actualTokenCounts, userInstructions])
+	}, [actualTokenCounts, userInstructions, debounceTimer])
 
 	// Effect to request token counts when selection changes
 	useEffect(() => {
 		const vscode = getVsCodeApi()
 		// Convert Set to Array before sending
-		const urisArray = Array.from(selectedUris) // Use selectedUris
+		const urisArray = Array.from(selectedUris)
 		if (urisArray.length > 0) {
 			// Only send if there are selected URIs
 			vscode.postMessage({
 				command: 'getTokenCounts',
-				payload: { selectedUris: urisArray }, // Use selectedUris key
+				payload: { selectedUris: urisArray },
 			})
 		} else {
 			// If no URIs are selected, clear the actualTokenCounts and skippedFiles
 			setActualTokenCounts({})
 			setSkippedFiles([])
 		}
-	}, [selectedUris]) // Depend on selectedUris
+	}, [selectedUris])
 
 	// Effect to listen for token count updates from the extension
 	useEffect(() => {
@@ -321,8 +131,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				setActualTokenCounts(message.payload.tokenCounts || {})
 				setSkippedFiles(message.payload.skippedFiles || [])
 			}
-			// tokenCountResponse is handled in the countTokens function itself
-			// No need to handle it here since it's handled by individual requests
 		}
 
 		window.addEventListener('message', handleMessage)
@@ -333,138 +141,16 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		() => onRefresh(excludedFolders),
 		[onRefresh, excludedFolders],
 	)
-	const handleCopyContextClick = useCallback(
-		() => onCopy({ includeXml: false, userInstructions }),
-		[onCopy, userInstructions],
-	)
-	const handleCopyContextXmlClick = useCallback(
-		() => onCopy({ includeXml: true, userInstructions }),
-		[onCopy, userInstructions],
-	)
-
-	// Handler for clicking the action icon - Toggles ONLY the clicked item
-	// Updated: Handles recursive selection/deselection for folders
-	const handleTreeAction = useCallback(
-		(event: VscTreeActionEvent) => {
-			const actionId = event.detail.actionId
-			const item = event.detail.item as VscodeTreeItem // item.value is a URI string
-
-			if (
-				(actionId === 'toggle-select' || actionId === 'deselect-all') &&
-				item?.value
-			) {
-				const newSelectedUris = new Set(selectedUris) // Use selectedUris
-				const uri = item.value // This is a URI string
-				const isCurrentlySelected = newSelectedUris.has(uri)
-
-				if (actionId === 'deselect-all') {
-					// Deselect all selected descendants (for half-selected folders)
-					if (item.subItems && item.subItems.length > 0) {
-						const allUris = getAllDescendantPaths(item) // Get all descendants
-						// Only deselect URIs that are currently selected
-						for (const u of allUris) {
-							if (newSelectedUris.has(u)) {
-								newSelectedUris.delete(u)
-							}
-						}
-					}
-				} else if (actionId === 'toggle-select') {
-					// Check if it's a folder (has subItems)
-					if (item.subItems && item.subItems.length > 0) {
-						// It's a folder - apply recursive logic
-						const allUris = getAllDescendantPaths(item) // Assumes this now returns URI strings
-
-						if (isCurrentlySelected) {
-							// Deselecting the folder and all its descendants
-							for (const u of allUris) {
-								newSelectedUris.delete(u)
-							}
-						} else {
-							// Selecting the folder and all its descendants
-							for (const u of allUris) {
-								newSelectedUris.add(u)
-							}
-						}
-					} else {
-						// It's a file - simple toggle
-						if (isCurrentlySelected) {
-							newSelectedUris.delete(uri)
-						} else {
-							newSelectedUris.add(uri)
-						}
-					}
-				}
-
-				// Notify parent with the updated set
-				onSelect(newSelectedUris)
-			}
-		},
-		[selectedUris, onSelect], // Depend on selectedUris
-	)
-
-	// Handle tree item selection with double-click detection
-	const handleTreeSelect = useCallback(
-		(event: VscTreeSelectEvent) => {
-			const item = event.detail as VscodeTreeItem // item.value is a URI string
-			if (!item?.value) return
-
-			const clickedUri = item.value // This is a URI string
-			const currentTime = Date.now()
-
-			// Check if this is a double-click (same item clicked within 500ms)
-			if (lastClickedItem === clickedUri && currentTime - lastClickTime < 500) {
-				// It's a double-click - determine if it's a file or folder (leaf or branch)
-				// Assuming itemType 'leaf' correctly identifies files.
-				// The tree data generation in file-system.ts sets icons, but not itemType explicitly.
-				// This might need adjustment if itemType is not reliably set by vscode-tree based on subItems.
-				// For now, we assume files won't have subItems.
-				if (!item.subItems || item.subItems.length === 0) {
-					// A more robust check for file-like items
-					// It's a file, send message to open it
-					const vscode = getVsCodeApi()
-					vscode.postMessage({
-						command: 'openFile',
-						payload: { fileUri: clickedUri }, // Use fileUri key
-					})
-				}
-
-				// Reset tracking after processing double-click
-				setLastClickedItem(null)
-				setLastClickTime(0)
-			} else {
-				// It's a single click - update tracking
-				setLastClickedItem(clickedUri)
-				setLastClickTime(currentTime)
-			}
-		},
-		[lastClickedItem, lastClickTime],
-	)
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-			{/* --- Excluded Folders Section --- */}
-			<div style={{ marginBottom: '10px', marginTop: '10px' }}>
-				<label
-					htmlFor="excluded-folders"
-					style={{ fontSize: '0.9em', marginBottom: '5px', display: 'block' }}
-				>
-					Excluded Folders (one per line, similar to .gitignore):
-				</label>
-				<vscode-textarea
-					id="excluded-folders"
-					resize="vertical"
-					rows={3}
-					placeholder="Enter folder patterns to exclude (e.g., node_modules, .git, dist)..."
-					value={excludedFolders}
-					onInput={(e) => {
-						const target = e.target as HTMLInputElement
-						onSaveExcludedFolders(target.value)
-					}}
-					style={{ width: '100%', minHeight: '60px' }}
-				/>
-			</div>
+			{/* Excluded Folders Section */}
+			<ExcludedFolders
+				excludedFolders={excludedFolders}
+				onSaveExcludedFolders={onSaveExcludedFolders}
+			/>
 
-			{/* --- Explorer Top Bar --- */}
+			{/* Explorer Top Bar */}
 			<div
 				style={{
 					display: 'flex',
@@ -486,116 +172,32 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				</vscode-textfield>
 			</div>
 
-			{/* --- File Tree Area --- */}
-			<div style={{ flexGrow: 1, overflow: 'auto', marginBottom: '10px' }}>
-				{isLoading ? (
-					<div
-						style={{
-							display: 'flex',
-							justifyContent: 'center',
-							alignItems: 'center',
-							height: '100%',
-						}}
-					>
-						<vscode-progress-ring />
-					</div>
-				) : (
-					<vscode-tree
-						ref={treeRef}
-						onvsc-tree-action={handleTreeAction}
-						onvsc-tree-select={handleTreeSelect}
-						arrows
-						indent-guides
-					/>
-				)}
-			</div>
+			{/* File Explorer */}
+			<FileExplorer
+				fileTreeData={fileTreeData}
+				selectedUris={selectedUris}
+				onSelect={onSelect}
+				isLoading={isLoading}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+				actualTokenCounts={actualTokenCounts}
+			/>
 
-			{/* --- Original Context Elements Below Tree --- */}
-			<vscode-divider />
-			<div>Selected files: {selectedCount}</div>
+			{/* Copy Actions and Selected Count */}
+			<CopyActions
+				selectedCount={selectedCount}
+				onCopy={onCopy}
+				userInstructions={userInstructions}
+			/>
 
-			{/* Token Count Information */}
-			<div
-				style={{
-					marginTop: '10px',
-					fontSize: '0.9em',
-					color: 'var(--vscode-descriptionForeground)',
-				}}
-			>
-				<div>File tokens (actual): {tokenStats.fileTokensEstimate}</div>
-				<div>User instruction tokens: {tokenStats.userInstructionsTokens}</div>
-				<div>Total tokens (Copy Context): {tokenStats.totalTokens}</div>
-				<div>
-					Total tokens (Copy Context + XML): {tokenStats.totalWithXmlTokens}
-				</div>
-			</div>
+			{/* Token Statistics */}
+			<TokenStats tokenStats={tokenStats} skippedFiles={skippedFiles} />
 
-			{/* Skipped Files Information */}
-			{skippedFiles.length > 0 && (
-				<div
-					style={{
-						marginTop: '10px',
-						fontSize: '0.8em',
-						color: 'var(--vscode-errorForeground)',
-						backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
-						border: '1px solid var(--vscode-inputValidation-warningBorder)',
-						borderRadius: '3px',
-						padding: '8px',
-					}}
-				>
-					<div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-						⚠️ Skipped Files ({skippedFiles.length}):
-					</div>
-					{skippedFiles.map((file, index) => (
-						<div key={index} style={{ marginBottom: '2px' }}>
-							<span style={{ fontFamily: 'monospace' }}>
-								{file.uri.split('/').pop()}
-							</span>
-							{' - '}
-							<span style={{ fontStyle: 'italic' }}>
-								{file.reason === 'binary'
-									? 'Binary file'
-									: file.reason === 'too-large'
-										? 'Too large'
-										: 'Error'}
-							</span>
-							{file.message && (
-								<span style={{ color: 'var(--vscode-descriptionForeground)' }}>
-									{' '}
-									({file.message})
-								</span>
-							)}
-						</div>
-					))}
-				</div>
-			)}
-
-			<div
-				style={{ marginTop: '10px', display: 'flex', flexDirection: 'column' }}
-			>
-				<label htmlFor="user-instructions">User Instructions:</label>
-				<vscode-textarea
-					id="user-instructions"
-					resize="vertical"
-					rows={10}
-					placeholder="Enter instructions for the AI..."
-					value={userInstructions}
-					onInput={(e) => {
-						const target = e.target as HTMLInputElement
-						setUserInstructions(target.value)
-					}}
-					style={{ marginTop: '5px', width: '100%', minHeight: '100px' }}
-				/>
-			</div>
-
-			<div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
-				<vscode-button onClick={handleCopyContextClick}>
-					Copy Context
-				</vscode-button>
-				<vscode-button onClick={handleCopyContextXmlClick}>
-					Copy Context + XML Instructions
-				</vscode-button>
-			</div>
+			{/* User Instructions */}
+			<UserInstructions
+				userInstructions={userInstructions}
+				onUserInstructionsChange={setUserInstructions}
+			/>
 		</div>
 	)
 }
