@@ -20,8 +20,9 @@ const FILE_ICONS = {
  * Recursively reads a directory using vscode.workspace.fs and builds a tree structure.
  * @param currentUri The URI of the directory to read.
  * @param rootUri The URI of the workspace root for this directory (for .gitignore path relativity).
- * @param excludedDirs An array of additional directory names to exclude.
- * @param ign The ignore object from the 'ignore' package.
+ * @param excludedDirs An array of additional directory patterns to exclude (like .gitignore patterns).
+ * @param ign The ignore object from the 'ignore' package for .gitignore rules.
+ * @param userIgnore The ignore object from the 'ignore' package for user-defined excluded patterns.
  * @returns A promise that resolves to an array of VscodeTreeItem objects.
  */
 async function readDirectoryRecursiveForRoot(
@@ -29,6 +30,7 @@ async function readDirectoryRecursiveForRoot(
 	rootUri: vscode.Uri,
 	excludedDirs: string[],
 	ign: ignore.Ignore,
+	userIgnore: ignore.Ignore,
 ): Promise<VscodeTreeItem[]> {
 	const items: VscodeTreeItem[] = []
 
@@ -62,8 +64,8 @@ async function readDirectoryRecursiveForRoot(
 				continue
 			}
 
-			// Additional check for excluded directory names (simple name check)
-			if (excludedDirs.includes(name) && type === vscode.FileType.Directory) {
+			// Check user-defined excluded patterns
+			if (userIgnore.ignores(relativePathForIgnore)) {
 				continue
 			}
 
@@ -80,6 +82,7 @@ async function readDirectoryRecursiveForRoot(
 					rootUri,
 					excludedDirs,
 					ign,
+					userIgnore,
 				)
 				if (subItems.length > 0) {
 					item.subItems = subItems
@@ -145,11 +148,15 @@ export async function getWorkspaceFileTree(
 		// Example: ign.add(['.vscode', 'node_modules', '.git'])
 		// For now, we rely on the project's .gitignore primarily.
 
+		// Create ignore object for user-defined excluded patterns
+		const userIgnore = ignore().add(excludedDirs)
+
 		const subItems = await readDirectoryRecursiveForRoot(
 			rootUri,
 			rootUri, // rootUri itself is the base for relative ignore paths
 			excludedDirs,
 			ign,
+			userIgnore,
 		)
 
 		const rootItem: VscodeTreeItem = {

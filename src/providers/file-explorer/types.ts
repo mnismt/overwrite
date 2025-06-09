@@ -14,3 +14,7 @@ export interface CopyContextPayload {
 export interface GetTokenCountsPayload {
 	selectedUris: string[] // Array of URI strings
 }
+
+export interface GetFileTreePayload {
+	excludedFolders?: string // String containing excluded folder patterns, one per line
+}

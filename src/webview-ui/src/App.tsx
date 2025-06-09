@@ -11,12 +11,19 @@ interface VsCodeMessage {
 	payload?: unknown // Use unknown instead of any for better type safety
 }
 
+interface UpdateExcludedFoldersPayload {
+	excludedFolders: string
+}
+
 function App() {
 	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index (0: Context, 1: Apply)
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
 	// selectedPaths renamed to selectedUris, stores Set of URI strings
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
+	const [excludedFolders, setExcludedFolders] = useState<string>(
+		'node_modules\n.git\ndist\nout\n.vscode-test',
+	) // Persisted excluded folders
 
 	console.log('selectedUris', selectedUris)
 
@@ -30,9 +37,10 @@ function App() {
 		vscode.postMessage({ command, payload })
 	}, [])
 
-	// Fetch initial file tree
+	// Fetch initial file tree and excluded folders
 	useEffect(() => {
 		sendMessage('getFileTree')
+		sendMessage('getExcludedFolders')
 	}, [sendMessage])
 
 	// Listen for messages from extension
@@ -53,6 +61,14 @@ function App() {
 					console.error('Error from extension:', message.payload)
 					setIsLoading(false) // Stop loading on error too
 					break
+				case 'updateExcludedFolders': {
+					// Update excluded folders from persisted state
+					const payload = message.payload as UpdateExcludedFoldersPayload
+					if (payload?.excludedFolders) {
+						setExcludedFolders(payload.excludedFolders)
+					}
+					break
+				}
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}
@@ -69,10 +85,24 @@ function App() {
 	}, [])
 
 	// Refresh handler for the file tree (moved from potential ExplorerTab)
-	const handleRefresh = useCallback(() => {
-		setIsLoading(true)
-		sendMessage('getFileTree')
-	}, [sendMessage])
+	const handleRefresh = useCallback(
+		(excludedFolders?: string) => {
+			setIsLoading(true)
+			sendMessage('getFileTree', { excludedFolders })
+		},
+		[sendMessage],
+	)
+
+	// Save excluded folders handler
+	const handleSaveExcludedFolders = useCallback(
+		(newExcludedFolders: string) => {
+			setExcludedFolders(newExcludedFolders)
+			sendMessage('saveExcludedFolders', {
+				excludedFolders: newExcludedFolders,
+			})
+		},
+		[sendMessage],
+	)
 
 	// Selection handler (assuming it will be needed in the combined ContextTab)
 	// Renamed paths to uris, expects a Set of URI strings
@@ -131,7 +161,9 @@ function App() {
 						onSelect={handleSelect} // Pass the handler
 						onRefresh={handleRefresh}
 						isLoading={isLoading}
-						// TODO: Add search/filter props and handler
+						// Props for excluded folders persistence
+						excludedFolders={excludedFolders}
+						onSaveExcludedFolders={handleSaveExcludedFolders}
 					/>
 				</vscode-tab-panel>
 

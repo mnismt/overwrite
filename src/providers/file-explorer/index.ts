@@ -13,6 +13,7 @@ import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
+	GetFileTreePayload,
 	GetTokenCountsPayload,
 	OpenFilePayload,
 } from './types'
@@ -24,12 +25,33 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private readonly _excludedDirs = [] // Directories to exclude
+	private static readonly EXCLUDED_FOLDERS_KEY = 'aboveRepo.excludedFolders'
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
 		context: vscode.ExtensionContext,
 	) {
 		this._context = context
+	}
+
+	/**
+	 * Saves excluded folders to workspace state.
+	 */
+	private async _saveExcludedFolders(excludedFolders: string): Promise<void> {
+		await this._context.workspaceState.update(
+			FileExplorerWebviewProvider.EXCLUDED_FOLDERS_KEY,
+			excludedFolders,
+		)
+	}
+
+	/**
+	 * Loads excluded folders from workspace state.
+	 */
+	private _loadExcludedFolders(): string {
+		return this._context.workspaceState.get(
+			FileExplorerWebviewProvider.EXCLUDED_FOLDERS_KEY,
+			'node_modules\n.git\ndist\nout\n.vscode-test', // Default value
+		)
 	}
 
 	public resolveWebviewView(
@@ -68,8 +90,18 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			try {
 				switch (message.command) {
 					case 'getFileTree':
-						// No payload expected for getFileTree
-						await this._handleGetFileTree()
+						// Payload may contain excluded folders
+						await this._handleGetFileTree(message.payload as GetFileTreePayload)
+						break
+					case 'saveExcludedFolders':
+						// Save excluded folders to workspace state
+						await this._handleSaveExcludedFolders(
+							message.payload as { excludedFolders: string },
+						)
+						break
+					case 'getExcludedFolders':
+						// Send persisted excluded folders to webview
+						await this._handleGetExcludedFolders()
 						break
 					case 'getTokenCounts': // Add handler for new command
 						await this._handleGetTokenCounts(message.payload)
@@ -118,14 +150,57 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	/**
+	 * Handles saving excluded folders to workspace state.
+	 */
+	private async _handleSaveExcludedFolders(payload: {
+		excludedFolders: string
+	}): Promise<void> {
+		await this._saveExcludedFolders(payload.excludedFolders)
+	}
+
+	/**
+	 * Handles getting excluded folders and sending them to webview.
+	 */
+	private async _handleGetExcludedFolders(): Promise<void> {
+		if (!this._view) return
+
+		const persistedExcludedFolders = this._loadExcludedFolders()
+		this._view.webview.postMessage({
+			command: 'updateExcludedFolders',
+			payload: { excludedFolders: persistedExcludedFolders },
+		})
+	}
+
+	/**
 	 * Fetches the file tree and sends it to the webview.
 	 */
-	private async _handleGetFileTree(): Promise<void> {
+	private async _handleGetFileTree(
+		payload?: GetFileTreePayload,
+	): Promise<void> {
 		if (!this._view) return
 
 		try {
+			// Parse excluded folders from payload if provided, otherwise load from state
+			const excludedFolders =
+				payload?.excludedFolders || this._loadExcludedFolders()
+
+			// Save excluded folders if they were provided in payload (user initiated refresh)
+			if (payload?.excludedFolders) {
+				await this._saveExcludedFolders(payload.excludedFolders)
+			}
+
+			const excludedFoldersArray = excludedFolders
+				? excludedFolders
+						.split(/\r?\n/)
+						.map((line) => line.trim())
+						.filter((line) => line.length > 0 && !line.startsWith('#'))
+				: []
+
+			// Combine with default excluded dirs
+			const allExcludedDirs = [...this._excludedDirs, ...excludedFoldersArray]
+
 			// Use the imported function, passing exclusions
-			const workspaceFiles = await getWorkspaceFileTree(this._excludedDirs)
+			const workspaceFiles = await getWorkspaceFileTree(allExcludedDirs)
 			this._fullTreeCache = workspaceFiles // Cache the full tree
 			this._view.webview.postMessage({
 				command: 'updateFileTree',

@@ -25,8 +25,10 @@ interface ContextTabProps {
 	fileTreeData: VscodeTreeItem[]
 	selectedUris: Set<string> // Changed from selectedPaths
 	onSelect: (uris: Set<string>) => void // Changed from paths
-	onRefresh: () => void // Handler for refresh button
+	onRefresh: (excludedFolders?: string) => void // Handler for refresh button with optional excluded folders
 	isLoading: boolean // To show loading state
+	excludedFolders: string // Persisted excluded folders
+	onSaveExcludedFolders: (excludedFolders: string) => void // Handler to save excluded folders
 }
 
 const ContextTab: React.FC<ContextTabProps> = ({
@@ -37,6 +39,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	onSelect,
 	onRefresh,
 	isLoading,
+	excludedFolders,
+	onSaveExcludedFolders,
 }) => {
 	// Ref for the vscode-tree element to update its data in place
 	const [userInstructions, setUserInstructions] = useState('')
@@ -71,17 +75,20 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			for (const item of prevItems) {
 				prevMap.set(item.value, item)
 			}
-			// Recursive merge
-			const mergeItem = (item: VscodeTreeItem): VscodeTreeItem => {
+			// Recursive merge with depth tracking
+			const mergeItem = (item: VscodeTreeItem, depth = 0): VscodeTreeItem => {
 				const prev = prevMap.get(item.value)
-				const openState = prev?.open ?? false
+				// For first level (depth 0), default to open; otherwise default to closed
+				const openState = prev?.open ?? depth === 0
 				const merged: VscodeTreeItem = { ...item, open: openState }
 				if (item.subItems) {
-					merged.subItems = item.subItems.map(mergeItem)
+					merged.subItems = item.subItems.map((subItem) =>
+						mergeItem(subItem, depth + 1),
+					)
 				}
 				return merged
 			}
-			return newItems.map(mergeItem)
+			return newItems.map((item) => mergeItem(item, 0))
 		},
 		[],
 	)
@@ -111,13 +118,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			const updateItems = (nodes: VscodeTreeItem[]) => {
 				for (const node of nodes) {
 					const isSelected = selectedUris.has(node.value) // Use selectedUris
-					node.actions = [
-						{
-							icon: isSelected ? 'close' : 'add',
-							actionId: 'toggle-select',
-							tooltip: isSelected ? 'Deselect' : 'Select',
-						},
-					]
 
 					if (node.subItems && node.subItems.length > 0) {
 						updateItems(node.subItems) // Recursively update children first
@@ -134,7 +134,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 							(uri) => selectedUris.has(uri), // Use selectedUris
 						).length
 
-						// Determine F/H selection status
+						// Determine F/H selection status and set appropriate actions
 						if (
 							selectedChildDescendantsCount === childDescendants.length &&
 							childDescendants.length > 0
@@ -143,11 +143,32 @@ const ContextTab: React.FC<ContextTabProps> = ({
 								content: 'F',
 								color: 'var(--vscode-testing-iconPassed)',
 							})
+							// For fully selected folders, show close (deselect all) action
+							node.actions = [
+								{
+									icon: 'close',
+									actionId: 'toggle-select',
+									tooltip: 'Deselect all',
+								},
+							]
 						} else if (selectedChildDescendantsCount > 0) {
 							folderDecorations.push({
 								content: 'H',
 								color: 'var(--vscode-testing-iconQueued)',
 							})
+							// For half-selected folders, show both add (select all) and close (deselect all) actions
+							node.actions = [
+								{
+									icon: 'add',
+									actionId: 'toggle-select',
+									tooltip: 'Select all',
+								},
+								{
+									icon: 'close',
+									actionId: 'deselect-all',
+									tooltip: 'Deselect all selected',
+								},
+							]
 						} else if (selectedUris.has(node.value)) {
 							// Use selectedUris
 							// Folder itself is selected (e.g., an empty selected folder)
@@ -155,6 +176,22 @@ const ContextTab: React.FC<ContextTabProps> = ({
 								content: 'F',
 								color: 'var(--vscode-testing-iconPassed)',
 							})
+							node.actions = [
+								{
+									icon: 'close',
+									actionId: 'toggle-select',
+									tooltip: 'Deselect',
+								},
+							]
+						} else {
+							// Empty folder with no selections
+							node.actions = [
+								{
+									icon: 'add',
+									actionId: 'toggle-select',
+									tooltip: 'Select all',
+								},
+							]
 						}
 
 						// Calculate total tokens for selected files within this folder
@@ -178,6 +215,13 @@ const ContextTab: React.FC<ContextTabProps> = ({
 							folderDecorations.length > 0 ? folderDecorations : undefined
 					} else {
 						// It's a file
+						node.actions = [
+							{
+								icon: isSelected ? 'close' : 'add',
+								actionId: 'toggle-select',
+								tooltip: isSelected ? 'Deselect' : 'Select',
+							},
+						]
 						node.decorations = isSelected
 							? [
 									{ content: 'F', color: 'var(--vscode-testing-iconPassed)' },
@@ -247,7 +291,10 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		return () => window.removeEventListener('message', handleMessage)
 	}, [])
 
-	const handleRefreshClick = useCallback(() => onRefresh(), [onRefresh])
+	const handleRefreshClick = useCallback(
+		() => onRefresh(excludedFolders),
+		[onRefresh, excludedFolders],
+	)
 	const handleCopyContextClick = useCallback(
 		() => onCopy({ includeXml: false, userInstructions }),
 		[onCopy, userInstructions],
@@ -264,33 +311,49 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			const actionId = event.detail.actionId
 			const item = event.detail.item as VscodeTreeItem // item.value is a URI string
 
-			if (actionId === 'toggle-select' && item?.value) {
+			if (
+				(actionId === 'toggle-select' || actionId === 'deselect-all') &&
+				item?.value
+			) {
 				const newSelectedUris = new Set(selectedUris) // Use selectedUris
 				const uri = item.value // This is a URI string
 				const isCurrentlySelected = newSelectedUris.has(uri)
 
-				// Check if it's a folder (has subItems)
-				if (item.subItems && item.subItems.length > 0) {
-					// It's a folder - apply recursive logic
-					const allUris = getAllDescendantPaths(item) // Assumes this now returns URI strings
-
-					if (isCurrentlySelected) {
-						// Deselecting the folder and all its descendants
+				if (actionId === 'deselect-all') {
+					// Deselect all selected descendants (for half-selected folders)
+					if (item.subItems && item.subItems.length > 0) {
+						const allUris = getAllDescendantPaths(item) // Get all descendants
+						// Only deselect URIs that are currently selected
 						for (const u of allUris) {
-							newSelectedUris.delete(u)
-						}
-					} else {
-						// Selecting the folder and all its descendants
-						for (const u of allUris) {
-							newSelectedUris.add(u)
+							if (newSelectedUris.has(u)) {
+								newSelectedUris.delete(u)
+							}
 						}
 					}
-				} else {
-					// It's a file - simple toggle
-					if (isCurrentlySelected) {
-						newSelectedUris.delete(uri)
+				} else if (actionId === 'toggle-select') {
+					// Check if it's a folder (has subItems)
+					if (item.subItems && item.subItems.length > 0) {
+						// It's a folder - apply recursive logic
+						const allUris = getAllDescendantPaths(item) // Assumes this now returns URI strings
+
+						if (isCurrentlySelected) {
+							// Deselecting the folder and all its descendants
+							for (const u of allUris) {
+								newSelectedUris.delete(u)
+							}
+						} else {
+							// Selecting the folder and all its descendants
+							for (const u of allUris) {
+								newSelectedUris.add(u)
+							}
+						}
 					} else {
-						newSelectedUris.add(uri)
+						// It's a file - simple toggle
+						if (isCurrentlySelected) {
+							newSelectedUris.delete(uri)
+						} else {
+							newSelectedUris.add(uri)
+						}
 					}
 				}
 
@@ -341,12 +404,33 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+			{/* --- Excluded Folders Section --- */}
+			<div style={{ marginBottom: '10px', marginTop: '10px' }}>
+				<label
+					htmlFor="excluded-folders"
+					style={{ fontSize: '0.9em', marginBottom: '5px', display: 'block' }}
+				>
+					Excluded Folders (one per line, similar to .gitignore):
+				</label>
+				<vscode-textarea
+					id="excluded-folders"
+					resize="vertical"
+					rows={3}
+					placeholder="Enter folder patterns to exclude (e.g., node_modules, .git, dist)..."
+					value={excludedFolders}
+					onInput={(e) => {
+						const target = e.target as HTMLInputElement
+						onSaveExcludedFolders(target.value)
+					}}
+					style={{ width: '100%', minHeight: '60px' }}
+				/>
+			</div>
+
 			{/* --- Explorer Top Bar --- */}
 			<div
 				style={{
 					display: 'flex',
 					marginBottom: '10px',
-					marginTop: '10px',
 					alignItems: 'center',
 				}}
 			>
