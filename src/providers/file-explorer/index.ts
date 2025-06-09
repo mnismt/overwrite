@@ -6,6 +6,7 @@ import {
 	generateFileMap,
 	generatePrompt,
 } from '../../prompts'
+import { countManyWithInfo, encodeText } from '../../services/token-counter'
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
 import { parseXmlResponse } from '../../utils/xml-parser'
@@ -105,6 +106,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 						break
 					case 'getTokenCounts': // Add handler for new command
 						await this._handleGetTokenCounts(message.payload)
+						break
+					case 'getTokenCount': // Handle single token count request from webview
+						await this._handleGetTokenCount(message.payload)
 						break
 					case 'openFile':
 						// Type assertion or validation recommended here
@@ -409,69 +413,59 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	): Promise<void> {
 		if (!this._view) return
 
-		const tokenCounts: Record<string, number> = {} // Keys will be URI strings
-		const errors: string[] = []
-
-		// Dynamically import Tiktoken and ranks, and create encoder
-		const { Tiktoken } = await import('js-tiktoken/lite')
-		const { default: o200k_base } = await import('js-tiktoken/ranks/o200k_base')
-		const enc = new Tiktoken(o200k_base)
-
-		// Define countTokens locally within the async function scope
-		const countTokensLocal = (text: string): number => {
-			if (!text) return 0
-			return enc.encode(text).length
-		}
-
 		try {
 			const urisToCount = Array.isArray(payload?.selectedUris)
 				? payload.selectedUris
 				: []
 
-			// Process URIs concurrently
-			await Promise.all(
-				urisToCount.map(async (uriString) => {
-					try {
-						const fileUri = vscode.Uri.parse(uriString)
-
-						// Ensure it's a file before attempting to read
-						const stats = await vscode.workspace.fs.stat(fileUri)
-						if (stats.type === vscode.FileType.File) {
-							const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
-							const content = Buffer.from(contentBuffer).toString('utf8')
-							tokenCounts[uriString] = countTokensLocal(content) // Use URI string as key
-						} else {
-							// It's a directory or something else, assign 0 tokens
-							tokenCounts[uriString] = 0
-						}
-					} catch (error) {
-						// Log error but continue processing other files
-						const errorMsg = `Error counting tokens for ${uriString}: ${error instanceof Error ? error.message : String(error)}`
-						console.error(errorMsg)
-						errors.push(errorMsg)
-						// Set token count to 0 on error to avoid issues in the UI
-						tokenCounts[uriString] = 0
-					}
-				}),
-			)
+			const uris = urisToCount.map((uriString) => vscode.Uri.parse(uriString))
+			const { tokenCounts, skippedFiles } = await countManyWithInfo(uris)
 
 			// Send the results back to the webview
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts },
+				payload: { tokenCounts, skippedFiles },
 			})
 
-			// Optionally report errors
-			if (errors.length > 0) {
-				console.warn('Errors encountered during token counting:', errors)
+			// Log skipped files for debugging
+			if (skippedFiles.length > 0) {
+				console.log('Skipped files during token counting:', skippedFiles)
 			}
 		} catch (error) {
-			// Handle general errors (e.g., Tiktoken import failure)
 			this._handleError(error, 'Error calculating token counts')
 			// Send empty counts back on error
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts: {} }, // Send empty on failure
+				payload: { tokenCounts: {}, skippedFiles: [] },
+			})
+		}
+	}
+
+	/**
+	 * Handles the 'getTokenCount' message from the webview for single text token counting.
+	 */
+	private async _handleGetTokenCount(payload: {
+		text: string
+		requestId: string
+	}): Promise<void> {
+		if (!this._view) return
+
+		try {
+			const tokenCount = await encodeText(payload.text)
+
+			// Send the response back to the webview
+			this._view.webview.postMessage({
+				command: 'tokenCountResponse',
+				requestId: payload.requestId,
+				tokenCount,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error calculating token count for text')
+			// Send fallback response
+			this._view.webview.postMessage({
+				command: 'tokenCountResponse',
+				requestId: payload.requestId,
+				tokenCount: Math.ceil(payload.text.length / 4), // Rough fallback estimate
 			})
 		}
 	}

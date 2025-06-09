@@ -1,14 +1,45 @@
-import { Tiktoken } from 'js-tiktoken/lite'
-import o200k_base from 'js-tiktoken/ranks/o200k_base'
 import type { VscodeTreeItem } from '../../../../types'
+import { getVsCodeApi } from '../../utils/vscode'
 
-// Initialize tokenizer once
-const enc = new Tiktoken(o200k_base)
+// Count tokens in a string using the extension's encoder for consistency
+export function countTokens(text: string): Promise<number> {
+	if (!text) return Promise.resolve(0)
 
-// Count tokens in a string
-export function countTokens(text: string): number {
-	if (!text) return 0
-	return enc.encode(text).length
+	// Use message passing to get token count from extension host
+	return new Promise((resolve) => {
+		const vscode = getVsCodeApi()
+
+		// Create a unique request ID for this token count request
+		const requestId = Math.random().toString(36).substring(2, 15)
+
+		// Listen for the response
+		const handleMessage = (event: MessageEvent) => {
+			const message = event.data
+			if (
+				message.command === 'tokenCountResponse' &&
+				message.requestId === requestId
+			) {
+				window.removeEventListener('message', handleMessage)
+				console.log('tokenCountResponse', message)
+				resolve(message.tokenCount || Math.ceil(text.length / 4))
+			}
+		}
+
+		window.addEventListener('message', handleMessage)
+
+		// Send the request
+		vscode.postMessage({
+			command: 'getTokenCount',
+			payload: { text, requestId },
+		})
+
+		// Fallback timeout after 5 seconds
+		setTimeout(() => {
+			window.removeEventListener('message', handleMessage)
+			console.warn('Token count request timed out, using fallback estimate')
+			resolve(Math.ceil(text.length / 4))
+		}, 5000)
+	})
 }
 
 // Format token count in 'k' units for display

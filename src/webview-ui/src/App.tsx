@@ -25,8 +25,6 @@ function App() {
 		'node_modules\n.git\ndist\nout\n.vscode-test',
 	) // Persisted excluded folders
 
-	console.log('selectedUris', selectedUris)
-
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
 		const vscode = getVsCodeApi()
@@ -69,6 +67,10 @@ function App() {
 					}
 					break
 				}
+				case 'tokenCountResponse':
+					// Token count responses are handled individually by countTokens calls
+					// No action needed here, just preventing the unknown command warning
+					break
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}

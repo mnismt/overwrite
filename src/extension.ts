@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode'
 import { FileExplorerWebviewProvider } from './providers/file-explorer'
+import { clearCache } from './services/token-counter'
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -25,6 +26,16 @@ export function activate(context: vscode.ExtensionContext) {
 				},
 			},
 		),
+	)
+
+	// Token counting is now handled via message passing in the webview provider
+
+	// Register cache management commands for debugging
+	context.subscriptions.push(
+		vscode.commands.registerCommand('aboveRepo.clearTokenCache', () => {
+			clearCache()
+			vscode.window.showInformationMessage('Token cache cleared')
+		}),
 	)
 }
 

@@ -46,6 +46,81 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 ## Important Notes
 - When updating permissions, update the extension's manifest or capabilities as needed
 
+## Webview-Extension Communication Architecture
+
+### Overview
+The AboveRepo extension follows a strict frontend-backend architecture where the webview (React app) and extension host communicate exclusively through message passing. **NEVER use `vscode.commands.executeCommand()` directly in the webview.**
+
+### Communication Pattern
+
+#### 1. Webview → Extension (Frontend to Backend)
+**Location**: Webview components use [getVsCodeApi()](mdc:src/webview-ui/src/utils/vscode.ts)
+```typescript
+const vscode = getVsCodeApi()
+vscode.postMessage({
+  command: 'commandName',
+  payload: { /* data */ }
+})
+```
+
+#### 2. Extension → Webview (Backend to Frontend)
+**Location**: [FileExplorerWebviewProvider](mdc:src/providers/file-explorer/index.ts)
+```typescript
+this._view.webview.postMessage({
+  command: 'responseCommand',
+  payload: { /* response data */ }
+})
+```
+
+### Message Handler Locations
+
+#### Extension Host Handler
+All incoming messages from webview are handled in:
+- **File**: [FileExplorerWebviewProvider](mdc:src/providers/file-explorer/index.ts)
+- **Method**: `webviewView.webview.onDidReceiveMessage(async (message) => { ... })`
+- **Pattern**: Switch statement on `message.command`
+
+#### Webview Handler
+All incoming messages from extension are handled in:
+- **File**: [App.tsx](mdc:src/webview-ui/src/App.tsx) (main handler)
+- **File**: [context-tab utils](mdc:src/webview-ui/src/components/context-tab/utils.ts) (specific handlers)
+- **Pattern**: Event listener on `window` for `message` events
+
+### Example: Token Counting System
+
+#### Request Flow (Webview → Extension)
+1. **Webview**: [countTokens()](mdc:src/webview-ui/src/components/context-tab/utils.ts) calls `getVsCodeApi().postMessage()`
+2. **Extension**: [_handleGetTokenCount()](mdc:src/providers/file-explorer/index.ts) processes request
+3. **Extension**: Uses [TokenCounter service](mdc:src/services/token-counter.ts) for computation
+4. **Extension**: Sends response via `this._view.webview.postMessage()`
+
+#### Message Types
+```typescript
+// Webview → Extension
+{
+  command: 'getTokenCount',
+  payload: { text: string, requestId: string }
+}
+
+// Extension → Webview  
+{
+  command: 'tokenCountResponse',
+  requestId: string,
+  tokenCount: number
+}
+```
+
+### Critical Rules
+
+1. **Single API Instance**: Use [getVsCodeApi()](mdc:src/webview-ui/src/utils/vscode.ts) - never call `acquireVsCodeApi()` directly
+2. **Message Recognition**: All message commands must be handled in [App.tsx](mdc:src/webview-ui/src/App.tsx) to prevent "unknown command" warnings
+3. **Async Patterns**: Use Promise-based patterns with request IDs for request-response flows
+4. **Error Handling**: Always include fallback/timeout mechanisms in webview requests
+
+### Services Architecture
+- **Extension Services**: [services/](mdc:src/services) (e.g., [token-counter.ts](mdc:src/services/token-counter.ts))
+- **Webview Utils**: [webview-ui/src/utils/](mdc:src/webview-ui/src/utils) (e.g., [vscode.ts](mdc:src/webview-ui/src/utils/vscode.ts))
+
 ## Additional Rules
 
 - All file names in the project must use kebab-case (e.g., `context-tab.tsx`, `file-system.ts`) to maintain consistency and ease of use in URLs and imports

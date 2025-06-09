@@ -55,11 +55,19 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	})
 	const [actualTokenCounts, setActualTokenCounts] = useState<
 		Record<string, number>
-	>({})
+	>({}) // Actual token counts from extension
+	const [skippedFiles, setSkippedFiles] = useState<
+		Array<{ uri: string; reason: string; message?: string }>
+	>([]) // Files that were skipped during token counting
 
 	// State for tracking double-clicks
 	const [lastClickedItem, setLastClickedItem] = useState<string | null>(null)
 	const [lastClickTime, setLastClickTime] = useState<number>(0)
+
+	// Debounce timer for user instructions token counting
+	const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(
+		null,
+	)
 
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
@@ -244,21 +252,47 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 	// Effect to calculate total tokens based on actual file counts and instructions
 	useEffect(() => {
-		// Calculate total from actualTokenCounts
+		// Clear any existing timer
+		if (debounceTimer) {
+			clearTimeout(debounceTimer)
+		}
+
+		// Calculate file total immediately
 		const fileTotal = Object.values(actualTokenCounts).reduce(
 			(sum, count) => sum + count,
 			0,
 		)
 
-		const instructionsTokens = countTokens(userInstructions)
-
-		setTokenStats({
+		// Update file totals immediately
+		setTokenStats((prev) => ({
+			...prev,
 			fileTokensEstimate: fileTotal,
-			userInstructionsTokens: instructionsTokens,
-			totalTokens: fileTotal + instructionsTokens,
+			totalTokens: fileTotal + prev.userInstructionsTokens,
 			totalWithXmlTokens:
-				fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
-		})
+				fileTotal + prev.userInstructionsTokens + XML_INSTRUCTIONS_TOKENS,
+		}))
+
+		// Debounce user instructions token counting
+		const timer = setTimeout(async () => {
+			const instructionsTokens = await countTokens(userInstructions)
+
+			setTokenStats((prev) => ({
+				...prev,
+				userInstructionsTokens: instructionsTokens,
+				totalTokens: fileTotal + instructionsTokens,
+				totalWithXmlTokens:
+					fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
+			}))
+		}, 500)
+
+		setDebounceTimer(timer)
+
+		// Cleanup function
+		return () => {
+			if (timer) {
+				clearTimeout(timer)
+			}
+		}
 	}, [actualTokenCounts, userInstructions])
 
 	// Effect to request token counts when selection changes
@@ -273,8 +307,9 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				payload: { selectedUris: urisArray }, // Use selectedUris key
 			})
 		} else {
-			// If no URIs are selected, clear the actualTokenCounts
+			// If no URIs are selected, clear the actualTokenCounts and skippedFiles
 			setActualTokenCounts({})
+			setSkippedFiles([])
 		}
 	}, [selectedUris]) // Depend on selectedUris
 
@@ -284,7 +319,10 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			const message = event.data
 			if (message.command === 'updateTokenCounts') {
 				setActualTokenCounts(message.payload.tokenCounts || {})
+				setSkippedFiles(message.payload.skippedFiles || [])
 			}
+			// tokenCountResponse is handled in the countTokens function itself
+			// No need to handle it here since it's handled by individual requests
 		}
 
 		window.addEventListener('message', handleMessage)
@@ -491,6 +529,46 @@ const ContextTab: React.FC<ContextTabProps> = ({
 					Total tokens (Copy Context + XML): {tokenStats.totalWithXmlTokens}
 				</div>
 			</div>
+
+			{/* Skipped Files Information */}
+			{skippedFiles.length > 0 && (
+				<div
+					style={{
+						marginTop: '10px',
+						fontSize: '0.8em',
+						color: 'var(--vscode-errorForeground)',
+						backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
+						border: '1px solid var(--vscode-inputValidation-warningBorder)',
+						borderRadius: '3px',
+						padding: '8px',
+					}}
+				>
+					<div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
+						⚠️ Skipped Files ({skippedFiles.length}):
+					</div>
+					{skippedFiles.map((file, index) => (
+						<div key={index} style={{ marginBottom: '2px' }}>
+							<span style={{ fontFamily: 'monospace' }}>
+								{file.uri.split('/').pop()}
+							</span>
+							{' - '}
+							<span style={{ fontStyle: 'italic' }}>
+								{file.reason === 'binary'
+									? 'Binary file'
+									: file.reason === 'too-large'
+										? 'Too large'
+										: 'Error'}
+							</span>
+							{file.message && (
+								<span style={{ color: 'var(--vscode-descriptionForeground)' }}>
+									{' '}
+									({file.message})
+								</span>
+							)}
+						</div>
+					))}
+				</div>
+			)}
 
 			<div
 				style={{ marginTop: '10px', display: 'flex', flexDirection: 'column' }}
