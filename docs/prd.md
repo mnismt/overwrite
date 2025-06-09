@@ -60,6 +60,11 @@ The **Context Tab** in the Webview Panel is the primary interface for selecting 
   * **Selection Persistence:** The selection state should be maintained correctly across multiple roots.
   * **Search/Filter:** The search/filter functionality should apply across all root folders
 
+* **Requirement 2.1.14: Allow exclude/include folder pattern.**
+  * The extension should support a textarea below the user instructions textarea to allow the user to input the exclude folder pattern.
+  * The exclude folder pattern is a simple text file with one pattern per line, similar to the `.gitignore` file, which is used to exclude files and folders from the file tree.
+  * The include folder pattern is a simple text file with one pattern per line, similar to the `.gitignore` file, which is used to always include files and folders from the file tree after a refresh.
+
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: In Progress
