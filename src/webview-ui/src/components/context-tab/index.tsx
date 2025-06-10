@@ -137,10 +137,13 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		return () => window.removeEventListener('message', handleMessage)
 	}, [])
 
-	const handleRefreshClick = useCallback(
-		() => onRefresh(excludedFolders),
-		[onRefresh, excludedFolders],
-	)
+	const handleRefreshClick = useCallback(() => {
+		// Reset skipped files and token counts when refreshing to clear any deleted files
+		setSkippedFiles([])
+		setActualTokenCounts({})
+		// Call the refresh function
+		onRefresh(excludedFolders)
+	}, [onRefresh, excludedFolders])
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

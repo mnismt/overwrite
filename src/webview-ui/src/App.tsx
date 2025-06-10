@@ -2,7 +2,7 @@ import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-t
 import { useCallback, useEffect, useState } from 'react'
 import type { VscodeTreeItem } from '../../types' // Import tree item type from root
 import './App.css' // We'll add styles later
-import ApplyTab from './components/apply-tab'
+import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
