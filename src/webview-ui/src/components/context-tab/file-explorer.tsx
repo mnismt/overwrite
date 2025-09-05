@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
 	VscTreeActionEvent,
 	VscTreeSelectEvent,
 } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 import {
@@ -28,7 +28,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	onSelect,
 	isLoading,
 	searchQuery,
-	onSearchChange,
 	actualTokenCounts,
 }) => {
 	// Ref for the vscode-tree element to update its data in place

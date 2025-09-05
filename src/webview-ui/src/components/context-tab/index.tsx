@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
-import { countTokens } from './utils'
 import CopyActions from './copy-actions'
 import ExcludedFolders from './excluded-folders'
 import FileExplorer from './file-explorer'
 import TokenStats from './token-stats'
 import UserInstructions from './user-instructions'
+import { countTokens } from './utils'
 
 interface ContextTabProps {
 	selectedCount: number

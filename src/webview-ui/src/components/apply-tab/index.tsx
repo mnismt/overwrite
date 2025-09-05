@@ -1,9 +1,9 @@
 import type React from 'react'
 import { useCallback, useEffect, useState } from 'react'
-import type { ApplyChangeResponse, ApplyResult } from './types'
-import ResponseTextarea from './response-textarea'
 import ApplyActions from './apply-actions'
+import ResponseTextarea from './response-textarea'
 import ResultsDisplay from './results-display'
+import type { ApplyChangeResponse, ApplyResult } from './types'
 
 interface ApplyTabProps {
 	onApply: (responseText: string) => void
