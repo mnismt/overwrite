@@ -1,10 +1,10 @@
 {
-  "name": "aboverepo",
-  "displayName": "AboveRepo",
+  "name": "overwrite",
+  "displayName": "Overwrite",
   "packageManager": "pnpm@10.8.0",
   "publisher": "mnismt",
   "license": "MIT",
-  "description": "AboveRepo is a VSCode extension that allows you to view and interact with files in your repository.",
+  "description": "Overwrite helps you curate workspace context into structured prompts and safely apply LLM-suggested diffs in VS Code.",
   "repository": {
     "type": "git",
     "url": "https://github.com/mnismt/aboverepo.git"
@@ -17,26 +17,26 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:aboveRepoFilesWebview"
+    "onView:overwriteFilesWebview"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "aboveRepo",
-          "title": "Above Repo",
+          "id": "overwrite",
+          "title": "Overwrite",
           "icon": "$(repo-clone)"
         }
       ]
     },
     "views": {
-      "aboveRepo": [
+      "overwrite": [
         {
-          "id": "aboveRepoFilesWebview",
+          "id": "overwriteFilesWebview",
           "name": "Files",
           "type": "webview",
-          "contextualTitle": "Above Repo Files"
+          "contextualTitle": "Overwrite Files"
         }
       ]
     },
@@ -56,6 +56,16 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json"
   },
+  "keywords": [
+    "prompt",
+    "context",
+    "xml",
+    "diff",
+    "apply",
+    "ai",
+    "llm",
+    "patch"
+  ],
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/glob": "^8.1.0",

@@ -1,13 +1,13 @@
-import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import type {
+	VscTreeActionEvent,
+	VscTreeSelectEvent,
+	TreeItem as VscodeLibTreeItem,
+	VscodeTree as VscodeTreeElement,
+} from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
-import {
-	filterTreeData,
-	formatTokenCount,
-	getAllDescendantPaths,
-	transformTreeData,
-} from './utils'
+import { filterTreeData, formatTokenCount, transformTreeData } from './utils'
 
 interface FileExplorerProps {
 	fileTreeData: VscodeTreeItem[]
@@ -19,6 +19,21 @@ interface FileExplorerProps {
 	actualTokenCounts: Record<string, number>
 }
 
+// Helper for collecting all descendant URIs from a library TreeItem without using `any`
+interface LibTreeItemMinimal {
+	value?: string
+	subItems?: LibTreeItemMinimal[]
+}
+const collectDescendantUris = (item: LibTreeItemMinimal): string[] => {
+	const list: string[] = []
+	if (typeof item.value === 'string') list.push(item.value)
+	if (Array.isArray(item.subItems)) {
+		for (const child of item.subItems)
+			list.push(...collectDescendantUris(child))
+	}
+	return list
+}
+
 const FileExplorer: React.FC<FileExplorerProps> = ({
 	fileTreeData,
 	selectedUris,
@@ -28,7 +43,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	actualTokenCounts,
 }) => {
 	// Ref for the vscode-tree element to update its data in place
-	const treeRef = useRef<any>(null)
+	const treeRef = useRef<VscodeTreeElement | null>(null)
 
 	// State for tracking double-clicks
 	const [lastClickedItem, setLastClickedItem] = useState<string | null>(null)
@@ -78,12 +93,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				: transformed
 			treeRef.current.data = dataToSet
 		}
-	}, [fileTreeData, searchQuery, mergeOpenState])
+	}, [fileTreeData, searchQuery, mergeOpenState, selectedUris])
 
 	// Update only actions & decorations when selection changes
 	useEffect(() => {
 		if (treeRef.current) {
-			const items: VscodeTreeItem[] = treeRef.current.data
+			const items = treeRef.current.data as unknown as VscodeTreeItem[]
 
 			const updateItems = (nodes: VscodeTreeItem[]) => {
 				for (const node of nodes) {
@@ -96,7 +111,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 							content: string
 							color?: string
 						}> = []
-						const allDescendants = getAllDescendantPaths(node) // Includes the folder itself
+						const allDescendants = ((): string[] => {
+							// Includes the folder itself
+							const paths: string[] = [node.value]
+							for (const sub of node.subItems ?? []) {
+								const stack: VscodeTreeItem[] = [sub]
+								while (stack.length) {
+									const current = stack.pop()!
+									paths.push(current.value)
+									for (const child of current.subItems ?? []) stack.push(child)
+								}
+							}
+							return paths
+						})()
 						const childDescendants = allDescendants.filter(
 							(p) => p !== node.value,
 						)
@@ -214,22 +241,25 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Handler for clicking the action icon - Toggles ONLY the clicked item
 	// Updated: Handles recursive selection/deselection for folders
 	const handleTreeAction = useCallback(
-		(event: any) => {
+		(event: VscTreeActionEvent) => {
 			const actionId = event.detail.actionId
-			const item = event.detail.item as VscodeTreeItem // item.value is a URI string
+			const libItem = event.detail.item as VscodeLibTreeItem | null
 
+			if (!libItem) return
+
+			// Only proceed if the item has a URI value
 			if (
 				(actionId === 'toggle-select' || actionId === 'deselect-all') &&
-				item?.value
+				typeof libItem.value === 'string'
 			) {
 				const newSelectedUris = new Set(selectedUris)
-				const uri = item.value // This is a URI string
+				const uri = libItem.value
 				const isCurrentlySelected = newSelectedUris.has(uri)
 
 				if (actionId === 'deselect-all') {
 					// Deselect all selected descendants (for half-selected folders)
-					if (item.subItems && item.subItems.length > 0) {
-						const allUris = getAllDescendantPaths(item) // Get all descendants
+					if (libItem.subItems && libItem.subItems.length > 0) {
+						const allUris = collectDescendantUris(libItem)
 						// Only deselect URIs that are currently selected
 						for (const u of allUris) {
 							if (newSelectedUris.has(u)) {
@@ -239,9 +269,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					}
 				} else if (actionId === 'toggle-select') {
 					// Check if it's a folder (has subItems)
-					if (item.subItems && item.subItems.length > 0) {
+					if (libItem.subItems && libItem.subItems.length > 0) {
 						// It's a folder - apply recursive logic
-						const allUris = getAllDescendantPaths(item) // Assumes this now returns URI strings
+						const allUris = collectDescendantUris(libItem)
 
 						if (isCurrentlySelected) {
 							// Deselecting the folder and all its descendants
@@ -274,18 +304,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Handle tree item selection with double-click detection
 	const handleTreeSelect = useCallback(
 		(event: VscTreeSelectEvent) => {
-			const item = event.detail as any // item.value is a URI string
-			if (!item?.value) return
+			const { value, itemType } = event.detail
+			if (!value) return
 
-			const clickedUri = item.value // This is a URI string
+			const clickedUri = value
 			const currentTime = Date.now()
 
 			// Check if this is a double-click (same item clicked within 500ms)
 			if (lastClickedItem === clickedUri && currentTime - lastClickTime < 500) {
-				// It's a double-click - determine if it's a file or folder (leaf or branch)
-				// For now, we assume files won't have subItems.
-				if (!item.subItems || item.subItems.length === 0) {
-					// It's a file, send message to open it
+				// Only open files (leaf nodes) on double-click
+				if (itemType === 'leaf') {
 					const vscode = getVsCodeApi()
 					vscode.postMessage({
 						command: 'openFile',

@@ -20,13 +20,13 @@ import type {
 } from './types'
 
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
-	public static readonly viewType = 'aboveRepoFilesWebview'
+	public static readonly viewType = 'overwriteFilesWebview'
 
 	private _view?: vscode.WebviewView
 	private _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private readonly _excludedDirs = [] // Directories to exclude
-	private static readonly EXCLUDED_FOLDERS_KEY = 'aboveRepo.excludedFolders'
+	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,

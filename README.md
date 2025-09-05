@@ -1,14 +1,14 @@
-# AboveRepo README
+# Overwrite README
 
-**AboveRepo** is a Visual Studio Code extension inspired by RepoPrompt. It helps you select files and folders from your workspace, build structured XML prompts for Large Language Models (LLMs) including code context, and apply LLM-suggested changes back to your local files.
+**Overwrite** is a Visual Studio Code extension inspired by RepoPrompt. It helps you select files and folders from your workspace, build structured XML prompts for Large Language Models (LLMs) including code context, and apply LLM-suggested changes back to your local files.
 
 ## Features
 
-AboveRepo integrates directly into your VS Code workflow with a dedicated view in the Activity Bar.
+Overwrite integrates directly into your VS Code workflow with a dedicated view in the Activity Bar.
 
 **1. File Selection (Explorer Tab)**
 
-*   **Visual File Tree:** Browse your workspace files and folders in a familiar tree structure within the AboveRepo Webview Panel.
+*   **Visual File Tree:** Browse your workspace files and folders in a familiar tree structure within the Overwrite Webview Panel.
 *   **Flexible Selection:** Select individual files or entire folders. Folder selection implicitly includes all nested files and subfolders (respecting common exclusion settings like `.gitignore` and `node_modules`).
 *   **Search & Filter:** Quickly find specific files or folders using the integrated search bar.
 *   **Refresh:** Manually update the file tree to reflect external changes.
@@ -37,7 +37,7 @@ AboveRepo integrates directly into your VS Code workflow with a dedicated view i
 
 ## How to Use
 
-1.  Click the **AboveRepo icon** in the VS Code Activity Bar to open the view.
+1.  Click the **Overwrite icon** in the VS Code Activity Bar to open the view.
 2.  Use the **Explorer Tab** to navigate and select the files and folders you want to include as context.
 3.  Switch to the **Context Tab**.
     *   Review the selected files.

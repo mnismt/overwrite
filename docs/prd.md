@@ -1,4 +1,4 @@
-## PRD: Above Repo (VS Code Extension)
+## PRD: Overwrite (VS Code Extension)
 
 **1. Introduction & Goal**
 
@@ -122,7 +122,7 @@ Read a .aboveignore file in the root of the workspace and use it as the ignore l
 
 ``````xml
 <file_map>
-/Users/minhthanh/Work/Side/aboverepo
+/Users/minhthanh/Work/Side/overwrite
 └── src
     ├── extension.ts
     └── fileExplorerWebviewProvider.ts
@@ -131,13 +131,13 @@ Read a .aboveignore file in the root of the workspace and use it as the ignore l
 </sample-file-map>
 
 <file_contents>
-File: /Users/minhthanh/Work/Side/aboverepo/src/extension.ts
+File: /Users/minhthanh/Work/Side/overwrite/src/extension.ts
 
 ```ts
 import * as vscode from 'vscode'
 import { FileExplorerWebviewProvider } from './fileExplorerWebviewProvider'
 export function activate(context: vscode.ExtensionContext) {
- console.log('Congratulations, your extension "aboverepo" is now active!')
+ console.log('Congratulations, your extension "overwrite" is now active!')
 
  const provider = new FileExplorerWebviewProvider(context.extensionUri)
  context.subscriptions.push(
@@ -149,7 +149,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 ```
 
-File: /Users/minhthanh/Work/Side/aboverepo/src/fileExplorerWebviewProvider.ts
+File: /Users/minhthanh/Work/Side/overwrite/src/fileExplorerWebviewProvider.ts
 ```ts
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
@@ -193,4 +193,3 @@ interface VscodeTreeItem {
 </file_contents>
 
 ``````
-

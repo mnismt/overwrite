@@ -75,6 +75,6 @@
 				"npm: watch-tests"
 			],
 			"problemMatcher": []
-		}
-	]
+		},
+		]
 }

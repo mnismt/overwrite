@@ -129,7 +129,7 @@ function getDevHtmlWithBuiltAssets(
   <link href="${codiconUri}" rel="stylesheet" id="vscode-codicon-stylesheet" />
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="stylesheet" type="text/css" href="${styleUri}">
-  <title>Above Repo (Dev)</title>
+  <title>Overwrite (Dev)</title>
 </head>
 <body>
   <div id="root"></div>
@@ -196,7 +196,7 @@ function getDevHtmlWithServer(
     </script>
     <script type="module" src="${DEV_WEBVIEW_URL}/@vite/client"></script>
     <link rel="icon" type="image/svg+xml" href="${DEV_WEBVIEW_URL}/vite.svg" />
-    <title>Above Repo (Dev)</title>
+    <title>Overwrite (Dev)</title>
   </head>
   <body>
     <div id="root"></div>
@@ -268,7 +268,7 @@ function getProdHtml(
   <link href="${codiconUri}" rel="stylesheet" id="vscode-codicon-stylesheet" />
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="stylesheet" type="text/css" href="${styleUri}">
-  <title>Above Repo</title>
+  <title>Overwrite</title>
 </head>
 <body>
   <div id="root"></div>

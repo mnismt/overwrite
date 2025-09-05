@@ -4,7 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project Overview
 
-AboveRepo is a Visual Studio Code extension that helps users select files and folders from their workspace, build structured XML prompts for Large Language Models (LLMs), and apply LLM-suggested changes back to local files. The extension provides a webview-based interface with tabs for file exploration, context building, and applying changes.
+Overwrite is a Visual Studio Code extension that helps users select files and folders from their workspace, build structured XML prompts for Large Language Models (LLMs), and apply LLM-suggested changes back to local files. The extension provides a webview-based interface with tabs for file exploration, context building, and applying changes.
 
 ## Development Commands
 

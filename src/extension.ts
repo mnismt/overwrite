@@ -9,7 +9,7 @@ import { clearCache } from './services/token-counter'
 export function activate(context: vscode.ExtensionContext) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "aboverepo" is now active!')
+	console.log('Congratulations, your extension "overwrite" is now active!')
 
 	// Register the Webview View Provider
 	const provider = new FileExplorerWebviewProvider(
@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register cache management commands for debugging
 	context.subscriptions.push(
-		vscode.commands.registerCommand('aboveRepo.clearTokenCache', () => {
+		vscode.commands.registerCommand('overwrite.clearTokenCache', () => {
 			clearCache()
 			vscode.window.showInformationMessage('Token cache cleared')
 		}),
