@@ -71,6 +71,14 @@ function App() {
 					// Token count responses are handled individually by countTokens calls
 					// No action needed here, just preventing the unknown command warning
 					break
+				case 'updateTokenCounts':
+					// ContextTab listens for this and updates its own state.
+					// Handle here to avoid unknown-command warnings.
+					break
+				case 'applyChangesResult':
+					// ApplyTab listens for this and updates its own state.
+					// Handle here to avoid unknown-command warnings.
+					break
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}

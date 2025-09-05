@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@vscode-elements/elements':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: ^2.3.0
+        version: 2.3.0
       js-tiktoken:
         specifier: ^1.0.20
         version: 1.0.20
@@ -322,6 +322,9 @@ packages:
 
   '@lit-labs/ssr-dom-shim@1.3.0':
     resolution: {integrity: sha512-nQIWonJ6eFAvUUrSlwyHDm/aE8PBDu5kRpL0vHMg6K8fK3Diq1xdPjTnsJSwxABhaZ+5eBi1btQB5ShUTKo4nQ==}
+
+  '@lit/context@1.1.6':
+    resolution: {integrity: sha512-M26qDE6UkQbZA2mQ3RjJ3Gzd8TxP+/0obMgE5HfkfLhEEyYE3Bui4A5XHiGPjy0MUGAyxB3QgVuw2ciS0kHn6A==}
 
   '@lit/reactive-element@2.1.0':
     resolution: {integrity: sha512-L2qyoZSQClcBmq0qajBVbhYEcG6iK0XfLn66ifLe/RfC0/ihpc+pl0Wdn8bJ8o+hj38cG0fGXRgSS20MuXn7qA==}
@@ -641,8 +644,8 @@ packages:
   '@vitest/utils@3.1.2':
     resolution: {integrity: sha512-5GGd0ytZ7BH3H6JTj9Kw7Prn1Nbg0wZVrIvou+UWxm54d+WoXXgAgjFJ8wn3LdagWLFSEfpPeyYrByZaGEZHLg==}
 
-  '@vscode-elements/elements@1.15.0':
-    resolution: {integrity: sha512-H+Ky/NqqhgaqdyoFR0np1OSL4n9x4acNR3jRHKP8x8jXGj8Gtw3ZoGV0PAMiVYKeyhwW0Yz3RRONtp6S49cMFA==}
+  '@vscode-elements/elements@2.3.0':
+    resolution: {integrity: sha512-N8NL3wk9kyI64sM70+I+QR1TIN0pvw0SqF+z09mvfP0l4PHoE6Y7jJk6B5BE/w8pF8tja0Sf42aCaUN3tJPm+g==}
 
   '@vscode-elements/webview-playground@1.6.0':
     resolution: {integrity: sha512-PGOecKbzEI+ZU1UEhS5RwdbPMxKljB6w4+fs1+8oGBGaVVOxVBB9hLaRtuIHIzGBiqV99uM0veJ4cQtQ3//4IA==}
@@ -1891,6 +1894,10 @@ snapshots:
 
   '@lit-labs/ssr-dom-shim@1.3.0': {}
 
+  '@lit/context@1.1.6':
+    dependencies:
+      '@lit/reactive-element': 2.1.0
+
   '@lit/reactive-element@2.1.0':
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.3.0
@@ -2205,8 +2212,9 @@ snapshots:
       loupe: 3.1.3
       tinyrainbow: 2.0.0
 
-  '@vscode-elements/elements@1.15.0':
+  '@vscode-elements/elements@2.3.0':
     dependencies:
+      '@lit/context': 1.1.6
       lit: 3.3.0
 
   '@vscode-elements/webview-playground@1.6.0': {}

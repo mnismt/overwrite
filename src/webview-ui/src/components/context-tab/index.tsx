@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 import CopyActions from './copy-actions'
@@ -52,10 +52,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		Array<{ uri: string; reason: string; message?: string }>
 	>([])
 
-	// Debounce timer for user instructions token counting
-	const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(
-		null,
-	)
+	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
+	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
@@ -63,8 +61,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	// Effect to calculate total tokens based on actual file counts and instructions
 	useEffect(() => {
 		// Clear any existing timer
-		if (debounceTimer) {
-			clearTimeout(debounceTimer)
+		if (debounceRef.current) {
+			clearTimeout(debounceRef.current)
 		}
 
 		// Calculate file total immediately
@@ -95,15 +93,15 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			}))
 		}, 500)
 
-		setDebounceTimer(timer)
+		debounceRef.current = timer
 
 		// Cleanup function
 		return () => {
-			if (timer) {
-				clearTimeout(timer)
+			if (debounceRef.current) {
+				clearTimeout(debounceRef.current)
 			}
 		}
-	}, [actualTokenCounts, userInstructions, debounceTimer])
+	}, [actualTokenCounts, userInstructions])
 
 	// Effect to request token counts when selection changes
 	useEffect(() => {
