@@ -1,7 +1,4 @@
-import type {
-	VscTreeActionEvent,
-	VscTreeSelectEvent,
-} from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
@@ -217,7 +214,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Handler for clicking the action icon - Toggles ONLY the clicked item
 	// Updated: Handles recursive selection/deselection for folders
 	const handleTreeAction = useCallback(
-		(event: VscTreeActionEvent) => {
+		(event: any) => {
 			const actionId = event.detail.actionId
 			const item = event.detail.item as VscodeTreeItem // item.value is a URI string
 
@@ -277,7 +274,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Handle tree item selection with double-click detection
 	const handleTreeSelect = useCallback(
 		(event: VscTreeSelectEvent) => {
-			const item = event.detail as VscodeTreeItem // item.value is a URI string
+			const item = event.detail as any // item.value is a URI string
 			if (!item?.value) return
 
 			const clickedUri = item.value // This is a URI string
@@ -328,7 +325,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 						ref={treeRef}
 						onvsc-tree-action={handleTreeAction}
 						onvsc-tree-select={handleTreeSelect}
-						arrows
 						indent-guides
 					/>
 				)}

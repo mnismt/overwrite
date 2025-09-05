@@ -21,6 +21,19 @@
             }
         },
         {
+            "label": "dev-build",
+            "dependsOn": [
+                "npm: compile"
+            ],
+            "presentation": {
+                "reveal": "never"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
             "type": "npm",
             "script": "watch:esbuild",
             "group": "build",

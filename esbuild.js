@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const production = process.argv.includes('--production')
 const watch = process.argv.includes('--watch')
+// Check if we're in development mode (no --production flag and not explicitly building)
+const isDevelopment = !production && process.env.NODE_ENV !== 'production'
 
 /**
  * @type {import('esbuild').Plugin}
@@ -27,14 +29,19 @@ const esbuildProblemMatcherPlugin = {
 }
 
 async function main() {
+	// Skip webview build in development mode for faster startup
 	if (production) {
-		console.log('[info] Production mode: Cleaning previous webview assets...');
+		console.log('[info] Production mode: Building webview assets...');
 		const webviewUiDir = path.resolve(__dirname, 'src', 'webview-ui');
 		const targetWebviewDir = path.resolve(__dirname, 'dist', 'webview-ui');
+		
+		// Clean previous builds
 		if (fs.existsSync(targetWebviewDir)) {
 			fs.rmSync(targetWebviewDir, { recursive: true, force: true });
 			console.log(`[info] Cleaned existing webview assets at ${targetWebviewDir}`);
 		}
+		
+		// Build webview UI
 		console.log(`[info] Building webview in ${webviewUiDir}...`);
 		try {
 			execSync('pnpm build', { cwd: webviewUiDir, stdio: 'inherit' });
@@ -69,6 +76,15 @@ async function main() {
 			process.exit(1);
 		}
 		console.log('[info] Webview setup for production completed.');
+	} else if (isDevelopment) {
+		// In development mode, check if we have existing webview assets
+		const targetWebviewDir = path.resolve(__dirname, 'dist', 'webview-ui');
+		if (fs.existsSync(targetWebviewDir)) {
+			console.log('[info] Development mode: Using existing webview assets for faster startup.');
+			console.log(`[info] Found assets at ${targetWebviewDir}`);
+		} else {
+			console.log('[info] Development mode: No existing webview assets found. Run pnpm build to create them.');
+		}
 	}
 
 	const ctx = await esbuild.context({
