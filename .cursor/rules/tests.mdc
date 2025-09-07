@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 # Testing Rules Guide
 
-This rule provides an overview of the testing setup for the AboveRepo VS Code extension, including unit and integration tests.
+This rule provides an overview of the testing setup for the Overwrite VS Code extension, including unit and integration tests.
 
 ## Key Concepts
 - **Testing Framework:** Uses Mocha for writing tests, integrated with VS Code's testing tools via `@vscode/test-cli`.

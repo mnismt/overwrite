@@ -3,7 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Project Overview: AboveRepo VS Code Extension
+# Project Overview: Overwrite VS Code Extension
 
 This project is a Visual Studio Code extension designed to streamline the process of packing the context of the entire repository into a single file, with the ability to copy it to the clipboard for easy sharing or further processing.
 
@@ -49,7 +49,7 @@ The extension provides a multi-tab Webview Panel accessible via an Activity Bar 
 ## Webview-Extension Communication Architecture
 
 ### Overview
-The AboveRepo extension follows a strict frontend-backend architecture where the webview (React app) and extension host communicate exclusively through message passing. **NEVER use `vscode.commands.executeCommand()` directly in the webview.**
+The Overwrite extension follows a strict frontend-backend architecture where the webview (React app) and extension host communicate exclusively through message passing. **NEVER use `vscode.commands.executeCommand()` directly in the webview.**
 
 ### Communication Pattern
 

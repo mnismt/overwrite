@@ -54,7 +54,8 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "check-types": "tsc --noEmit",
     "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json"
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "dev:webview": "cd src/webview-ui && pnpm run dev"
   },
   "keywords": [
     "prompt",
