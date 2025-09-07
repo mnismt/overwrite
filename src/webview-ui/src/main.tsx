@@ -20,6 +20,8 @@ import '@vscode-elements/elements/dist/vscode-table-header-cell'
 import '@vscode-elements/elements/dist/vscode-table-row'
 import '@vscode-elements/elements/dist/vscode-badge'
 import '@vscode-elements/elements/dist/vscode-divider'
+import '@vscode-elements/elements/dist/vscode-toolbar-button'
+import '@vscode-elements/elements/dist/vscode-tree-item'
 
 if (import.meta.env.DEV) {
 	await import('@vscode-elements/webview-playground')

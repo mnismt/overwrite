@@ -2,7 +2,8 @@
 export interface FileAction {
 	path: string
 	action: 'create' | 'rewrite' | 'modify' | 'delete' | 'rename'
-	newPath?: string // For rename action
+	newPath?: string // For rename action (can be relative to workspace)
+	root?: string // Optional workspace root name for multi-root workspaces
 	changes?: ChangeBlock[]
 }
 
@@ -10,6 +11,7 @@ interface ChangeBlock {
 	description: string
 	search?: string // Only for modify action
 	content: string
+	occurrence?: 'first' | 'last' | number // Optional disambiguator for modify
 }
 
 interface ParseResult {
@@ -37,33 +39,36 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 		}
 
 		// Extract file actions
-		const fileRegex =
-			/<file\s+path="([^"]*)"\s+action="([^"]*)">([\s\S]*?)<\/file>/g
+		const fileRegex = /<file\s+([^>]*)>([\s\S]*?)<\/file>/g
 		let fileMatch: RegExpExecArray | null
 
 		// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
 		while ((fileMatch = fileRegex.exec(xmlContent)) !== null) {
-			const [, path, action, fileContent] = fileMatch
+			const [, rawAttrs, fileContent] = fileMatch
+			const attrs = parseAttributes(rawAttrs)
+			const pathAttr = attrs.path
+			const actionAttr = attrs.action
 
-			if (!path || !action) {
+			if (!pathAttr || !actionAttr) {
 				result.errors.push('Missing required attribute: path or action')
 				continue
 			}
 
 			const fileAction: FileAction = {
-				path,
-				action: action as FileAction['action'],
+				path: pathAttr,
+				action: actionAttr as FileAction['action'],
 				changes: [],
+				root: attrs.root,
 			}
 
 			// Handle rename action
-			if (action === 'rename') {
+			if (actionAttr === 'rename') {
 				const newPathMatch = fileContent.match(/<new\s+path="([^"]*)"\s*\/>/i)
 				if (newPathMatch?.[1]) {
 					fileAction.newPath = newPathMatch[1]
 				} else {
 					result.errors.push(
-						`Missing <new> element for rename action on: ${path}`,
+						`Missing <new> element for rename action on: ${pathAttr}`,
 					)
 				}
 			} else {
@@ -85,7 +90,7 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 
 					// Extract search block for modify
 					let search: string | undefined
-					if (action === 'modify') {
+					if (actionAttr === 'modify') {
 						const searchMatch = changeContent.match(
 							/<search>([\s\S]*?)<\/search>/i,
 						)
@@ -103,10 +108,26 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 						content = extractContentBetweenMarkers(contentMatch[1]) || ''
 					}
 
+					// Optional occurrence disambiguator
+					let occurrence: ChangeBlock['occurrence']
+					const occMatch = changeContent.match(
+						/<occurrence>([\s\S]*?)<\/occurrence>/i,
+					)
+					if (occMatch?.[1]) {
+						const occRaw = occMatch[1].trim().toLowerCase()
+						if (occRaw === 'first' || occRaw === 'last') {
+							occurrence = occRaw
+						} else {
+							const n = Number.parseInt(occRaw, 10)
+							if (!Number.isNaN(n) && n > 0) occurrence = n
+						}
+					}
+
 					fileAction.changes!.push({
 						description,
 						search,
 						content,
+						occurrence,
 					})
 				}
 			}
@@ -135,4 +156,19 @@ function extractContentBetweenMarkers(text: string): string | undefined {
 
 	const match = trimmedText.match(markerPattern)
 	return match ? match[1] : undefined
+}
+
+/**
+ * Parses attributes from a tag attribute string into a key-value map.
+ */
+function parseAttributes(attrString: string): Record<string, string> {
+	const attrs: Record<string, string> = {}
+	// Matches key="value" pairs, ignoring order and whitespace
+	const regex = /(\w+)\s*=\s*"([^"]*)"/g
+	let match: RegExpExecArray | null
+	// biome-ignore lint/suspicious/noAssignInExpressions: iterative regex exec
+	while ((match = regex.exec(attrString)) !== null) {
+		attrs[match[1]] = match[2]
+	}
+	return attrs
 }

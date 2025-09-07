@@ -143,6 +143,10 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		onRefresh(excludedFolders)
 	}, [onRefresh, excludedFolders])
 
+	console.log({
+		fileTreeData,
+	})
+
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 			{/* Excluded Folders Section */}

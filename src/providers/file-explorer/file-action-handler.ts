@@ -1,5 +1,6 @@
 import path from 'node:path'
 import * as vscode from 'vscode'
+import { resolveXmlPathToUri } from '../../utils/path-resolver'
 import type { FileAction } from '../../utils/xml-parser'
 
 interface FileActionResult {
@@ -22,13 +23,8 @@ export async function applyFileActions(
 
 	for (const fileAction of fileActions) {
 		try {
-			// Assuming fileAction.path is an absolute fsPath from the XML parser
-			if (!path.isAbsolute(fileAction.path)) {
-				throw new Error(
-					`File path must be absolute: ${fileAction.path}. Ensure LLM provides full paths.`,
-				)
-			}
-			const fileUri = vscode.Uri.file(fileAction.path)
+			// Resolve XML path (supports absolute, file://, or workspace-relative with optional root)
+			const fileUri = resolveXmlPathToUri(fileAction.path, fileAction.root)
 
 			switch (fileAction.action) {
 				case 'create':
@@ -44,7 +40,6 @@ export async function applyFileActions(
 					await handleDeleteAction(fileAction, fileUri, results)
 					break
 				case 'rename':
-					// await handleRenameAction(fileAction, fileUri, rootPath, results) // rootPath removed
 					await handleRenameAction(fileAction, fileUri, results)
 					break
 				default:
@@ -81,40 +76,23 @@ async function handleCreateAction(
 		}
 		const content = fileAction.changes[0].content
 
-		try {
-			await vscode.workspace.fs.stat(fileUri)
-			throw new Error('File already exists, cannot create')
-		} catch (error) {
-			if (
-				!(
-					error instanceof vscode.FileSystemError &&
-					error.code === 'FileNotFound'
-				)
-			) {
-				throw error
-			}
-		}
-
+		// Ensure parent directory exists
 		const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
 		try {
-			await vscode.workspace.fs.stat(dirUri)
-		} catch (error) {
-			if (
-				error instanceof vscode.FileSystemError &&
-				error.code === 'FileNotFound'
-			) {
-				await vscode.workspace.fs.createDirectory(dirUri)
-			} else {
-				throw error
-			}
+			await vscode.workspace.fs.createDirectory(dirUri)
+		} catch (e) {
+			// ignore; createDirectory is idempotent
 		}
 
-		await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'))
+		const edit = new vscode.WorkspaceEdit()
+		edit.createFile(fileUri, { overwrite: false, ignoreIfExists: false })
+		edit.insert(fileUri, new vscode.Position(0, 0), content)
+		const applied = await vscode.workspace.applyEdit(edit)
 		results.push({
 			path: fileAction.path,
 			action: 'create',
-			success: true,
-			message: 'File created successfully',
+			success: applied,
+			message: applied ? 'File created successfully' : 'Failed to create file',
 		})
 	} catch (error) {
 		results.push({
@@ -151,6 +129,7 @@ async function handleModifyAction(
 	try {
 		const document = await vscode.workspace.openTextDocument(fileUri)
 		const fullText = document.getText()
+		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
 
 		for (const change of fileAction.changes) {
 			try {
@@ -159,24 +138,43 @@ async function handleModifyAction(
 					continue
 				}
 
-				const searchPos = fullText.indexOf(change.search)
+				// Normalize search block line endings to document EOL
+				const normalizedSearch = normalizeToEol(change.search, eol)
+
+				let searchPos = fullText.indexOf(normalizedSearch)
 				if (searchPos === -1) {
 					changeResults.push(
-						`Error: Search text not found: "${change.search.slice(0, 20)}..."`,
+						`Error: Search text not found: "${normalizedSearch.slice(0, 20)}..."`,
 					)
 					continue
 				}
 
-				const nextPos = fullText.indexOf(change.search, searchPos + 1)
+				// Handle ambiguous occurrences
+				const nextPos = fullText.indexOf(normalizedSearch, searchPos + 1)
 				if (nextPos !== -1) {
-					changeResults.push(
-						`Error: Ambiguous search text - found multiple matches: "${change.search.slice(0, 20)}..."`,
-					)
-					continue
+					const occ = change.occurrence
+					if (occ === 'first' || occ === undefined) {
+						// keep first
+					} else if (occ === 'last') {
+						searchPos = fullText.lastIndexOf(normalizedSearch)
+					} else if (typeof occ === 'number' && occ > 0) {
+						searchPos = findNthOccurrence(fullText, normalizedSearch, occ)
+						if (searchPos === -1) {
+							changeResults.push(
+								`Error: occurrence=${occ} not found for search block`,
+							)
+							continue
+						}
+					} else {
+						changeResults.push(
+							'Error: Ambiguous search text - found multiple matches; specify <occurrence>first|last|N</occurrence>',
+						)
+						continue
+					}
 				}
 
 				const startPos = document.positionAt(searchPos)
-				const endPos = document.positionAt(searchPos + change.search.length)
+				const endPos = document.positionAt(searchPos + normalizedSearch.length)
 				const range = new vscode.Range(startPos, endPos)
 				workspaceEdit.replace(fileUri, range, change.content)
 
@@ -235,12 +233,22 @@ async function handleRewriteAction(
 			throw new Error('File does not exist, cannot rewrite')
 		}
 
-		await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'))
+		const document = await vscode.workspace.openTextDocument(fileUri)
+		const fullRange = new vscode.Range(
+			new vscode.Position(0, 0),
+			document.lineAt(Math.max(0, document.lineCount - 1))
+				.rangeIncludingLineBreak.end,
+		)
+		const edit = new vscode.WorkspaceEdit()
+		edit.replace(fileUri, fullRange, content)
+		const applied = await vscode.workspace.applyEdit(edit)
 		results.push({
 			path: fileAction.path,
 			action: 'rewrite',
-			success: true,
-			message: 'File rewritten successfully',
+			success: applied,
+			message: applied
+				? 'File rewritten successfully'
+				: 'Failed to rewrite file',
 		})
 	} catch (error) {
 		results.push({
@@ -267,15 +275,14 @@ async function handleDeleteAction(
 			throw new Error('File does not exist, cannot delete')
 		}
 
-		await vscode.workspace.fs.delete(fileUri, {
-			recursive: true,
-			useTrash: true,
-		})
+		const edit = new vscode.WorkspaceEdit()
+		edit.deleteFile(fileUri, { recursive: true, ignoreIfNotExists: false })
+		const applied = await vscode.workspace.applyEdit(edit)
 		results.push({
 			path: fileAction.path,
 			action: 'delete',
-			success: true,
-			message: 'File deleted successfully (moved to trash)',
+			success: applied,
+			message: applied ? 'File deleted successfully' : 'Failed to delete file',
 		})
 	} catch (error) {
 		results.push({
@@ -300,13 +307,8 @@ async function handleRenameAction(
 		if (!fileAction.newPath) {
 			throw new Error('Missing new path for rename operation.')
 		}
-		// Assuming fileAction.newPath is an absolute fsPath from the XML parser
-		if (!path.isAbsolute(fileAction.newPath)) {
-			throw new Error(
-				`New path for rename must be absolute: ${fileAction.newPath}. Ensure LLM provides full paths.`,
-			)
-		}
-		const newUri = vscode.Uri.file(fileAction.newPath)
+		// Resolve new path relative to same workspace root if provided
+		const newUri = resolveXmlPathToUri(fileAction.newPath, fileAction.root)
 
 		try {
 			await vscode.workspace.fs.stat(fileUri)
@@ -316,21 +318,26 @@ async function handleRenameAction(
 			)
 		}
 
+		// Ensure destination directory exists
 		try {
-			await vscode.workspace.fs.stat(newUri)
-			throw new Error(`Target path '${fileAction.newPath}' already exists.`)
-		} catch (error) {
-			if (error instanceof Error && error.message.includes('already exists')) {
-				throw error
-			}
-		}
+			await vscode.workspace.fs.createDirectory(
+				vscode.Uri.file(path.dirname(newUri.fsPath)),
+			)
+		} catch {}
 
-		await vscode.workspace.fs.rename(fileUri, newUri, { overwrite: false })
+		const edit = new vscode.WorkspaceEdit()
+		edit.renameFile(fileUri, newUri, {
+			overwrite: false,
+			ignoreIfExists: false,
+		})
+		const applied = await vscode.workspace.applyEdit(edit)
 		results.push({
 			path: fileAction.path,
 			action: 'rename',
-			success: true,
-			message: `File renamed successfully to '${fileAction.newPath}'`,
+			success: applied,
+			message: applied
+				? `File renamed successfully to '${fileAction.newPath}'`
+				: `Failed to rename to '${fileAction.newPath}'`,
 			newPath: fileAction.newPath,
 		})
 	} catch (error) {
@@ -342,4 +349,25 @@ async function handleRenameAction(
 			newPath: fileAction.newPath,
 		})
 	}
+}
+
+function normalizeToEol(text: string, eol: string): string {
+	// Normalize any CRLF to LF first, then convert to desired EOL
+	const lf = text.replace(/\r\n/g, '\n')
+	return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf
+}
+
+function findNthOccurrence(
+	haystack: string,
+	needle: string,
+	n: number,
+): number {
+	let idx = -1
+	let from = 0
+	for (let i = 0; i < n; i++) {
+		idx = haystack.indexOf(needle, from)
+		if (idx === -1) return -1
+		from = idx + needle.length
+	}
+	return idx
 }

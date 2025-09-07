@@ -13,11 +13,19 @@ export const XML_FORMATTING_INSTRUCTIONS: string = `<xml_formatting_instructions
 
 **Core Principle:** Avoid placeholders like \`...\` or \`// existing code here\` or comments indicating where code should go. Always provide the complete, literal code required for the change.
 
+## Paths & Workspace Roots
+
+- Prefer workspace-relative paths, e.g., \`path="src/llm.py"\`.
+- In multi-root workspaces, include the workspace folder name as \`root\`, e.g., \`<file path="src/app.ts" root="my-workspace" ...>\`.
+- Alternatively, you may prefix the path with the root name like \`my-workspace:src/app.ts\`.
+- Absolute paths and \`file://\` URIs are accepted but not required.
+- Never reference files outside the workspace.
+
 ## Tools & Actions (File Operations)
 
 1. **\`create\`**: Creates a new file at the specified \`path\`. Requires the full file content within \`<content>\`. Fails if the file already exists.
 2. **\`rewrite\`**: Replaces the *entire* content of an existing file at \`path\`. Requires the new full file content within \`<content>\`. Use for significant refactoring or when \`modify\` becomes too complex.
-3. **\`modify\`**: Performs a search-and-replace within an existing file at \`path\`. Requires *exact* matching \`<search>\` block and the \`<content>\` block that will replace it. Ideal for targeted changes.
+3. **\`modify\`**: Performs a search-and-replace within an existing file at \`path\`. Requires *exact* matching \`<search>\` block and the \`<content>\` block that will replace it. Ideal for targeted changes. If the \`<search>\` block might match multiple places, include \`<occurrence>first|last|N</occurrence>\` to disambiguate.
 4. **\`delete\`**: Removes the file at the specified \`path\`. Requires an empty \`<content>\` block.
 5. **\`rename\`**: Moves or renames the file at \`path\`. Requires a \`<new path="..."/>\` tag *instead* of \`<change>\`. The content of the file remains the same during the rename operation itself.
 
@@ -84,7 +92,7 @@ Clearly and concisely describe your step-by-step approach or reasoning for the c
 ## Format Guidelines & Best Practices
 
 1. **Plan First**: Always start with a \`<Plan>\` block. Explain your strategy.
-2. **File Tag**: Use \`<file path="..." action="...">\`. The \`action\` must be one of the five tools (\`create\`, \`rewrite\`, \`modify\`, \`delete\`, \`rename\`). Ensure the \`path\` is correct relative to the project structure.
+2. **File Tag**: Use \`<file path="..." action="..." [root="workspaceFolderName"]>\`. The \`action\` must be one of the five tools (\`create\`, \`rewrite\`, \`modify\`, \`delete\`, \`rename\`). Prefer workspace-relative paths. In multi-root workspaces, include \`root\` (VS Code workspace folder name) or prefix the path like \`rootName:relative/path\`.
 3. **Change Tag**: Inside \`<file>\` (except for \`rename\`), use \`<change>\`. Always include a clear \`<description>\`.
 4. **\`modify\` - Search Precision**:
     - The \`<search>\` block MUST *exactly* match the current code in the file, including indentation, spacing, line breaks, and comments.
@@ -107,6 +115,7 @@ Clearly and concisely describe your step-by-step approach or reasoning for the c
 14. **Atomicity**: Each XML response should represent a complete, self-contained set of changes that leaves the codebase in a valid state (though potentially incomplete with respect to the overall user goal, which might require multiple steps).
 15. **No Placeholders**: Never use comments like \`// ... rest of function\` or \`...\` within \`<content>\`. Provide the full, literal code.
 16. **Syntax**: Ensure the code provided in \`<content>\` is syntactically correct TypeScript.
+17. **No Markdown Fences**: Do not wrap the XML response itself in Markdown code fences (\`\`\` ... \`\`\`). Return raw XML only.
 
 ## Code Examples (TypeScript)
 
