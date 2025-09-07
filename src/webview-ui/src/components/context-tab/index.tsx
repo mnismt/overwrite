@@ -103,22 +103,22 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		}
 	}, [actualTokenCounts, userInstructions])
 
-	// Effect to request token counts when selection changes
+	// Debounced request for token counts on selection changes
 	useEffect(() => {
 		const vscode = getVsCodeApi()
-		// Convert Set to Array before sending
 		const urisArray = Array.from(selectedUris)
-		if (urisArray.length > 0) {
-			// Only send if there are selected URIs
+		if (urisArray.length === 0) {
+			setActualTokenCounts({})
+			setSkippedFiles([])
+			return
+		}
+		const handle = setTimeout(() => {
 			vscode.postMessage({
 				command: 'getTokenCounts',
 				payload: { selectedUris: urisArray },
 			})
-		} else {
-			// If no URIs are selected, clear the actualTokenCounts and skippedFiles
-			setActualTokenCounts({})
-			setSkippedFiles([])
-		}
+		}, 200)
+		return () => clearTimeout(handle)
 	}, [selectedUris])
 
 	// Effect to listen for token count updates from the extension
@@ -126,14 +126,31 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data
 			if (message.command === 'updateTokenCounts') {
-				setActualTokenCounts(message.payload.tokenCounts || {})
+				const incoming: Record<string, number> =
+					message.payload.tokenCounts || {}
+				// Shallow diff and only update if changed
+				let changed = false
+				const next: Record<string, number> = { ...actualTokenCounts }
+				for (const [k, v] of Object.entries(incoming)) {
+					if (next[k] !== v) {
+						next[k] = v
+						changed = true
+					}
+				}
+				// Remove keys that no longer exist
+				for (const k of Object.keys(next)) {
+					if (!(k in incoming)) {
+						delete next[k]
+						changed = true
+					}
+				}
+				if (changed) setActualTokenCounts(next)
 				setSkippedFiles(message.payload.skippedFiles || [])
 			}
 		}
-
 		window.addEventListener('message', handleMessage)
 		return () => window.removeEventListener('message', handleMessage)
-	}, [])
+	}, [actualTokenCounts])
 
 	const handleRefreshClick = useCallback(() => {
 		// Reset skipped files and token counts when refreshing to clear any deleted files
@@ -184,7 +201,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				onSelect={onSelect}
 				isLoading={isLoading}
 				searchQuery={searchQuery}
-				onSearchChange={setSearchQuery}
 				actualTokenCounts={actualTokenCounts}
 			/>
 

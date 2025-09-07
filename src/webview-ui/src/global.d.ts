@@ -41,10 +41,7 @@ import type {
 	VscodeSplitLayout,
 } from '@vscode-elements/elements/dist/vscode-split-layout/vscode-split-layout'
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
-import type {
-	VscTreeActionEvent,
-	VscTreeSelectEvent,
-} from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
 
 type ElementProps<I> = Partial<Omit<I, keyof HTMLElement>>
 type CustomEventHandler<E> = (e: E) => void
@@ -104,7 +101,6 @@ declare module 'react' {
 			'vscode-toolbar-button': WebComponentProps<VscodeToolbarButton>
 			'vscode-tree': WebComponentProps<VscodeTree> & {
 				'onvsc-tree-select'?: CustomEventHandler<VscTreeSelectEvent>
-				'onvsc-tree-action'?: CustomEventHandler<VscTreeActionEvent>
 			}
 			'vscode-tree-item': WebComponentProps<VscodeTreeItemElement>
 		}

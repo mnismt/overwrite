@@ -1,10 +1,16 @@
 import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
-import React, { startTransition, useCallback, useMemo, useState } from 'react'
+import React, {
+	startTransition,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+} from 'react'
 import type { VscodeTreeItem } from '../../../../../types'
 import { getVsCodeApi } from '../../../utils/vscode'
 import { filterTreeData, getAllDescendantPaths } from '../utils'
-import RowActions from './row-actions'
-import RowDecorations, { type FolderSelectionState } from './row-decorations'
+import type { FolderSelectionState } from './row-decorations'
+import TreeNode from './tree-node'
 
 import { buildTreeIndex } from './tree-index'
 
@@ -14,7 +20,6 @@ interface FileExplorerProps {
 	onSelect: (uris: Set<string>) => void
 	isLoading: boolean
 	searchQuery: string
-	onSearchChange: (query: string) => void
 	actualTokenCounts: Record<string, number>
 }
 
@@ -39,6 +44,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
 	// Build index for current visible tree
 	const index = useMemo(() => buildTreeIndex(visibleItems), [visibleItems])
+
+	// Let vscode-tree manage expansion state internally
+
+	// Stable refs to avoid function identity changes and stale closures
+	const selectedUrisRef = useRef(selectedUris)
+	const indexRef = useRef(index)
+	selectedUrisRef.current = selectedUris
+	indexRef.current = index
 
 	// Derived per-node metrics based on selection + tokens (single post-order pass)
 	const { selectedCountMap, tokenTotalsMap } = useMemo(() => {
@@ -67,30 +80,34 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Selection helpers
 	const toggleFile = useCallback(
 		(uri: string) => {
-			const next = new Set(selectedUris)
+			const next = new Set(selectedUrisRef.current)
 			if (next.has(uri)) next.delete(uri)
 			else next.add(uri)
 			startTransition(() => onSelect(next))
 		},
-		[selectedUris, onSelect],
+		[onSelect],
 	)
 
 	const selectAllInSubtree = useCallback(
-		(item: VscodeTreeItem) => {
-			const next = new Set(selectedUris)
-			for (const u of getAllDescendantPaths(item)) next.add(u)
+		(uri: string) => {
+			const node = indexRef.current.nodes.get(uri)
+			if (!node) return
+			const next = new Set(selectedUrisRef.current)
+			for (const u of getAllDescendantPaths(node.item)) next.add(u)
 			startTransition(() => onSelect(next))
 		},
-		[selectedUris, onSelect],
+		[onSelect],
 	)
 
 	const deselectAllInSubtree = useCallback(
-		(item: VscodeTreeItem) => {
-			const next = new Set(selectedUris)
-			for (const u of getAllDescendantPaths(item)) next.delete(u)
+		(uri: string) => {
+			const node = indexRef.current.nodes.get(uri)
+			if (!node) return
+			const next = new Set(selectedUrisRef.current)
+			for (const u of getAllDescendantPaths(node.item)) next.delete(u)
 			startTransition(() => onSelect(next))
 		},
-		[selectedUris, onSelect],
+		[onSelect],
 	)
 
 	const getFolderSelectionState = useCallback(
@@ -110,7 +127,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	): React.ReactNode[] => {
 		return items.map((item) => {
 			const isFolder = !!(item.subItems && item.subItems.length > 0)
-			const label = item.label
 			const totalDescFiles = index.descendantFileCount.get(item.value) || 0
 			const selectedDescFiles = selectedCountMap.get(item.value) || 0
 			const folderState = isFolder
@@ -119,40 +135,26 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			const folderTokens = isFolder ? tokenTotalsMap.get(item.value) || 0 : 0
 			const fileSelected = !isFolder && selectedUris.has(item.value)
 			const fileTokens = !isFolder ? actualTokenCounts[item.value] || 0 : 0
+			const isOpen = depth === 0
 
 			return (
-				<vscode-tree-item
+				<TreeNode
 					key={item.value}
-					data-uri={item.value}
-					open={depth === 0}
-				>
-					<div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-						<div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-							<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-						</div>
-						<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-							<RowActions
-								isFolder={isFolder}
-								totalDescendantFiles={totalDescFiles}
-								selectedDescendantFiles={selectedDescFiles}
-								onSelectAllInSubtree={() => selectAllInSubtree(item)}
-								onDeselectAllInSubtree={() => deselectAllInSubtree(item)}
-								fileIsSelected={fileSelected}
-								onToggleFile={() => toggleFile(item.value)}
-							/>
-						</div>
-						<div style={{ marginLeft: 'auto', display: 'flex' }}>
-							<RowDecorations
-								isFolder={isFolder}
-								folderSelectionState={folderState}
-								folderTokenTotal={folderTokens}
-								fileIsSelected={fileSelected}
-								fileTokenCount={fileTokens}
-							/>
-						</div>
-					</div>
-					{isFolder ? renderTreeItems(item.subItems!, depth + 1) : null}
-				</vscode-tree-item>
+					item={item}
+					depth={depth}
+					isFolder={isFolder}
+					isOpen={isOpen}
+					totalDescendantFiles={totalDescFiles}
+					selectedDescendantFiles={selectedDescFiles}
+					folderSelectionState={folderState}
+					folderTokenTotal={folderTokens}
+					fileIsSelected={fileSelected}
+					fileTokenCount={fileTokens}
+					onToggleFile={toggleFile}
+					onSelectAllInSubtree={selectAllInSubtree}
+					onDeselectAllInSubtree={deselectAllInSubtree}
+					renderChildren={renderTreeItems}
+				/>
 			)
 		})
 	}
@@ -168,16 +170,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			if (!clickedUri) return
 			const currentTime = Date.now()
 
+			// If branch, rely on native expansion; selection handler continues
+
+			// Double-click to open file
 			if (lastClickedItem === clickedUri && currentTime - lastClickTime < 500) {
-				const isBranch =
-					(last as unknown as { branch?: boolean }).branch === true
-				if (!isBranch) {
-					const vscode = getVsCodeApi()
-					vscode.postMessage({
-						command: 'openFile',
-						payload: { fileUri: clickedUri },
-					})
-				}
+				const vscode = getVsCodeApi()
+				vscode.postMessage({
+					command: 'openFile',
+					payload: { fileUri: clickedUri },
+				})
 				setLastClickedItem(null)
 				setLastClickTime(0)
 			} else {
@@ -202,7 +203,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					<vscode-progress-ring />
 				</div>
 			) : (
-				<vscode-tree onvsc-tree-select={handleTreeSelect} indent-guides>
+				<vscode-tree
+					onvsc-tree-select={handleTreeSelect}
+					expand-mode="singleClick"
+					indent-guides
+				>
 					{renderTreeItems(visibleItems)}
 				</vscode-tree>
 			)}
