@@ -101,7 +101,7 @@ The extension follows a strict frontend-backend architecture:
 
 ### Biome Configuration (`biome.json`)
 - Code formatter and linter
-- Uses tabs for indentation
+- Uses 2 spaces for indentation
 - Single quotes for JavaScript
 - Specific rules disabled for VS Code extension development
 

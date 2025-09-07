@@ -13,6 +13,7 @@
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
 			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
 				"${workspaceFolder}/out/**/*.js"
 			],
 			"preLaunchTask": "dev-build"
@@ -26,6 +27,7 @@
 				"--extensionTestsPath=${workspaceFolder}/out/test/suite/extension.test.js"
 			],
 			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
 				"${workspaceFolder}/out/test/**/*.js"
 			],
 			"preLaunchTask": "dev-build"

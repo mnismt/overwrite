@@ -23,7 +23,8 @@
         {
             "label": "dev-build",
             "dependsOn": [
-                "npm: compile"
+                "npm: compile",
+                "npm: build:esbuild"
             ],
             "presentation": {
                 "reveal": "never"

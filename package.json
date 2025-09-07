@@ -50,6 +50,7 @@
     "lint": "biome check src --apply",
     "test": "vscode-test",
     "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "build:esbuild": "node esbuild.js",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "check-types": "tsc --noEmit",
