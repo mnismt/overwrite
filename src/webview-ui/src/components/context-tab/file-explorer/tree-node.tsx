@@ -71,6 +71,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 			data-uri={item.value}
 			{...(isOpen ? { open: true } : {})}
 		>
+			<vscode-icon name="folder" slot="icon-branch"></vscode-icon>
+			<vscode-icon name="folder-opened" slot="icon-branch-opened"></vscode-icon>
+			<vscode-icon name="file" slot="icon-leaf"></vscode-icon>
 			<div style={containerStyle}>
 				<div style={leftStyle}>
 					<span style={labelStyle}>{item.label}</span>

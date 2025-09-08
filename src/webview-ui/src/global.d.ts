@@ -34,7 +34,6 @@ import type {
 	VscodeTree,
 	VscodeTreeItem as VscodeTreeItemElement,
 } from '@vscode-elements/elements'
-import type { VscodeTreeItem } from '../../../types'
 import type { VscCollapsibleToggleEvent } from '@vscode-elements/elements/dist/vscode-collapsible/vscode-collapsible'
 import type { VscContextMenuSelectEvent } from '@vscode-elements/elements/dist/vscode-context-menu/vscode-context-menu'
 import type {
@@ -43,6 +42,7 @@ import type {
 } from '@vscode-elements/elements/dist/vscode-split-layout/vscode-split-layout'
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
 import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
+import type { VscodeTreeItem } from '../../../types'
 
 type ElementProps<I> = Partial<Omit<I, keyof HTMLElement>>
 type CustomEventHandler<E> = (e: E) => void

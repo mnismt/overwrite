@@ -12,102 +12,101 @@ Here are the essential features for the initial version:
 
 Status: Done
 
-The **Context Tab** in the Webview Panel is the primary interface for selecting files and preparing the prompt context.
+The Context Tab in the Webview Panel is the primary interface for selecting files and preparing the prompt context.
 
-* **Requirement 2.1.1: Activate via Activity Bar:** The extension should add an icon to the VS Code Activity Bar. Clicking this icon reveals the Webview Panel, defaulting to the Context Tab.
-* **Requirement 2.1.2: Workspace File Tree View:**
-  * Display the file and folder structure of the *currently opened* VS Code workspace within the Context Tab using a suitable webview component (e.g., leveraging `@vscode/webview-ui-toolkit` or a custom implementation).
-  * Should visually distinguish between files and folders.
-  * Should allow expanding/collapsing folders.
-  * Should ideally respect `.gitignore` and VS Code's `files.exclude` settings (or provide an option).
-* **Requirement 2.1.3: File/Folder Selection:**
-  * Implement checkboxes or a similar selection mechanism within the TreeView.
-  * Selecting a folder should implicitly select all non-excluded files and subfolders within it. Deselecting should do the opposite.
-  * Allow selecting/deselecting individual files even if their parent folder is selected/deselected.
-  * The selection state must persist within the session.
-* **Requirement 2.1.4: Search/Filter (Basic):** Provide a search/filter bar within the Context Tab to filter the files/folders displayed in the tree by name.
-* **Requirement 2.1.5: Refresh Tree:** Include a refresh button near the search bar to manually reload the file tree, reflecting external changes.
-* **Requirement 2.1.6: Selected Files Summary:** Display a simple counter below the tree showing how many files/folders are currently selected.
-* **Requirement 2.1.7: User Instructions Input:**
-  * Provide a `<textarea>` below the selected files summary for the user's specific instructions (`<user_instructions>` tag content).
-* **Requirement 2.1.8: Copy to Clipboard Buttons:**
-  * Implement a "Copy Context" button: Dynamically generates and copies `<file_map>`, `<file_contents>`, and `<user_instructions>` to the clipboard.
-  * Implement an "Copy Context + XML Instructions" button: Dynamically generates and copies `<file_map>`, `<file_contents>`, `<xml_formatting_instructions>`, and `<user_instructions>` to the clipboard.
-  * Both buttons should use `vscode.env.clipboard.writeText`.
-  * The actual XML content should be generated at copy time, not displayed.
-* **Requirement 2.1.9: Background Processing (No UI Display):** The extension host must still implement the logic to:
-  * Generate the `<file_map>` tag (hierarchical structure).
-  * Read and format the content for `<file_contents>`.
-  * Include the fixed `<xml_formatting_instructions>` when requested.
-* **Requirement 2.1.10: Double click on the selected files in the tree view should open the file in the editor.**
-  * Implement a double click handler on the tree view to open the selected file in the editor.
-* **Requirement 2.1.11: Count and display the tokens number of files selected.**
-  * When a file is selected, the extension should count the tokens number of the file and display it in the tree view:
-    * If the file is a folder, the extension should count the tokens number of all files in the folder
-    * If the file is a file, the extension should count the tokens number of the file
-  * Below the User instructions textarea, display two text lines:
-    * Show the total tokens + user instructions textarea content (for Copy Context button)
-    * Show the total tokens + user instructions textarea content + xml formatting instructions (for Copy Context + XML Instructions button)
-
-* **Requirement 2.1.12: Preserve the selection state when the webview is reopened.**
-  * When the webview is reopened, it should restore the previously selected files (use `retainContextWhenHidden` option in the webview options)
-
-* **Requirement 2.1.13: Multi-Root Workspace Support.**
-  * The extension must correctly handle VS Code workspaces with multiple root folders.
-  * **File Tree:** The TreeView in the Context Tab should display a clear separation or grouping for each root folder in the workspace. For example, each root folder could be a top-level expandable item.
-  * **Path Resolution:** All file paths (for selection, context generation, and applying changes) must be resolved correctly relative to their respective workspace folder. The generated `<file_map>` and `<file>` paths in the XML should reflect this, possibly by prefixing paths with the root folder name or using a scheme that uniquely identifies the root.
-  * **File Operations:** All `vscode.workspace.fs` operations and `vscode.workspace.applyEdit` must target files within the correct workspace folder.
-  * **Selection Persistence:** The selection state should be maintained correctly across multiple roots.
-  * **Search/Filter:** The search/filter functionality should apply across all root folders
-
-* **Requirement 2.1.14: Allow exclude/include folder pattern.**
-  * The extension should support a textarea below the user instructions textarea to allow the user to input the exclude folder pattern.
-  * The exclude folder pattern is a simple text file with one pattern per line, similar to the `.gitignore` file, which is used to exclude files and folders from the file tree.
-  * The include folder pattern is a simple text file with one pattern per line, similar to the `.gitignore` file, which is used to always include files and folders from the file tree after a refresh.
+- Requirement 2.1.1: Activate via Activity Bar:
+  - The extension should add an icon to the VS Code Activity Bar. Clicking this icon reveals the Webview Panel, defaulting to the Context Tab.
+- Requirement 2.1.2: Workspace File Tree View:
+  - Display the file and folder structure of the currently opened VS Code workspace within the Context Tab using a suitable webview component (e.g., leveraging @vscode/webview-ui-toolkit or a custom implementation).
+  - Should visually distinguish between files and folders.
+  - Should allow expanding/collapsing folders.
+  - Must ensure row action buttons do not toggle expand/collapse (clicks are captured and stopped to avoid bubbling to the tree row).
+- Requirement 2.1.3: File/Folder Selection:
+  - Implement checkboxes or a similar selection mechanism within the TreeView.
+  - Selecting a folder should implicitly select all non-excluded files and subfolders within it. Deselecting should do the opposite.
+  - Allow selecting/deselecting individual files even if their parent folder is selected/deselected.
+  - The selection state must persist within the session.
+- Requirement 2.1.4: Search/Filter (Basic): Provide a search/filter bar within the Context Tab to filter the files/folders displayed in the tree by name.
+- Requirement 2.1.5: Refresh Tree: Include a refresh button near the search bar to manually reload the file tree, reflecting external changes.
+- Requirement 2.1.6: Selected Files Summary: Display a simple counter below the tree showing how many files/folders are currently selected.
+- Requirement 2.1.7: User Instructions Input:
+  - Provide a <textarea> below the selected files summary for the user's specific instructions (<user_instructions> tag content).
+- Requirement 2.1.8: Copy to Clipboard Buttons:
+  - Implement a "Copy Context" button: Dynamically generates and copies <file_map>, <file_contents>, and <user_instructions> to the clipboard.
+  - Implement an "Copy Context + XML Instructions" button: Dynamically generates and copies <file_map>, <file_contents>, <xml_formatting_instructions>, and <user_instructions> to the clipboard.
+  - Both buttons should use vscode.env.clipboard.writeText.
+  - The actual XML content should be generated at copy time, not displayed.
+- Requirement 2.1.9: Background Processing (No UI Display): The extension host must still implement the logic to:
+  - Generate the <file_map> tag (hierarchical structure).
+  - Read and format the content for <file_contents>.
+  - Include the fixed <xml_formatting_instructions> when requested.
+- Requirement 2.1.10: Double click on the selected files in the tree view should open the file in the editor.
+  - Implement a double click handler on the tree view to open the selected file in the editor.
+  - Row action buttons do not toggle folder expand/collapse; clicks are captured and stopped to avoid bubbling to the tree row.
+- Requirement 2.1.11: Count and display the tokens number of files selected.
+  - When a file is selected, the extension should count the tokens number of the file and display it in the tree view:
+    - If the file is a folder, the extension should count the tokens number of all files in the folder
+    - If the file is a file, the extension should count the tokens number of the file
+  - Below the User instructions textarea, display two text lines:
+    - Show the total tokens + user instructions textarea content (for Copy Context button)
+    - Show the total tokens + user instructions textarea content + xml formatting instructions (for Copy Context + XML Instructions button)
+- Requirement 2.1.12: Preserve the selection state when the webview is reopened.
+  - When the webview is reopened, it should restore the previously selected files (use retainContextWhenHidden option in the webview options)
+- Requirement 2.1.13: Multi-Root Workspace Support.
+  - The extension must correctly handle VS Code workspaces with multiple root folders.
+  - File Tree: The TreeView in the Context Tab should display a clear separation or grouping for each root folder in the workspace. For example, each root folder could be a top-level expandable item.
+  - Path Resolution: All file paths (for selection, context generation, and applying changes) must be resolved correctly relative to their respective workspace folder. The generated <file_map> and <file> paths in the XML should reflect this, possibly by prefixing paths with the root folder name or using a scheme that uniquely identifies the root.
+  - File Operations: All vscode.workspace.fs operations and vscode.workspace.applyEdit must target files within the correct workspace folder.
+  - Selection Persistence: The selection state should be maintained correctly across multiple roots.
+  - Search/Filter: The search/filter functionality should apply across all root folders
+- Requirement 2.1.14: Allow exclude/include folder pattern.
+  - The extension should support a textarea below the user instructions textarea to allow the user to input the exclude folder pattern.
+  - The exclude folder pattern is a simple text file with one pattern per line, similar to the .gitignore file, which is used to exclude files and folders from the file tree.
+  - The include folder pattern is a simple text file with one pattern per line, similar to the .gitignore file, which is used to always include files and folders from the file tree after a refresh.
 
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
 Status: In Progress
 
-The **Apply Tab** in the Webview Panel is dedicated to applying changes suggested by the LLM.
+The Apply Tab in the Webview Panel is dedicated to applying changes suggested by the LLM.
 
-* **Requirement 2.2.1: AI Response Input:** Provide a `<textarea>` in the Webview Panel for the user to paste the XML-formatted LLM response.
-* **Requirement 2.2.2: Parse LLM Response:**
-  * Implement logic (within the Webview or extension host) to parse the pasted XML, specifically looking for `<file>` tags and their `path` and `action` attributes.
-  * Extract `<search>` and `<content>` blocks for `modify` actions.
-  * Extract `<content>` blocks for `create` and `rewrite` actions.
-* **Requirement 2.2.3: "Preview & Apply Changes" Button:** A button in the Webview Panel to initiate the application process. *Consider adding a preview step (e.g., using VS Code's diff view) before final application.*
-* **Requirement 2.2.4: Implement File Actions using VS Code API:**
-  * **`create`:** Use `vscode.workspace.fs.writeFile` to create a new file at the specified relative `path` with the provided `<content>`. Ensure the path is resolved correctly relative to the workspace root. Handle directory creation if needed.
-  * **`rewrite`:** Use `vscode.workspace.fs.writeFile` to replace the entire content of the file at the specified relative `path` with the provided `<content>`.
-  * **`modify`:**
-    * Use `vscode.workspace.openTextDocument` and `getText` to read the target file specified by the relative `path`.
-    * Find the *exact* block of text matching the `<search>` content.
-    * Calculate the `vscode.Range` of the found block.
-    * Create a `vscode.WorkspaceEdit` object. Use `workspaceEdit.replace(fileUri, range, content)` to stage the replacement.
-    * Apply the change using `vscode.workspace.applyEdit`. This integrates with VS Code's undo/redo stack.
-    * Handle errors: file not found, search block not found, multiple ambiguous matches.
-  * **`delete`:** Use `vscode.workspace.fs.delete` to delete the file at the specified relative `path`. Use `{ recursive: true, useTrash: true }` options for safety.
-* **Requirement 2.2.5: Feedback & Error Handling:** Provide clear feedback using VS Code notifications (`vscode.window.showInformationMessage`, `vscode.window.showWarningMessage`, `vscode.window.showErrorMessage`) and potentially status updates within the Webview Panel. Report success/failure for each action.
+- Requirement 2.2.1: AI Response Input: Provide a <textarea> in the Webview Panel for the user to paste the XML-formatted LLM response.
+- Requirement 2.2.2: Parse LLM Response:
+  - Implement logic (within the Webview or extension host) to parse the pasted XML, specifically looking for <file> tags and their path and action attributes.
+  - Extract <search> and <content> blocks for modify actions.
+  - Extract <content> blocks for create and rewrite actions.
+- Requirement 2.2.3: "Preview & Apply Changes" Button: A button in the Webview Panel to initiate the application process. Consider adding a preview step (e.g., using VS Code's diff view) before final application.
+- Requirement 2.2.4: Implement File Actions using VS Code API:
+  - create: Use vscode.workspace.fs.writeFile to create a new file at the specified relative path with the provided <content>. Ensure the path is resolved correctly relative to the workspace root. Handle directory creation if needed.
+  - rewrite: Use vscode.workspace.fs.writeFile to replace the entire content of the file at the specified relative path with the provided <content>.
+  - modify:
+    - Use vscode.workspace.openTextDocument and getText to read the target file specified by the relative path.
+    - Find the exact block of text matching the <search> content.
+    - Calculate the vscode.Range of the found block.
+    - Create a vscode.WorkspaceEdit object. Use workspaceEdit.replace(fileUri, range, content) to stage the replacement.
+    - Apply the change using vscode.workspace.applyEdit. This integrates with VS Code's undo/redo stack.
+    - Handle errors: file not found, search block not found, multiple ambiguous matches.
+  - delete: Use vscode.workspace.fs.delete to delete the file at the specified relative path. Use { recursive: true, useTrash: true } options for safety.
+- Requirement 2.2.5: Feedback & Error Handling: Provide clear feedback using VS Code notifications (vscode.window.showInformationMessage, vscode.window.showWarningMessage, vscode.window.showErrorMessage) and potentially status updates within the Webview Panel. Report success/failure for each action.
 
 **3. User Interface (UI) / User Experience (UX)**
 
-* **Integration:** Leverage standard VS Code UI components: Activity Bar, Webview Panel, Status Bar, Notifications, Command Palette.
-* **Layout:**
-  * **Webview Panel (Tabs):**
-    * **Context Tab:** Combines file exploration/selection and context/instruction building.
-    * **Apply Tab:** Applies changes from the LLM.
-* **Responsiveness:** Use asynchronous operations (`async/await`) for all file system access and potentially long-running tasks (parsing, context generation) to keep the UI responsive. Use `vscode.Progress` API for long operations.
-* **Consistency:** Follow VS Code UI/UX guidelines.
+- Integration: Leverage standard VS Code UI components: Activity Bar, Webview Panel, Status Bar, Notifications, Command Palette.
+- Layout:
+  - Webview Panel (Tabs):
+    - Context Tab: Combines file exploration/selection and context/instruction building.
+    - Apply Tab: Applies changes from the LLM.
+- Responsiveness: Use asynchronous operations (async/await) for all file system access and potentially long-running tasks (parsing, context generation) to keep the UI responsive. Use vscode.Progress API for long operations.
+- Consistency: Follow VS Code UI/UX guidelines.
 
 **4. Technical Considerations**
 
-* **Language:** TypeScript (standard for VS Code extensions).
-* **Core API:** `vscode` namespace (especially `vscode.workspace`, `vscode.window`, `vscode.commands`, `vscode.Uri`, `vscode.TreeView`, `vscode.WebviewPanel`, `vscode.env`).
-* **File System:** Use `vscode.workspace.fs` for basic file operations (read, write, delete) and `vscode.workspace.applyEdit` with `vscode.WorkspaceEdit` for modifications to ensure integration with editor features (undo, dirty state).
-* **Webview Communication:** Use `webview.postMessage` and `extensionContext.webviewView.webview.onDidReceiveMessage` / `panel.webview.onDidReceiveMessage` for communication between the Webview UI and the extension host logic.
-* **XML Parsing:** Use a reliable JavaScript/Node.js XML parsing library (e.g., `fast-xml-parser` or standard `DOMParser` within the webview).
-* **State Management:** Manage the state of selected files effectively (e.g., using `extensionContext.workspaceState`).
+- Language: TypeScript (standard for VS Code extensions).
+- Core API: vscode namespace (especially vscode.workspace, vscode.window, vscode.commands, vscode.Uri, vscode.TreeView, vscode.WebviewPanel, vscode.env).
+- File System: Use vscode.workspace.fs for basic file operations (read, write, delete) and vscode.workspace.applyEdit with vscode.WorkspaceEdit for modifications to ensure integration with editor features (undo, dirty state).
+- Webview Communication: Use webview.postMessage and extensionContext.webviewView.webview.onDidReceiveMessage / panel.webview.onDidReceiveMessage for communication between the Webview UI and the extension host logic.
+- XML Parsing: Use a reliable JavaScript/Node.js XML parsing library (e.g., fast-xml-parser or standard DOMParser within the webview).
+- State Management: Manage the state of selected files effectively (e.g., using extensionContext.workspaceState).
 
 **5. Sample XML Output**
 
@@ -184,3 +183,7 @@ interface VscodeTreeItem {
 </file_contents>
 
 ``````
+
+**6. Updates**
+
+- Tests: Added unit tests for file-explorer (RowActions, MiniActionButton, RowDecorations, TreeNode, FileExplorer selection flows).
