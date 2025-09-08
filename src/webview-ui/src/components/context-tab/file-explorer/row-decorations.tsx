@@ -25,46 +25,83 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 				parts.push(
 					<span
 						key="full"
-						style={{ color: 'var(--vscode-testing-iconPassed)' }}
-					>
-						Full
-					</span>,
+						title="Fully included"
+						style={{
+							width: 10,
+							height: 10,
+							borderRadius: 9999,
+							background: 'var(--vscode-testing-iconPassed)',
+							display: 'inline-block',
+						}}
+					/>,
 				)
 			} else if (folderSelectionState === 'partial') {
 				parts.push(
 					<span
-						key="half"
-						style={{ color: 'var(--vscode-testing-iconQueued)' }}
-					>
-						Half
-					</span>,
+						key="partial"
+						title="Partially included"
+						style={{
+							width: 10,
+							height: 10,
+							borderRadius: 9999,
+							display: 'inline-block',
+							backgroundImage:
+								'linear-gradient(90deg, var(--vscode-testing-iconQueued) 50%, transparent 50%)',
+							border: '1px solid var(--vscode-descriptionForeground)',
+							boxSizing: 'border-box',
+						}}
+					/>,
 				)
 			}
-			if (folderTokenTotal > 0) {
+			// Token indicator badge
+			const showBadge = folderTokenTotal > 0
+			if (showBadge) {
 				parts.push(
-					<vscode-badge key="tok" variant="counter">
-						{formatTokenCount(folderTokenTotal)}
-					</vscode-badge>,
+					<div
+						key="folder-token-indicator"
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							position: 'relative',
+						}}
+					>
+						{showBadge ? <TokenBadge count={folderTokenTotal} /> : null}
+					</div>,
 				)
 			}
 		} else {
 			if (fileIsSelected) {
-				parts.push(
-					<span key="f" style={{ color: 'var(--vscode-testing-iconPassed)' }}>
-						F
-					</span>,
-				)
-				parts.push(
-					<vscode-badge key="tok" variant="counter">
-						{formatTokenCount(fileTokenCount)}
-					</vscode-badge>,
-				)
+				const showBadge = fileTokenCount > 0
+				if (showBadge) {
+					parts.push(
+						<div
+							key="file-token-indicator"
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								position: 'relative',
+							}}
+						>
+							{showBadge ? <TokenBadge count={fileTokenCount} /> : null}
+						</div>,
+					)
+				}
 			}
 		}
 		if (parts.length === 0) return null
-		return <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>{parts}</div>
+		return (
+			<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+				{parts}
+			</div>
+		)
 	},
 )
 RowDecorations.displayName = 'RowDecorations'
+
+const TokenBadge: React.FC<{ count: number }> = ({ count }) => {
+	return (
+		<vscode-badge variant="counter">{formatTokenCount(count)}</vscode-badge>
+	)
+}
 
 export default RowDecorations

@@ -20,35 +20,6 @@ interface TreeNodeProps {
 	renderChildren: (items: VscodeTreeItem[], depth: number) => React.ReactNode
 }
 
-const containerStyle: React.CSSProperties = {
-	display: 'flex',
-	alignItems: 'center',
-	width: '100%',
-}
-
-const leftStyle: React.CSSProperties = {
-	display: 'flex',
-	alignItems: 'center',
-	flex: 1,
-	minWidth: 0,
-}
-
-const labelStyle: React.CSSProperties = {
-	overflow: 'hidden',
-	textOverflow: 'ellipsis',
-}
-
-const actionsStyle: React.CSSProperties = {
-	display: 'flex',
-	alignItems: 'center',
-	gap: 8,
-}
-
-const rightStyle: React.CSSProperties = {
-	marginLeft: 'auto',
-	display: 'flex',
-}
-
 const TreeNode: React.FC<TreeNodeProps> = ({
 	item,
 	depth,
@@ -70,15 +41,42 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 			key={item.value}
 			data-uri={item.value}
 			{...(isOpen ? { open: true } : {})}
+			style={{ width: '100%' }}
 		>
 			<vscode-icon name="folder" slot="icon-branch"></vscode-icon>
 			<vscode-icon name="folder-opened" slot="icon-branch-opened"></vscode-icon>
 			<vscode-icon name="file" slot="icon-leaf"></vscode-icon>
-			<div style={containerStyle}>
-				<div style={leftStyle}>
-					<span style={labelStyle}>{item.label}</span>
+			<div
+				style={{
+					display: 'flex',
+					alignItems: 'center',
+					width: '100%',
+				}}
+			>
+				<div
+					style={{
+						display: 'flex',
+						alignItems: 'center',
+						flex: 1,
+						minWidth: 0,
+					}}
+				>
+					<span
+						style={{
+							overflow: 'hidden',
+							textOverflow: 'ellipsis',
+						}}
+					>
+						{item.label}
+					</span>
 				</div>
-				<div style={actionsStyle}>
+				<div
+					style={{
+						display: 'flex',
+						alignItems: 'center',
+						gap: 8,
+					}}
+				>
 					<RowActions
 						isFolder={isFolder}
 						totalDescendantFiles={totalDescendantFiles}
@@ -89,15 +87,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 						onToggleFile={() => onToggleFile(item.value)}
 					/>
 				</div>
-				<div style={rightStyle}>
-					<RowDecorations
-						isFolder={isFolder}
-						folderSelectionState={folderSelectionState}
-						folderTokenTotal={folderTokenTotal}
-						fileIsSelected={fileIsSelected}
-						fileTokenCount={fileTokenCount}
-					/>
-				</div>
+				<RowDecorations
+					isFolder={isFolder}
+					folderSelectionState={folderSelectionState}
+					folderTokenTotal={folderTokenTotal}
+					fileIsSelected={fileIsSelected}
+					fileTokenCount={fileTokenCount}
+				/>
 			</div>
 			{isFolder ? renderChildren(item.subItems || [], depth + 1) : null}
 		</vscode-tree-item>

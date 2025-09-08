@@ -1,10 +1,9 @@
 import { render, screen } from '@testing-library/react'
-import React from 'react'
 import { describe, expect, it } from 'vitest'
 import RowDecorations from '../row-decorations'
 
 describe('RowDecorations', () => {
-	it('shows Full and a token badge for full-selected folder', () => {
+	it('shows status dot and a token badge for full-selected folder', () => {
 		render(
 			<RowDecorations
 				isFolder
@@ -12,12 +11,13 @@ describe('RowDecorations', () => {
 				folderTokenTotal={1234}
 			/>,
 		)
-		expect(screen.getByText('Full')).toBeInTheDocument()
+		// Status dot via title
+		expect(screen.getByTitle('Fully included')).toBeInTheDocument()
 		// Badge exists and has text
 		expect(screen.getByText(/\d/)).toBeInTheDocument()
 	})
 
-	it('shows Half for partial-selected folder', () => {
+	it('shows partial status dot for partial-selected folder', () => {
 		render(
 			<RowDecorations
 				isFolder
@@ -25,7 +25,7 @@ describe('RowDecorations', () => {
 				folderTokenTotal={0}
 			/>,
 		)
-		expect(screen.getByText('Half')).toBeInTheDocument()
+		expect(screen.getByTitle('Partially included')).toBeInTheDocument()
 	})
 
 	it('renders nothing for empty folder (no decorations)', () => {
@@ -40,11 +40,10 @@ describe('RowDecorations', () => {
 		expect(container.firstChild).toBeNull()
 	})
 
-	it('shows F and a token badge for selected file', () => {
+	it('shows a token badge for selected file', () => {
 		render(
 			<RowDecorations isFolder={false} fileIsSelected fileTokenCount={42} />,
 		)
-		expect(screen.getByText('F')).toBeInTheDocument()
 		expect(screen.getByText(/\d/)).toBeInTheDocument()
 	})
 })

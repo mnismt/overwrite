@@ -44,6 +44,7 @@ export function countTokens(text: string): Promise<number> {
 
 // Format token count in 'k' units for display
 export function formatTokenCount(count: number): string {
+	if (count < 1000) return count.toString()
 	return `${(count / 1000).toFixed(1)}k`
 }
 

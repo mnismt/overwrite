@@ -88,9 +88,11 @@ The extension follows a strict frontend-backend architecture:
 - All message commands must be registered in `App.tsx` to prevent warnings
 
 ### Testing
-- Tests located in `src/test/suite/`
-- Uses Mocha with VS Code test runner
-- Run with `pnpm test` (includes compilation and linting)
+- Webview tests (preferred for verification): `pnpm -C src/webview-ui test --run`
+  - Runs Vitest against the React webview UI.
+  - Use this command when verifying functionality in this repo.
+- Backend/extension tests are located in `src/test/suite/` and use Mocha with the VS Code runner.
+  - Do not run backend/VS Code-side tests as part of routine verification in this environment.
 
 ### Build Process
 - Main extension: ESBuild (configured in `esbuild.js`)

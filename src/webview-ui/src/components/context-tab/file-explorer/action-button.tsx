@@ -6,16 +6,24 @@ interface MiniActionButtonProps {
 	onPress: () => void
 }
 
-const MiniActionButton: React.FC<MiniActionButtonProps> = React.memo(
+const ActionButton: React.FC<MiniActionButtonProps> = React.memo(
 	({ icon, title, onPress }) => {
 		const [hovered, setHovered] = useState(false)
+		const [pressed, setPressed] = useState(false)
+		const [focused, setFocused] = useState(false)
+
 		const style: React.CSSProperties = {
-			background: hovered
-				? 'var(--vscode-list-hoverBackground)'
-				: 'transparent',
-			border: hovered
-				? '1px solid var(--vscode-list-hoverBackground)'
-				: '1px solid transparent',
+			// Use VS Code theme variables for full compatibility
+			background: pressed
+				? 'var(--vscode-list-activeSelectionBackground)'
+				: hovered
+					? 'var(--vscode-list-hoverBackground)'
+					: 'transparent',
+			border: focused
+				? '1px solid var(--vscode-focusBorder)'
+				: hovered
+					? '1px solid var(--vscode-list-hoverBackground)'
+					: '1px solid transparent',
 			color: 'var(--vscode-foreground)',
 			borderRadius: 6,
 			fontSize: 12,
@@ -26,6 +34,8 @@ const MiniActionButton: React.FC<MiniActionButtonProps> = React.memo(
 			alignItems: 'center',
 			justifyContent: 'center',
 			cursor: 'pointer',
+			transition: 'background-color 120ms ease-in-out',
+			outline: 'none',
 		}
 		const symbol = icon === 'add' ? '+' : '×'
 		return (
@@ -35,17 +45,24 @@ const MiniActionButton: React.FC<MiniActionButtonProps> = React.memo(
 				aria-label={title}
 				style={style}
 				onMouseEnter={() => setHovered(true)}
-				onMouseLeave={() => setHovered(false)}
 				onMouseDown={(e) => {
 					// Trigger the action immediately but avoid affecting the tree item
 					e.preventDefault()
 					e.stopPropagation()
+					setPressed(true)
 					onPress()
 				}}
 				onMouseUp={(e) => {
 					// Some trees toggle on mouseup; stop propagation here as well
 					e.preventDefault()
 					e.stopPropagation()
+					setPressed(false)
+				}}
+				onFocus={() => setFocused(true)}
+				onBlur={() => setFocused(false)}
+				onMouseLeave={() => {
+					setHovered(false)
+					setPressed(false)
 				}}
 				onClick={(e) => {
 					// Prevent the click from bubbling to the tree row which can toggle expand/collapse
@@ -63,6 +80,6 @@ const MiniActionButton: React.FC<MiniActionButtonProps> = React.memo(
 		)
 	},
 )
-MiniActionButton.displayName = 'MiniActionButton'
+ActionButton.displayName = 'MiniActionButton'
 
-export default MiniActionButton
+export default ActionButton

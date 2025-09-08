@@ -1,5 +1,5 @@
 import React from 'react'
-import MiniActionButton from './mini-action-button'
+import ActionButton from './action-button'
 
 interface RowActionsProps {
 	isFolder: boolean
@@ -10,8 +10,6 @@ interface RowActionsProps {
 	fileIsSelected?: boolean
 	onToggleFile?: () => void
 }
-
-const wrapperStyle: React.CSSProperties = { display: 'flex', gap: 4 }
 
 const RowActions: React.FC<RowActionsProps> = React.memo(
 	({
@@ -44,75 +42,53 @@ const RowActions: React.FC<RowActionsProps> = React.memo(
 			e.stopPropagation()
 		}
 
-		if (isFolder) {
-			if (
-				totalDescendantFiles > 0 &&
-				selectedDescendantFiles === totalDescendantFiles
-			) {
-				return (
-					<div
-						style={wrapperStyle}
-						onMouseDownCapture={onMouseDownCapture}
-						onMouseUpCapture={stop}
-						onClickCapture={stop}
-						onDoubleClickCapture={stop}
-					>
-						<MiniActionButton
-							icon="close"
-							title="Deselect all"
-							onPress={() => onDeselectAllInSubtree?.()}
-						/>
-					</div>
-				)
-			}
-			if (selectedDescendantFiles > 0) {
-				return (
-					<div
-						style={wrapperStyle}
-						onMouseDownCapture={onMouseDownCapture}
-						onMouseUpCapture={stop}
-						onClickCapture={stop}
-						onDoubleClickCapture={stop}
-					>
-						<MiniActionButton
-							icon="close"
-							title="Deselect all"
-							onPress={() => onDeselectAllInSubtree?.()}
-						/>
-					</div>
-				)
-			}
-			return (
-				<div
-					style={wrapperStyle}
-					onMouseDownCapture={onMouseDownCapture}
-					onMouseUpCapture={stop}
-					onClickCapture={stop}
-					onDoubleClickCapture={stop}
-				>
-					<MiniActionButton
-						icon="add"
-						title="Select all"
-						onPress={() => onSelectAllInSubtree?.()}
-					/>
-				</div>
-			)
-		}
-
-		return (
+		const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 			<div
-				style={wrapperStyle}
+				style={{ display: 'flex', gap: 4 }}
 				onMouseDownCapture={onMouseDownCapture}
 				onMouseUpCapture={stop}
 				onClickCapture={stop}
 				onDoubleClickCapture={stop}
 			>
-				<MiniActionButton
+				{children}
+			</div>
+		)
+
+		// Decide which action button to render
+		if (isFolder) {
+			const showDeselect =
+				totalDescendantFiles > 0 &&
+				selectedDescendantFiles === totalDescendantFiles
+					? true
+					: selectedDescendantFiles > 0
+
+			return (
+				<Wrapper>
+					{showDeselect ? (
+						<ActionButton
+							icon="close"
+							title="Deselect all"
+							onPress={() => onDeselectAllInSubtree?.()}
+						/>
+					) : (
+						<ActionButton
+							icon="add"
+							title="Select all"
+							onPress={() => onSelectAllInSubtree?.()}
+						/>
+					)}
+				</Wrapper>
+			)
+		}
+
+		return (
+			<Wrapper>
+				<ActionButton
 					icon={fileIsSelected ? 'close' : 'add'}
 					title={fileIsSelected ? 'Deselect' : 'Select'}
 					onPress={() => onToggleFile?.()}
 				/>
-			</div>
+			</Wrapper>
 		)
 	},
 )

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type React from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import MiniActionButton from '../mini-action-button'
+import ActionButton from '../action-button'
 
 function Parent({
 	children,
@@ -26,7 +26,7 @@ describe('MiniActionButton', () => {
 
 		render(
 			<Parent onParent={onParent}>
-				<MiniActionButton icon="add" title="Select" onPress={onPress} />
+				<ActionButton icon="add" title="Select" onPress={onPress} />
 			</Parent>,
 		)
 
@@ -44,13 +44,11 @@ describe('MiniActionButton', () => {
 
 	it('renders plus/minus symbols depending on icon', () => {
 		const { rerender } = render(
-			<MiniActionButton icon="add" title="Select" onPress={() => {}} />,
+			<ActionButton icon="add" title="Select" onPress={() => {}} />,
 		)
 		expect(screen.getByRole('button', { name: 'Select' }).textContent).toBe('+')
 
-		rerender(
-			<MiniActionButton icon="close" title="Deselect" onPress={() => {}} />,
-		)
+		rerender(<ActionButton icon="close" title="Deselect" onPress={() => {}} />)
 		expect(screen.getByRole('button', { name: 'Deselect' }).textContent).toBe(
 			'×',
 		)
