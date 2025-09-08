@@ -5,7 +5,6 @@ import React, {
 	useDeferredValue,
 	useMemo,
 	useRef,
-	useState,
 } from 'react'
 import type { VscodeTreeItem } from '../../../../../types'
 import { getVsCodeApi } from '../../../utils/vscode'
@@ -32,8 +31,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	searchQuery,
 	actualTokenCounts,
 }) => {
-	// NOTE: We handle double-click via a native dblclick handler on the tree
-
 	// Defer heavy recalculations when selection/token counts change massively
 	const deferredSelectedUris = useDeferredValue(selectedUris)
 	const deferredTokenCounts = useDeferredValue(actualTokenCounts)
@@ -165,12 +162,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		})
 	}
 
-	// Optional: still listen to select to prevent warnings; no double-click logic here
-	const handleTreeSelect = useCallback((_: VscTreeSelectEvent) => {
-		// Selection is managed via row action buttons; we don't toggle here.
-		// This handler exists to keep integration with the component's API.
-	}, [])
-
 	// Handle actual double-clicks to open files in VS Code
 	const handleTreeDoubleClick = useCallback((e: React.MouseEvent) => {
 		const target = e.target as HTMLElement | null
@@ -201,7 +192,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				</div>
 			) : (
 				<vscode-tree
-					onvsc-tree-select={handleTreeSelect}
 					onDoubleClick={handleTreeDoubleClick}
 					expand-mode="singleClick"
 					indent-guides

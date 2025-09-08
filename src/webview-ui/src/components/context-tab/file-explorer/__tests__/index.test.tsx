@@ -2,11 +2,21 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { VscodeTreeItem } from '../../../../../../types'
 
+// Spy for VS Code API messaging from the webview
+const postMessageSpy = vi.fn()
+vi.mock('../../../../utils/vscode', () => ({
+    getVsCodeApi: () => ({
+        postMessage: postMessageSpy,
+        getState: () => ({}),
+        setState: () => undefined,
+    }),
+}))
+
 // Mock RowActions to provide simple buttons to trigger FileExplorer callbacks
 vi.mock('../row-actions', () => ({
-	default: ({
-		isFolder,
-		onSelectAllInSubtree,
+    default: ({
+        isFolder,
+        onSelectAllInSubtree,
 		onDeselectAllInSubtree,
 		onToggleFile,
 		fileIsSelected,
@@ -70,9 +80,10 @@ const mkTree = (): VscodeTreeItem[] => [
 	},
 ]
 
-describe('FileExplorer (index.tsx)', () => {
+	describe('FileExplorer (index.tsx)', () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		postMessageSpy.mockClear()
 	})
 	afterEach(() => {
 		vi.runOnlyPendingTimers()
@@ -180,5 +191,52 @@ describe('FileExplorer (index.tsx)', () => {
 
 		const selected = onSelect.mock.calls[0][0] as Set<string>
 		expect(selected.size).toBe(1)
+	})
+
+	it('double-clicking a file sends openFile message with fileUri', async () => {
+		render(
+			<FileExplorer
+				fileTreeData={mkTree()}
+				selectedUris={new Set()}
+				onSelect={() => {}}
+				isLoading={false}
+				searchQuery=""
+				actualTokenCounts={{}}
+			/>,
+		)
+
+		// Double-click the README.md label
+		const readme = screen.getByText('README.md')
+		fireEvent.doubleClick(readme)
+
+		expect(postMessageSpy).toHaveBeenCalled()
+		const call = postMessageSpy.mock.calls.find(
+			([msg]) => msg?.command === 'openFile',
+		) as [
+			{ command: string; payload: { fileUri: string } },
+		]
+		expect(call).toBeTruthy()
+		expect(call[0].payload.fileUri).toBe('r')
+	})
+
+	it('double-clicking a folder does not send openFile', async () => {
+		postMessageSpy.mockClear()
+		render(
+			<FileExplorer
+				fileTreeData={mkTree()}
+				selectedUris={new Set()}
+				onSelect={() => {}}
+				isLoading={false}
+				searchQuery=""
+				actualTokenCounts={{}}
+			/>,
+		)
+
+		const folderLabel = screen.getByText('src')
+		fireEvent.doubleClick(folderLabel)
+
+		expect(
+			postMessageSpy.mock.calls.some(([msg]) => msg?.command === 'openFile'),
+		).toBe(false)
 	})
 })
