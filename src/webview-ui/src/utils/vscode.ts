@@ -1,37 +1,51 @@
 // src/webview-ui/src/utils/vscode.ts
 
-// Define the structure of the VS Code API that our webview expects
-// Based on the previous 'declare const acquireVsCodeApi'
-interface VsCodeApi {
-	getState: () => unknown
-	setState: (newState: unknown) => void
-	postMessage: (message: unknown) => void
+import { createMockVsCodeApi } from './mock'
+import type { VscodeTreeItem } from '../../../types'
+
+// Keep in sync with global.d.ts
+interface VsCodeMessage {
+	command: string
+	payload?: unknown
+	// Optional fields used by some flows (e.g., tokenCountResponse)
+	requestId?: string
+	[key: string]: unknown
 }
 
-// Augment the Window interface to recognize our global variable
+interface VsCodeApi {
+	postMessage: (message: VsCodeMessage) => void
+	getState: () => unknown
+	setState: (newState: unknown) => void
+}
+
+// Augment the Window interface to recognize our globals
 declare global {
 	interface Window {
-		vscodeApi: VsCodeApi
+		vscodeApi?: VsCodeApi
+		__overwriteMockApi__?: {
+			setFileTree: (tree: VscodeTreeItem[]) => void
+			setExcludedFolders: (text: string) => void
+			sendToWebview: (message: VsCodeMessage) => void
+		}
 	}
 }
 
 // Export a function that returns the typed API
 export function getVsCodeApi(): VsCodeApi {
-	// Check if the API exists - it should be defined by the script injected in the HTML
-	if (!window.vscodeApi) {
-		// In a real scenario, you might want a more robust error handling
-		// or a mock API for development outside VS Code
-		console.error(
-			'VS Code API not found. Make sure it is initialized in the HTML.',
-		)
-		// Return a dummy object to prevent immediate crashes, though functionality will be broken
-		return {
-			getState: () => ({}),
-			setState: () => {},
-			postMessage: (message) => {
-				console.warn('VS Code API not available, message not sent:', message)
-			},
-		}
+	// 1) Already injected by VS Code HTML glue
+	if (window.vscodeApi) return window.vscodeApi
+
+	// 2) Running inside VS Code but not yet captured
+	if (typeof window.acquireVsCodeApi === 'function') {
+		const real = window.acquireVsCodeApi()
+		window.vscodeApi = real
+		return real
 	}
-	return window.vscodeApi
+
+	// 3) Browser/dev: create a mock API
+	const mock = createMockVsCodeApi()
+	window.vscodeApi = mock
+	// eslint-disable-next-line no-console
+	console.info('[MockVSCode] Using mocked VS Code API')
+	return mock
 }

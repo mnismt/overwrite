@@ -23,30 +23,75 @@ const RowActions: React.FC<RowActionsProps> = React.memo(
     fileIsSelected = false,
     onToggleFile,
   }) => {
+    const onMouseDownCapture: React.MouseEventHandler<HTMLDivElement> = (e) => {
+      // Handle the action early (capture) and stop the event so the tree doesn't toggle expand/collapse
+      e.preventDefault()
+      e.stopPropagation()
+      if (isFolder) {
+        if (selectedDescendantFiles > 0) {
+          onDeselectAllInSubtree?.()
+        } else {
+          onSelectAllInSubtree?.()
+        }
+      } else {
+        onToggleFile?.()
+      }
+    }
+
+    const stop: React.MouseEventHandler<HTMLDivElement> = (e) => {
+      // Block other tree interactions (click, dblclick, mouseup)
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
     if (isFolder) {
       if (totalDescendantFiles > 0 && selectedDescendantFiles === totalDescendantFiles) {
         return (
-          <div style={wrapperStyle}>
+          <div
+            style={wrapperStyle}
+            onMouseDownCapture={onMouseDownCapture}
+            onMouseUpCapture={stop}
+            onClickCapture={stop}
+            onDoubleClickCapture={stop}
+          >
             <MiniActionButton icon="close" title="Deselect all" onPress={() => onDeselectAllInSubtree?.()} />
           </div>
         )
       }
       if (selectedDescendantFiles > 0) {
         return (
-          <div style={wrapperStyle}>
+          <div
+            style={wrapperStyle}
+            onMouseDownCapture={onMouseDownCapture}
+            onMouseUpCapture={stop}
+            onClickCapture={stop}
+            onDoubleClickCapture={stop}
+          >
             <MiniActionButton icon="close" title="Deselect all" onPress={() => onDeselectAllInSubtree?.()} />
           </div>
         )
       }
       return (
-        <div style={wrapperStyle}>
+        <div
+          style={wrapperStyle}
+          onMouseDownCapture={onMouseDownCapture}
+          onMouseUpCapture={stop}
+          onClickCapture={stop}
+          onDoubleClickCapture={stop}
+        >
           <MiniActionButton icon="add" title="Select all" onPress={() => onSelectAllInSubtree?.()} />
         </div>
       )
     }
 
     return (
-      <div style={wrapperStyle}>
+      <div
+        style={wrapperStyle}
+        onMouseDownCapture={onMouseDownCapture}
+        onMouseUpCapture={stop}
+        onClickCapture={stop}
+        onDoubleClickCapture={stop}
+      >
         <MiniActionButton
           icon={fileIsSelected ? 'close' : 'add'}
           title={fileIsSelected ? 'Deselect' : 'Select'}

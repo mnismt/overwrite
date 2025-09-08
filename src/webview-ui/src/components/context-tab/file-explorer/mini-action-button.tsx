@@ -37,9 +37,25 @@ const MiniActionButton: React.FC<MiniActionButtonProps> = React.memo(
 				onMouseEnter={() => setHovered(true)}
 				onMouseLeave={() => setHovered(false)}
 				onMouseDown={(e) => {
+					// Trigger the action immediately but avoid affecting the tree item
 					e.preventDefault()
 					e.stopPropagation()
 					onPress()
+				}}
+				onMouseUp={(e) => {
+					// Some trees toggle on mouseup; stop propagation here as well
+					e.preventDefault()
+					e.stopPropagation()
+				}}
+				onClick={(e) => {
+					// Prevent the click from bubbling to the tree row which can toggle expand/collapse
+					e.preventDefault()
+					e.stopPropagation()
+				}}
+				onDoubleClick={(e) => {
+					// Also guard against double-click expanding folders
+					e.preventDefault()
+					e.stopPropagation()
 				}}
 			>
 				{symbol}

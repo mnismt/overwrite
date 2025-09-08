@@ -34,6 +34,7 @@ import type {
 	VscodeTree,
 	VscodeTreeItem as VscodeTreeItemElement,
 } from '@vscode-elements/elements'
+import type { VscodeTreeItem } from '../../../types'
 import type { VscCollapsibleToggleEvent } from '@vscode-elements/elements/dist/vscode-collapsible/vscode-collapsible'
 import type { VscContextMenuSelectEvent } from '@vscode-elements/elements/dist/vscode-context-menu/vscode-context-menu'
 import type {
@@ -126,5 +127,11 @@ interface VsCodeApi {
 declare global {
 	interface Window {
 		acquireVsCodeApi: () => VsCodeApi
+		vscodeApi?: VsCodeApi
+		__overwriteMockApi__?: {
+			setFileTree: (tree: VscodeTreeItem[]) => void
+			setExcludedFolders: (text: string) => void
+			sendToWebview: (message: VsCodeMessage) => void
+		}
 	}
 }
