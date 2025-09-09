@@ -79,7 +79,7 @@ The extension follows a strict frontend-backend architecture:
 ### VS Code Elements Integration
 - Use `@vscode-elements/elements` components directly in JSX
 - Type definitions in `src/webview-ui/src/global.d.ts`
-- Use standard HTML attributes (`class`, `for`) for web components
+- In React, use `className` and `htmlFor` on web components — React maps them to `class` and `for` at runtime. This matches our typings in `global.d.ts` (use `className`, not `class`).
 - Custom events use `on`-prefixed props (e.g., `onvsc-tabs-select`)
 
 ### Message Passing Patterns
@@ -114,3 +114,18 @@ The extension follows a strict frontend-backend architecture:
 ### Package Management
 - Uses PNPM as package manager
 - Webview UI has its own package.json and dependencies
+
+## When you need to call tools from the shell, use this rubric
+
+When you need to call tools from the shell, use this rubric:
+
+- Find files: `fd`
+- Find text: `rg` (ripgrep)
+- Find code structure (TS/TSX): `ast-grep`
+  - Default to TypeScript:
+    - `.ts`: `ast-grep --lang ts -p '<pattern>'`
+    - `.tsx` (React): `ast-grep --lang tsx -p '<pattern>'`
+  - For other languages, set `--lang` appropriately (e.g., `--lang rust`)
+- Select among matches: pipe to `fzf`
+- JSON: `jq`
+- YAML/XML: `yq`

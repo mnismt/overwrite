@@ -44,7 +44,7 @@ const RowActions: React.FC<RowActionsProps> = React.memo(
 
 		const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 			<div
-				style={{ display: 'flex', gap: 4 }}
+				className="flex gap-1"
 				onMouseDownCapture={onMouseDownCapture}
 				onMouseUpCapture={stop}
 				onClickCapture={stop}

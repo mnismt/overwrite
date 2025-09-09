@@ -161,7 +161,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, [onRefresh, excludedFolders])
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+		<div className="flex flex-col h-full">
 			{/* Excluded Folders Section */}
 			<ExcludedFolders
 				excludedFolders={excludedFolders}
@@ -169,20 +169,14 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			/>
 
 			{/* Explorer Top Bar */}
-			<div
-				style={{
-					display: 'flex',
-					marginBottom: '10px',
-					alignItems: 'center',
-				}}
-			>
+			<div className="mb-2 flex items-center">
 				<vscode-button onClick={handleRefreshClick} disabled={isLoading}>
 					<span slot="start" className="codicon codicon-refresh" />
 					{isLoading ? 'Loading...' : 'Refresh'}
 				</vscode-button>
 				<vscode-textfield
 					placeholder="Search files..."
-					style={{ marginLeft: '10px', flexGrow: 1 }}
+					className="ml-2 flex-1"
 					value={searchQuery}
 					onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
 				>

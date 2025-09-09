@@ -41,42 +41,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 			key={item.value}
 			data-uri={item.value}
 			{...(isOpen ? { open: true } : {})}
-			style={{ width: '100%' }}
+			className="w-full"
 		>
 			<vscode-icon name="folder" slot="icon-branch"></vscode-icon>
 			<vscode-icon name="folder-opened" slot="icon-branch-opened"></vscode-icon>
 			<vscode-icon name="file" slot="icon-leaf"></vscode-icon>
-			<div
-				style={{
-					display: 'flex',
-					alignItems: 'center',
-					width: '100%',
-				}}
-			>
-				<div
-					style={{
-						display: 'flex',
-						alignItems: 'center',
-						flex: 1,
-						minWidth: 0,
-					}}
-				>
-					<span
-						style={{
-							overflow: 'hidden',
-							textOverflow: 'ellipsis',
-						}}
-					>
-						{item.label}
-					</span>
+			<div className="flex items-center w-full">
+				<div className="flex items-center flex-1 min-w-0">
+					<span className="truncate">{item.label}</span>
 				</div>
-				<div
-					style={{
-						display: 'flex',
-						alignItems: 'center',
-						gap: 8,
-					}}
-				>
+				<div className="flex items-center gap-2">
 					<RowActions
 						isFolder={isFolder}
 						totalDescendantFiles={totalDescendantFiles}

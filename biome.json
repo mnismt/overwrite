@@ -7,7 +7,9 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"ignore": []
+		"ignore": [
+			"src/webview-ui/src/index.css"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -38,6 +40,12 @@
 			}
 		}
 	},
+	"overrides": [
+		{
+			"include": ["src/webview-ui/src/**/*.css"],
+			"linter": { "enabled": false }
+		}
+	],
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "single",

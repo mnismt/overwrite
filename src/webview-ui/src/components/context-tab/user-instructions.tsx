@@ -8,9 +8,7 @@ const UserInstructions: React.FC<UserInstructionsProps> = ({
 	onUserInstructionsChange,
 }) => {
 	return (
-		<div
-			style={{ marginTop: '10px', display: 'flex', flexDirection: 'column' }}
-		>
+		<div className="mt-2 flex flex-col">
 			<label htmlFor="user-instructions">User Instructions:</label>
 			<vscode-textarea
 				id="user-instructions"
@@ -22,7 +20,7 @@ const UserInstructions: React.FC<UserInstructionsProps> = ({
 					const target = e.target as HTMLInputElement
 					onUserInstructionsChange(target.value)
 				}}
-				style={{ marginTop: '5px', width: '100%', minHeight: '100px' }}
+				className="mt-1 w-full min-h-[100px]"
 			/>
 		</div>
 	)

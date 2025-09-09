@@ -178,16 +178,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	}, [])
 
 	return (
-		<div style={{ flexGrow: 1, overflow: 'auto', marginBottom: '10px' }}>
+		<div className="flex-1 overflow-auto mb-2">
 			{isLoading ? (
-				<div
-					style={{
-						display: 'flex',
-						justifyContent: 'center',
-						alignItems: 'center',
-						height: '100%',
-					}}
-				>
+				<div className="flex justify-center items-center h-full">
 					<vscode-progress-ring />
 				</div>
 			) : (

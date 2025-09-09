@@ -28,10 +28,10 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 	}
 
 	return (
-		<div style={{ marginBottom: '10px', marginTop: '10px' }}>
+		<div className="my-2">
 			<label
 				htmlFor="excluded-folders"
-				style={{ fontSize: '0.9em', marginBottom: '5px', display: 'block' }}
+				className="text-sm mb-1 block"
 			>
 				Excluded Folders (one per line, similar to .gitignore):
 			</label>
@@ -47,7 +47,7 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 					setLocalValue(next)
 					scheduleSave(next)
 				}}
-				style={{ width: '100%', minHeight: '60px' }}
+				className="w-full min-h-[60px]"
 			/>
 		</div>
 	)

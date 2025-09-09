@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+
+/* Map VS Code theme tokens to Tailwind color palette (v4 @theme) */
+@theme {
+  /* Base foreground/background */
+  --color-fg: var(--vscode-foreground);
+  --color-bg: var(--vscode-editor-background);
+  --color-muted: var(--vscode-descriptionForeground);
+
+  /* Status/severity */
+  --color-error: var(--vscode-errorForeground);
+  --color-warn-bg: var(--vscode-inputValidation-warningBackground);
+  --color-warn-border: var(--vscode-inputValidation-warningBorder);
+
+  /* Buttons */
+  --color-button: var(--vscode-button-background);
+  --color-button-hover: var(--vscode-button-hoverBackground);
+  --color-button-foreground: var(--vscode-button-foreground);
+
+  /* Generic borders/surfaces */
+  --color-border: var(--vscode-panel-border, var(--vscode-contrastBorder));
+}
+
+/* Default surface text alignment to VS Code, keep bg transparent for webview */
+:root {
+  color: var(--vscode-foreground);
+  background: transparent;
+  font-family: var(--vscode-editor-font-family, ui-sans-serif, system-ui);
+}

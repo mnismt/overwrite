@@ -79,7 +79,7 @@ The extension follows a strict frontend-backend architecture:
 ### VS Code Elements Integration
 - Use `@vscode-elements/elements` components directly in JSX
 - Type definitions in `src/webview-ui/src/global.d.ts`
-- Use standard HTML attributes (`class`, `for`) for web components
+- In React, use `className` and `htmlFor` on web components — React maps them to `class` and `for` at runtime. This matches our typings in `global.d.ts` (use `className`, not `class`).
 - Custom events use `on`-prefixed props (e.g., `onvsc-tabs-select`)
 
 ### Message Passing Patterns
@@ -89,10 +89,10 @@ The extension follows a strict frontend-backend architecture:
 
 ### Testing
 - Webview tests (preferred for verification): `pnpm -C src/webview-ui test --run`
-  - Runs Vitest against the React webview UI.
-  - Use this command when verifying functionality in this repo.
+- Runs Vitest against the React webview UI.
+- Use this command when verifying functionality in this repo.
 - Backend/extension tests are located in `src/test/suite/` and use Mocha with the VS Code runner.
-  - Do not run backend/VS Code-side tests as part of routine verification in this environment.
+- Do not run backend/VS Code-side tests as part of routine verification in this environment.
 
 ### Build Process
 - Main extension: ESBuild (configured in `esbuild.js`)
@@ -114,3 +114,25 @@ The extension follows a strict frontend-backend architecture:
 ### Package Management
 - Uses PNPM as package manager
 - Webview UI has its own package.json and dependencies
+
+### Tailwind CSS in Webview UI
+- Tailwind v4 is used in `src/webview-ui`. Import once in [`src/webview-ui/src/index.css`](src/webview-ui/src/index.css) via `@import 'tailwindcss';`.
+- VS Code theme tokens are mapped to Tailwind colors using `@theme` in that file:
+  - Examples: `--color-fg`, `--color-bg`, `--color-muted`, `--color-error`, `--color-button`, `--color-button-hover`, `--color-button-foreground`, `--color-warn-bg`, `--color-warn-border`.
+  - Use utilities like `text-fg`, `text-muted`, `text-error`, `bg-bg`, `bg-warn-bg`, `border-warn-border`, etc.
+- Prefer Tailwind utilities over inline styles for layout/spacing; keep inline styles only where dynamic token logic is needed.
+
+## When you need to call tools from the shell, use this rubric
+
+When you need to call tools from the shell, use this rubric:
+
+- Find files: `fd`
+- Find text: `rg` (ripgrep)
+- Find code structure (TS/TSX): `ast-grep`
+  - Default to TypeScript:
+    - `.ts`: `ast-grep --lang ts -p '<pattern>'`
+    - `.tsx` (React): `ast-grep --lang tsx -p '<pattern>'`
+  - For other languages, set `--lang` appropriately (e.g., `--lang rust`)
+- Select among matches: pipe to `fzf`
+- JSON: `jq`
+- YAML/XML: `yq`

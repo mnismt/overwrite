@@ -89,6 +89,15 @@ The Apply Tab in the Webview Panel is dedicated to applying changes suggested by
   - delete: Use vscode.workspace.fs.delete to delete the file at the specified relative path. Use { recursive: true, useTrash: true } options for safety.
 - Requirement 2.2.5: Feedback & Error Handling: Provide clear feedback using VS Code notifications (vscode.window.showInformationMessage, vscode.window.showWarningMessage, vscode.window.showErrorMessage) and potentially status updates within the Webview Panel. Report success/failure for each action.
 
+**2.3. Setting (Webview Panel - Setting Tab)**
+
+Status: Todo
+
+The setting tab in the webview panel is dedicated to setting the extension.
+
+- Requirement 2.3.1: Support reading .gitignore (checkbox)
+- Requirement 2.3.2: Support enable/disable token usages per file
+
 **3. User Interface (UI) / User Experience (UX)**
 
 - Integration: Leverage standard VS Code UI components: Activity Bar, Webview Panel, Status Bar, Notifications, Command Palette.

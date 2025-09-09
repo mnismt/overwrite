@@ -15,44 +15,26 @@ const TokenStats: React.FC<TokenStatsProps> = ({
 	return (
 		<>
 			{/* Token Count Information */}
-			<div
-				style={{
-					marginTop: '10px',
-					fontSize: '0.9em',
-					color: 'var(--vscode-descriptionForeground)',
-				}}
-			>
-				<div>File tokens (actual): {tokenStats.fileTokensEstimate}</div>
-				<div>User instruction tokens: {tokenStats.userInstructionsTokens}</div>
-				<div>Total tokens (Copy Context): {tokenStats.totalTokens}</div>
-				<div>
+			<div className="mt-2 text-xs text-muted">
+				<p>File tokens (actual): {tokenStats.fileTokensEstimate}</p>
+				<p>User instruction tokens: {tokenStats.userInstructionsTokens}</p>
+				<p>Total tokens (Copy Context): {tokenStats.totalTokens}</p>
+				<p>
 					Total tokens (Copy Context + XML): {tokenStats.totalWithXmlTokens}
-				</div>
+				</p>
 			</div>
 
 			{/* Skipped Files Information */}
 			{skippedFiles.length > 0 && (
-				<div
-					style={{
-						marginTop: '10px',
-						fontSize: '0.8em',
-						color: 'var(--vscode-errorForeground)',
-						backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
-						border: '1px solid var(--vscode-inputValidation-warningBorder)',
-						borderRadius: '3px',
-						padding: '8px',
-					}}
-				>
-					<div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
+				<div className="mt-2 text-xs text-error bg-warn-bg border border-warn-border rounded px-2 py-2">
+					<p className="font-semibold mb-1">
 						⚠️ Skipped Files ({skippedFiles.length}):
-					</div>
+					</p>
 					{skippedFiles.map((file, index) => (
-						<div key={index} style={{ marginBottom: '2px' }}>
-							<span style={{ fontFamily: 'monospace' }}>
-								{file.uri.split('/').pop()}
-							</span>
+						<div key={index} className="mb-0.5">
+							<span className="font-mono">{file.uri.split('/').pop()}</span>
 							{' - '}
-							<span style={{ fontStyle: 'italic' }}>
+							<span className="italic">
 								{file.reason === 'binary'
 									? 'Binary file'
 									: file.reason === 'too-large'
@@ -60,10 +42,7 @@ const TokenStats: React.FC<TokenStatsProps> = ({
 										: 'Error'}
 							</span>
 							{file.message && (
-								<span style={{ color: 'var(--vscode-descriptionForeground)' }}>
-									{' '}
-									({file.message})
-								</span>
+								<span className="text-muted"> ({file.message})</span>
 							)}
 						</div>
 					))}
