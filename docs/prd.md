@@ -59,7 +59,7 @@ The Context Tab in the Webview Panel is the primary interface for selecting file
   - File Operations: All vscode.workspace.fs operations and vscode.workspace.applyEdit must target files within the correct workspace folder.
   - Selection Persistence: The selection state should be maintained correctly across multiple roots.
   - Search/Filter: The search/filter functionality should apply across all root folders
-- Requirement 2.1.14: Allow exclude/include folder pattern.
+- Requirement 2.1.14: Allow exclude/include folder pattern (deprecated, moved to Setting Tab in requirement 2.3.0)
   - The extension should support a textarea below the user instructions textarea to allow the user to input the exclude folder pattern.
   - The exclude folder pattern is a simple text file with one pattern per line, similar to the .gitignore file, which is used to exclude files and folders from the file tree.
   - The include folder pattern is a simple text file with one pattern per line, similar to the .gitignore file, which is used to always include files and folders from the file tree after a refresh.
@@ -95,6 +95,7 @@ Status: Todo
 
 The setting tab in the webview panel is dedicated to setting the extension.
 
+- Requirement 2.3.0: Move the Excluded folders textarea to the Setting Tab (Requirement 2.1.14)
 - Requirement 2.3.1: Support reading .gitignore (checkbox)
 - Requirement 2.3.2: Support enable/disable token usages per file
 

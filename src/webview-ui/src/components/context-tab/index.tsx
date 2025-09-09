@@ -2,40 +2,35 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from '../../../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 import CopyActions from './copy-actions'
-import ExcludedFolders from './excluded-folders'
 import FileExplorer from './file-explorer/index'
 import TokenStats from './token-stats'
 import UserInstructions from './user-instructions'
 import { countTokens } from './utils'
 
 interface ContextTabProps {
-	selectedCount: number
-	onCopy: ({
-		includeXml,
-		userInstructions,
-	}: {
-		includeXml: boolean
-		userInstructions: string
-	}) => void
-	fileTreeData: VscodeTreeItem[]
-	selectedUris: Set<string>
-	onSelect: (uris: Set<string>) => void
-	onRefresh: (excludedFolders?: string) => void
-	isLoading: boolean
-	excludedFolders: string
-	onSaveExcludedFolders: (excludedFolders: string) => void
+    selectedCount: number
+    onCopy: ({
+        includeXml,
+        userInstructions,
+    }: {
+        includeXml: boolean
+        userInstructions: string
+    }) => void
+    fileTreeData: VscodeTreeItem[]
+    selectedUris: Set<string>
+    onSelect: (uris: Set<string>) => void
+    onRefresh: (excludedFolders?: string) => void
+    isLoading: boolean
 }
 
 const ContextTab: React.FC<ContextTabProps> = ({
-	selectedCount,
-	onCopy,
-	fileTreeData,
-	selectedUris,
-	onSelect,
-	onRefresh,
-	isLoading,
-	excludedFolders,
-	onSaveExcludedFolders,
+    selectedCount,
+    onCopy,
+    fileTreeData,
+    selectedUris,
+    onSelect,
+    onRefresh,
+    isLoading,
 }) => {
 	const [userInstructions, setUserInstructions] = useState('')
 	const [searchQuery, setSearchQuery] = useState('')
@@ -152,26 +147,21 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		return () => window.removeEventListener('message', handleMessage)
 	}, [actualTokenCounts])
 
-	const handleRefreshClick = useCallback(() => {
-		// Reset skipped files and token counts when refreshing to clear any deleted files
-		setSkippedFiles([])
-		setActualTokenCounts({})
-		// Call the refresh function
-		onRefresh(excludedFolders)
-	}, [onRefresh, excludedFolders])
+    const handleRefreshClick = useCallback(() => {
+        // Reset skipped files and token counts when refreshing to clear any deleted files
+        setSkippedFiles([])
+        setActualTokenCounts({})
+        // Call the refresh function (use persisted excluded folders on backend)
+        onRefresh()
+    }, [onRefresh])
 
 	return (
-		<div className="flex flex-col h-full gap-y-1">
-			{/* Excluded Folders Section */}
-			<ExcludedFolders
-				excludedFolders={excludedFolders}
-				onSaveExcludedFolders={onSaveExcludedFolders}
-			/>
+        <div className="flex flex-col h-full gap-y-1">
 
-			{/* Explorer Top Bar */}
-			<div className="mb-2 flex items-center">
-				<vscode-button onClick={handleRefreshClick} disabled={isLoading}>
-					<span slot="start" className="codicon codicon-refresh" />
+            {/* Explorer Top Bar */}
+            <div className="mb-2 flex items-center">
+                <vscode-button onClick={handleRefreshClick} disabled={isLoading}>
+                    <span slot="start" className="codicon codicon-refresh" />
 					{isLoading ? 'Loading...' : 'Refresh'}
 				</vscode-button>
 				<vscode-textfield

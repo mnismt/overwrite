@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-
+@import 'tailwind-animate-css';
 /* Map VS Code theme tokens to Tailwind color palette (v4 @theme) */
 @theme {
   /* Base foreground/background */

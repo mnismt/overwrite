@@ -4,6 +4,7 @@ import type { VscodeTreeItem } from '../../types' // Import tree item type from 
 import './App.css' // We'll add styles later
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
+import SettingsTab from './components/settings-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
 interface VsCodeMessage {
@@ -103,16 +104,16 @@ function App() {
 		[sendMessage],
 	)
 
-	// Save excluded folders handler
-	const handleSaveExcludedFolders = useCallback(
-		(newExcludedFolders: string) => {
-			setExcludedFolders(newExcludedFolders)
-			sendMessage('saveExcludedFolders', {
-				excludedFolders: newExcludedFolders,
-			})
-		},
-		[sendMessage],
-	)
+    // Save excluded folders handler
+    const handleSaveExcludedFolders = useCallback(
+        (newExcludedFolders: string) => {
+            setExcludedFolders(newExcludedFolders)
+            sendMessage('saveExcludedFolders', {
+                excludedFolders: newExcludedFolders,
+            })
+        },
+        [sendMessage],
+    )
 
 	// Selection handler (assuming it will be needed in the combined ContextTab)
 	// Renamed paths to uris, expects a Set of URI strings
@@ -153,40 +154,48 @@ function App() {
 
 	return (
 		<main>
-			<vscode-tabs
-				selected-index={activeTabIndex}
-				onvsc-tabs-select={handleTabChange}
-			>
-				<vscode-tab-header slot="header" id="context-tab">
-					Context
-				</vscode-tab-header>
-				<vscode-tab-panel id="context-tab-panel">
-					<ContextTab
-						// Props for original Context functionality
-						selectedCount={selectedUris.size} // Use selectedUris
-						onCopy={handleCopy}
-						// Props for Explorer functionality
-						fileTreeData={fileTreeData}
-						selectedUris={selectedUris} // Pass selectedUris
-						onSelect={handleSelect} // Pass the handler
-						onRefresh={handleRefresh}
-						isLoading={isLoading}
-						// Props for excluded folders persistence
-						excludedFolders={excludedFolders}
-						onSaveExcludedFolders={handleSaveExcludedFolders}
-					/>
-				</vscode-tab-panel>
+            <vscode-tabs
+                selected-index={activeTabIndex}
+                onvsc-tabs-select={handleTabChange}
+            >
+                <vscode-tab-header slot="header" id="context-tab">
+                    Context
+                </vscode-tab-header>
+                <vscode-tab-panel id="context-tab-panel">
+                    <ContextTab
+                        // Props for original Context functionality
+                        selectedCount={selectedUris.size} // Use selectedUris
+                        onCopy={handleCopy}
+                        // Props for Explorer functionality
+                        fileTreeData={fileTreeData}
+                        selectedUris={selectedUris} // Pass selectedUris
+                        onSelect={handleSelect} // Pass the handler
+                        onRefresh={handleRefresh}
+                        isLoading={isLoading}
+                    />
+                </vscode-tab-panel>
 
 				{/* Apply Tab */}
 				<vscode-tab-header slot="header" id="apply-tab">
 					Apply
 				</vscode-tab-header>
-				<vscode-tab-panel id="apply-tab-panel">
-					<ApplyTab onApply={handleApply} />
-				</vscode-tab-panel>
-			</vscode-tabs>
-		</main>
-	)
+                <vscode-tab-panel id="apply-tab-panel">
+                    <ApplyTab onApply={handleApply} />
+                </vscode-tab-panel>
+
+                {/* Settings Tab */}
+                <vscode-tab-header slot="header" id="settings-tab">
+                    Settings
+                </vscode-tab-header>
+                <vscode-tab-panel id="settings-tab-panel">
+                    <SettingsTab
+                        excludedFolders={excludedFolders}
+                        onSaveExcludedFolders={handleSaveExcludedFolders}
+                    />
+                </vscode-tab-panel>
+            </vscode-tabs>
+        </main>
+    )
 }
 
 export default App

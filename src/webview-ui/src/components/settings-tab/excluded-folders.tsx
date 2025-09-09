@@ -29,10 +29,7 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 
 	return (
 		<div className="my-2">
-			<label
-				htmlFor="excluded-folders"
-				className="text-sm mb-1 block"
-			>
+			<label htmlFor="excluded-folders" className="text-xs mb-1 block">
 				Excluded Folders (one per line, similar to .gitignore):
 			</label>
 			<vscode-textarea
