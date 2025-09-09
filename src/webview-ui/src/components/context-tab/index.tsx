@@ -161,7 +161,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, [onRefresh, excludedFolders])
 
 	return (
-		<div className="flex flex-col h-full">
+		<div className="flex flex-col h-full gap-y-1">
 			{/* Excluded Folders Section */}
 			<ExcludedFolders
 				excludedFolders={excludedFolders}
@@ -193,6 +193,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				searchQuery={searchQuery}
 				actualTokenCounts={actualTokenCounts}
 			/>
+
+			<vscode-divider />
 
 			{/* Copy Actions and Selected Count */}
 			<CopyActions

@@ -22,10 +22,9 @@ const CopyActions: React.FC<CopyActionsProps> = ({
 
 	return (
 		<>
-			<vscode-divider />
-			<div>Selected files: {selectedCount}</div>
+			<p>Selected files: {selectedCount}</p>
 
-			<div className="mt-4 flex gap-2">
+			<div className="flex gap-2">
 				<vscode-button onClick={handleCopyContextClick}>
 					Copy Context
 				</vscode-button>
