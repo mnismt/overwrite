@@ -66,6 +66,11 @@ The extension follows a strict frontend-backend architecture:
 - Token counting integration
 - XML response parsing and application
 
+**Settings Tab** (`src/webview-ui/src/components/settings-tab/`):
+- Preferences UI using a native `<form>` with a single submit handler.
+- Draft object state with dirty tracking; submit persists via `onSaveExcludedFolders` and shows a short confirmation.
+- Fields have `name` and accessible labels; do not set `form` on `<vscode-button>` (use `type="submit"`).
+
 **Services** (`src/services/`):
 - `token-counter.ts` - Token estimation using js-tiktoken
 - Caching mechanism for performance
@@ -93,6 +98,18 @@ The extension follows a strict frontend-backend architecture:
   - Prefer this command to validate changes; do not rely on backend tests here.
 - Backend/extension tests live under `src/test/suite/` and run with the VS Code test runner.
   - Avoid running backend/VS Code-side tests in this environment.
+
+### Webview Verification (Playwright MCP)
+Use Playwright MCP to validate UI flows directly in the browser against the dev server with mocked data.
+
+- Open app: `await page.goto('http://localhost:5173/')` (the server is kept running for this workspace).
+- Mock layer: `src/webview-ui/src/utils/mock.ts` provides a fake VS Code API, file tree, and token counts; no filesystem writes occur.
+- Interactions:
+  - Navigate tabs with `page.getByRole('tab', { name: '<Tab Name>' }).click()`.
+  - Use role-based selectors for form controls and buttons.
+  - Example validation (Settings): edit the Excluded Folders textarea → Save enables → click Save → transient “Settings saved” appears → Save disables → file tree refresh message is sent (mock responds).
+- Expected console messages: VS Code Elements dev warnings are normal in the playground.
+- Reminder: Do not call `vscode.commands` from webview code; use message passing only.
 
 ### Build Process
 - Main extension: ESBuild (configured in `esbuild.js`)

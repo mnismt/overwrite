@@ -108,9 +108,12 @@ function App() {
     const handleSaveExcludedFolders = useCallback(
         (newExcludedFolders: string) => {
             setExcludedFolders(newExcludedFolders)
+            // persist to extension
             sendMessage('saveExcludedFolders', {
                 excludedFolders: newExcludedFolders,
             })
+            // immediately refresh file tree using the saved exclusions
+            sendMessage('getFileTree', { excludedFolders: newExcludedFolders })
         },
         [sendMessage],
     )

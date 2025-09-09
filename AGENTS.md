@@ -66,6 +66,11 @@ The extension follows a strict frontend-backend architecture:
 - Token counting integration
 - XML response parsing and application
 
+**Settings Tab** (`src/webview-ui/src/components/settings-tab/`):
+- Form-based UI for user preferences (currently “Excluded Folders”).
+- Uses a native `<form>` with a single submit handler, a `draft` state object, and dirty tracking.
+- Fields expose `name` and accessible labeling; avoid setting `form` attribute on `<vscode-button>` (use `type="submit"`).
+
 **Services** (`src/services/`):
 - `token-counter.ts` - Token estimation using js-tiktoken
 - Caching mechanism for performance
@@ -136,3 +141,25 @@ When you need to call tools from the shell, use this rubric:
 - Select among matches: pipe to `fzf`
 - JSON: `jq`
 - YAML/XML: `yq`
+
+## Webview Verification (Playwright MCP)
+
+When you change anything in `src/webview-ui/`, verify behavior using Playwright MCP against the always-running dev server. The webview boots with a mocked VS Code API so you can exercise flows without the extension host.
+
+- Open the app
+  - Navigate with Playwright MCP to `http://localhost:5173/`.
+  - The mock API lives at `src/webview-ui/src/utils/mock.ts` and provides deterministic data (file tree, excluded folders, token counts). No real filesystem operations occur.
+
+- Basic smoke steps
+  - Switch tabs via role selectors, e.g., `page.getByRole('tab', { name: 'Settings' }).click()`.
+  - Interact with inputs and buttons using role-based queries; verify state changes (disabled/enabled, text content) and UI feedback.
+  - Example (Settings): type into the Excluded Folders textarea, confirm the `Save` button enables, click Save, observe the transient “Settings saved” indicator, and ensure the button disables again.
+
+- File tree checks
+  - The Context tab shows the mock file tree generated in `buildMockFileTree()` inside `mock.ts`.
+  - After saving settings that affect exclusions, the UI posts `getFileTree` and refreshes using the mock; validate the message flow only (no real files change).
+
+- Console noise
+  - You may see VS Code Elements warnings about codicons in dev; these are expected in the browser playground.
+
+- Do not use `vscode.commands` in the webview; all extension interactions occur via `getVsCodeApi().postMessage()` and are handled in `src/providers/file-explorer/index.ts`.
