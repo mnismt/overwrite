@@ -20,7 +20,7 @@ const ResponseTextarea: React.FC<ResponseTextareaProps> = ({
 			<vscode-textarea
 				id="llm-response-textarea"
 				placeholder="Paste the full XML response from the AI here..."
-				style={{ width: '100%', minHeight: '300px' }}
+				className="w-full"
 				rows={15}
 				value={responseText}
 				onInput={onTextChange}

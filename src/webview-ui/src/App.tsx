@@ -22,6 +22,7 @@ function App() {
 	// selectedPaths renamed to selectedUris, stores Set of URI strings
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
+	const [errorText, setErrorText] = useState<string | null>(null) // Graceful error banner
 	const [excludedFolders, setExcludedFolders] = useState<string>(
 		'node_modules\n.git\ndist\nout\n.vscode-test',
 	) // Persisted excluded folders
@@ -56,8 +57,23 @@ function App() {
 					setIsLoading(false)
 					break
 				case 'showError':
-					// TODO: Display error message more gracefully
-					console.error('Error from extension:', message.payload)
+					// Display error message in a dismissible banner
+					{
+						const payload = message.payload as unknown
+						let text = 'An unexpected error occurred.'
+						if (typeof payload === 'string') {
+							text = payload
+						} else if (
+							payload &&
+							typeof payload === 'object' &&
+							'message' in (payload as Record<string, unknown>) &&
+							typeof (payload as { message?: unknown }).message === 'string'
+						) {
+							text = String((payload as { message: string }).message)
+						}
+						setErrorText(text)
+						console.error('Error from extension:', text)
+					}
 					setIsLoading(false) // Stop loading on error too
 					break
 				case 'updateExcludedFolders': {
@@ -104,19 +120,19 @@ function App() {
 		[sendMessage],
 	)
 
-    // Save excluded folders handler
-    const handleSaveExcludedFolders = useCallback(
-        (newExcludedFolders: string) => {
-            setExcludedFolders(newExcludedFolders)
-            // persist to extension
-            sendMessage('saveExcludedFolders', {
-                excludedFolders: newExcludedFolders,
-            })
-            // immediately refresh file tree using the saved exclusions
-            sendMessage('getFileTree', { excludedFolders: newExcludedFolders })
-        },
-        [sendMessage],
-    )
+	// Save excluded folders handler
+	const handleSaveExcludedFolders = useCallback(
+		(newExcludedFolders: string) => {
+			setExcludedFolders(newExcludedFolders)
+			// persist to extension
+			sendMessage('saveExcludedFolders', {
+				excludedFolders: newExcludedFolders,
+			})
+			// immediately refresh file tree using the saved exclusions
+			sendMessage('getFileTree', { excludedFolders: newExcludedFolders })
+		},
+		[sendMessage],
+	)
 
 	// Selection handler (assuming it will be needed in the combined ContextTab)
 	// Renamed paths to uris, expects a Set of URI strings
@@ -157,48 +173,48 @@ function App() {
 
 	return (
 		<main>
-            <vscode-tabs
-                selected-index={activeTabIndex}
-                onvsc-tabs-select={handleTabChange}
-            >
-                <vscode-tab-header slot="header" id="context-tab">
-                    Context
-                </vscode-tab-header>
-                <vscode-tab-panel id="context-tab-panel">
-                    <ContextTab
-                        // Props for original Context functionality
-                        selectedCount={selectedUris.size} // Use selectedUris
-                        onCopy={handleCopy}
-                        // Props for Explorer functionality
-                        fileTreeData={fileTreeData}
-                        selectedUris={selectedUris} // Pass selectedUris
-                        onSelect={handleSelect} // Pass the handler
-                        onRefresh={handleRefresh}
-                        isLoading={isLoading}
-                    />
-                </vscode-tab-panel>
+			<vscode-tabs
+				selected-index={activeTabIndex}
+				onvsc-tabs-select={handleTabChange}
+			>
+				<vscode-tab-header slot="header" id="context-tab">
+					Context
+				</vscode-tab-header>
+				<vscode-tab-panel id="context-tab-panel">
+					<ContextTab
+						// Props for original Context functionality
+						selectedCount={selectedUris.size} // Use selectedUris
+						onCopy={handleCopy}
+						// Props for Explorer functionality
+						fileTreeData={fileTreeData}
+						selectedUris={selectedUris} // Pass selectedUris
+						onSelect={handleSelect} // Pass the handler
+						onRefresh={handleRefresh}
+						isLoading={isLoading}
+					/>
+				</vscode-tab-panel>
 
 				{/* Apply Tab */}
 				<vscode-tab-header slot="header" id="apply-tab">
 					Apply
 				</vscode-tab-header>
-                <vscode-tab-panel id="apply-tab-panel">
-                    <ApplyTab onApply={handleApply} />
-                </vscode-tab-panel>
+				<vscode-tab-panel id="apply-tab-panel">
+					<ApplyTab onApply={handleApply} />
+				</vscode-tab-panel>
 
-                {/* Settings Tab */}
-                <vscode-tab-header slot="header" id="settings-tab">
-                    Settings
-                </vscode-tab-header>
-                <vscode-tab-panel id="settings-tab-panel">
-                    <SettingsTab
-                        excludedFolders={excludedFolders}
-                        onSaveExcludedFolders={handleSaveExcludedFolders}
-                    />
-                </vscode-tab-panel>
-            </vscode-tabs>
-        </main>
-    )
+				{/* Settings Tab */}
+				<vscode-tab-header slot="header" id="settings-tab">
+					Settings
+				</vscode-tab-header>
+				<vscode-tab-panel id="settings-tab-panel">
+					<SettingsTab
+						excludedFolders={excludedFolders}
+						onSaveExcludedFolders={handleSaveExcludedFolders}
+					/>
+				</vscode-tab-panel>
+			</vscode-tabs>
+		</main>
+	)
 }
 
 export default App

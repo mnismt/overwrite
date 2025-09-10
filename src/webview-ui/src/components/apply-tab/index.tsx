@@ -62,7 +62,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({ onApply }) => {
 	)
 
 	return (
-		<div>
+		<div className="py-2">
 			<ResponseTextarea
 				responseText={responseText}
 				onTextChange={handleTextChange}

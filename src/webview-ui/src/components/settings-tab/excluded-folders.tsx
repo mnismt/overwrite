@@ -19,8 +19,12 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 	}, [excludedFolders])
 
 	return (
-		<div className="my-2">
-			<label id="excluded-folders-label" htmlFor="excluded-folders" className="text-xs mb-1 block">
+		<div>
+			<label
+				id="excluded-folders-label"
+				htmlFor="excluded-folders"
+				className="text-xs mb-1 block"
+			>
 				Excluded Folders (one per line, similar to .gitignore):
 			</label>
 			<vscode-textarea
@@ -31,7 +35,7 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 				rows={3}
 				placeholder="Enter folder patterns to exclude (e.g., node_modules, .git, dist)..."
 				value={localValue}
-					onInput={(e) => {
+				onInput={(e) => {
 					const target = e.target as unknown as { value?: string } & HTMLElement
 					const next =
 						(target as any)?.value ?? target.getAttribute('value') ?? ''

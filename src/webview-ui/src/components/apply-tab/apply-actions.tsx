@@ -15,15 +15,13 @@ const ApplyActions: React.FC<ApplyActionsProps> = ({
 	handleButtonKeyDown,
 }) => {
 	return (
-		<div style={{ marginTop: '10px' }}>
-			<vscode-button
-				onClick={onApply}
-				onKeyDown={(e) => handleButtonKeyDown(e, onApply)}
-				disabled={isApplying}
-			>
-				{isApplying ? 'Applying Changes...' : 'Preview & Apply Changes'}
-			</vscode-button>
-		</div>
+		<vscode-button
+			onClick={onApply}
+			onKeyDown={(e) => handleButtonKeyDown(e, onApply)}
+			disabled={isApplying}
+		>
+			{isApplying ? 'Applying Changes...' : 'Preview & Apply Changes'}
+		</vscode-button>
 	)
 }
 
