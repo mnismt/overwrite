@@ -26,7 +26,7 @@ describe('MiniActionButton', () => {
 
 		render(
 			<Parent onParent={onParent}>
-				<ActionButton icon="add" title="Select" onPress={onPress} />
+				<ActionButton title="Select" onPress={onPress} isSelected={false} />
 			</Parent>,
 		)
 
@@ -42,15 +42,21 @@ describe('MiniActionButton', () => {
 		expect(onParent).not.toHaveBeenCalled()
 	})
 
-	it('renders plus/minus symbols depending on icon', () => {
+	it('renders appropriate icons based on selection state', () => {
 		const { rerender } = render(
-			<ActionButton icon="add" title="Select" onPress={() => {}} />,
+			<ActionButton title="Select" onPress={() => {}} isSelected={false} />,
 		)
-		expect(screen.getByRole('button', { name: 'Select' }).textContent).toBe('+')
+		const button = screen.getByRole('button', { name: 'Select' })
+		const icon = button.querySelector('vscode-icon')
+		expect(icon).toBeTruthy()
+		expect(icon?.getAttribute('name')).toBe('add')
 
-		rerender(<ActionButton icon="close" title="Deselect" onPress={() => {}} />)
-		expect(screen.getByRole('button', { name: 'Deselect' }).textContent).toBe(
-			'×',
+		rerender(
+			<ActionButton title="Deselect" onPress={() => {}} isSelected={true} />,
 		)
+		const deselectedButton = screen.getByRole('button', { name: 'Deselect' })
+		const checkIcon = deselectedButton.querySelector('vscode-icon')
+		expect(checkIcon).toBeTruthy()
+		expect(checkIcon?.getAttribute('name')).toBe('check')
 	})
 })

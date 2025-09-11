@@ -10,7 +10,6 @@ interface TokenStatsProps {
 		totalWithXmlTokens: number
 	}
 	skippedFiles: Array<{ uri: string; reason: string; message?: string }>
-	compact?: boolean
 }
 
 const TokenStats: React.FC<TokenStatsProps> = ({
@@ -18,24 +17,7 @@ const TokenStats: React.FC<TokenStatsProps> = ({
 	selectedCount,
 	tokenStats,
 	skippedFiles,
-	compact,
 }) => {
-	if (compact) {
-		return (
-			<div
-				className={cn(
-					'flex flex-col text-xs text-muted leading-tight',
-					className,
-				)}
-			>
-				<div>Files: {tokenStats.fileTokensEstimate}</div>
-				<div>Instructions: {tokenStats.userInstructionsTokens}</div>
-				<div>Total: {tokenStats.totalTokens}</div>
-				<div>With XML: {tokenStats.totalWithXmlTokens}</div>
-			</div>
-		)
-	}
-
 	return (
 		<>
 			{/* Token Count Information */}

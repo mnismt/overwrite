@@ -1,58 +1,61 @@
 import React, { useState } from 'react'
 
 interface MiniActionButtonProps {
-	icon: 'add' | 'close'
 	title: string
 	onPress: () => void
+	isSelected?: boolean
 }
 
 const ActionButton: React.FC<MiniActionButtonProps> = React.memo(
-	({ icon, title, onPress }) => {
+	({ title, onPress, isSelected = false }) => {
 		const [hovered, setHovered] = useState(false)
 		const [pressed, setPressed] = useState(false)
 
-		// Make buttons visually distinct from tree row hover using real button tokens
-		const baseBorder = 'var(--vscode-button-background)'
-		const baseBg = 'var(--vscode-button-background)'
-		const baseBgHover = 'var(--vscode-button-hoverBackground)'
-		const baseFg = 'var(--vscode-button-foreground)'
-
-		const style: React.CSSProperties = {
-			background: pressed ? baseBgHover : hovered ? baseBg : 'transparent',
-			border: 'none',
-			color: hovered || pressed ? baseFg : baseBorder,
-			borderRadius: 6,
-			fontSize: 12,
-			margin: '0 8px',
-			padding: '0 8px',
-			height: 20,
-			lineHeight: '18px',
-			display: 'inline-flex',
-			alignItems: 'center',
-			justifyContent: 'center',
-			cursor: 'pointer',
-			userSelect: 'none',
-			transition: 'background-color 120ms ease-in-out, color 120ms ease-in-out',
-			outline: 'none',
+		// Determine the visual state and icon to show
+		const getDisplayIcon = () => {
+			if (isSelected) {
+				return hovered ? 'close' : 'check'
+			}
+			return 'add'
 		}
 
-		const symbol = icon === 'add' ? '+' : '×'
+		// Icon color for better visibility
+		const getIconColor = () => {
+			if (isSelected) {
+				return hovered
+					? 'var(--vscode-errorForeground)'
+					: 'var(--vscode-testing-iconPassed)'
+			}
+			return hovered ? '#ffffff' : '#007ACC'
+		}
+
 		return (
 			<button
 				type="button"
 				title={title}
 				aria-label={title}
-				style={style}
+				className={`
+					inline-flex items-center justify-center
+					h-5 px-2 mx-2 rounded-md
+					border-none outline-none cursor-pointer select-none
+					text-xs text-button-foreground
+					transition-all duration-100 ease-in-out
+					${
+						pressed
+							? 'bg-button-hover'
+							: hovered
+								? 'bg-button'
+								: 'bg-transparent'
+					}
+				`}
 				onMouseEnter={() => setHovered(true)}
 				onMouseDown={(e) => {
-					// Trigger the action immediately but avoid affecting the tree item
 					e.preventDefault()
 					e.stopPropagation()
 					setPressed(true)
 					onPress()
 				}}
 				onMouseUp={(e) => {
-					// Some trees toggle on mouseup; stop propagation here as well
 					e.preventDefault()
 					e.stopPropagation()
 					setPressed(false)
@@ -62,17 +65,21 @@ const ActionButton: React.FC<MiniActionButtonProps> = React.memo(
 					setPressed(false)
 				}}
 				onClick={(e) => {
-					// Prevent the click from bubbling to the tree row which can toggle expand/collapse
 					e.preventDefault()
 					e.stopPropagation()
 				}}
 				onDoubleClick={(e) => {
-					// Also guard against double-click expanding folders
 					e.preventDefault()
 					e.stopPropagation()
 				}}
 			>
-				{symbol}
+				<vscode-icon
+					name={getDisplayIcon()}
+					style={{
+						color: getIconColor(),
+					}}
+					size={12}
+				></vscode-icon>
 			</button>
 		)
 	},

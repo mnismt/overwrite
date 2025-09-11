@@ -20,16 +20,14 @@ const CopyActions: React.FC<CopyActionsProps> = ({
 	const handleCopyContextXmlClick = () => handleCopy(true)
 
 	return (
-		<>
-			<div className="flex flex-col gap-2">
-				<vscode-button onClick={handleCopyContextClick}>
-					Copy Context
-				</vscode-button>
-				<vscode-button onClick={handleCopyContextXmlClick}>
-					Copy Context + XML
-				</vscode-button>
-			</div>
-		</>
+		<div className="flex flex-col justify-start gap-2 h-full">
+			<vscode-button onClick={handleCopyContextClick}>
+				Copy Context
+			</vscode-button>
+			<vscode-button onClick={handleCopyContextXmlClick}>
+				Copy Context + XML
+			</vscode-button>
+		</div>
 	)
 }
 

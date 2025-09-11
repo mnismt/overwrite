@@ -68,7 +68,11 @@ describe('SettingsTab', () => {
 	it('resets draft and dirty when excludedFolders prop updates', async () => {
 		const onSave = vi.fn()
 		const { rerender } = render(
-			<SettingsTab excludedFolders={'a'} readGitignore={true} onSaveSettings={onSave} />,
+			<SettingsTab
+				excludedFolders={'a'}
+				readGitignore={true}
+				onSaveSettings={onSave}
+			/>,
 		)
 		const textarea = screen.getByLabelText(/Excluded Folders/i)
 		;(textarea as HTMLElement).setAttribute('value', 'a\nb')
@@ -77,7 +81,11 @@ describe('SettingsTab', () => {
 
 		// Prop update (e.g., persisted value arrives)
 		rerender(
-			<SettingsTab excludedFolders={'NEW'} readGitignore={true} onSaveSettings={onSave} />,
+			<SettingsTab
+				excludedFolders={'NEW'}
+				readGitignore={true}
+				onSaveSettings={onSave}
+			/>,
 		)
 
 		// Textarea reflects new prop and save returns to disabled

@@ -1,18 +1,18 @@
 /* Ensure the webview fills the available viewport and panels can scroll */
 main {
-  height: 100vh;
-  overflow: hidden;
+	height: 100vh;
+	overflow: hidden;
 }
 
 vscode-tabs {
-  display: block;
-  height: 100%;
-  overflow: hidden;
+	display: block;
+	height: 100%;
+	overflow: hidden;
 }
 
 vscode-tab-panel {
-  display: block;
-  height: 100%;
-  /* Let inner sections control scrolling (tree only) */
-  overflow: hidden;
+	display: block;
+	height: 100%;
+	/* Let inner sections control scrolling (tree only) */
+	overflow: hidden;
 }

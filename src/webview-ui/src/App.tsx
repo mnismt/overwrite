@@ -28,7 +28,7 @@ function App() {
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 	const [errorText, setErrorText] = useState<string | null>(null) // Graceful error banner
-    const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
+	const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
 	const [readGitignore, setReadGitignore] = useState<boolean>(true)
 
 	// Send message to extension using the utility

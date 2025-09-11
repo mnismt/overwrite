@@ -23,32 +23,25 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 		if (isFolder) {
 			if (folderSelectionState === 'full') {
 				parts.push(
-					<span
+					<vscode-icon
 						key="full"
+						name="circle-filled"
 						title="Fully included"
 						style={{
-							width: 10,
-							height: 10,
-							borderRadius: 9999,
-							background: 'var(--vscode-testing-iconPassed)',
-							display: 'inline-block',
+							color: 'var(--vscode-testing-iconPassed)',
+							fontSize: '12px',
 						}}
 					/>,
 				)
 			} else if (folderSelectionState === 'partial') {
 				parts.push(
-					<span
+					<vscode-icon
 						key="partial"
+						name="circle"
 						title="Partially included"
 						style={{
-							width: 10,
-							height: 10,
-							borderRadius: 9999,
-							display: 'inline-block',
-							backgroundImage:
-								'linear-gradient(90deg, var(--vscode-testing-iconQueued) 50%, transparent 50%)',
-							border: '1px solid var(--vscode-descriptionForeground)',
-							boxSizing: 'border-box',
+							color: 'var(--vscode-testing-iconQueued)',
+							fontSize: '12px',
 						}}
 					/>,
 				)
@@ -70,6 +63,7 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 				)
 			}
 		} else {
+			// Only show token badge for selected files, no duplicate checkmark
 			if (fileIsSelected) {
 				const showBadge = fileTokenCount > 0
 				if (showBadge) {
@@ -82,7 +76,7 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 								position: 'relative',
 							}}
 						>
-							{showBadge ? <TokenBadge count={fileTokenCount} /> : null}
+							<TokenBadge count={fileTokenCount} isSelected={true} />
 						</div>,
 					)
 				}
@@ -94,8 +88,21 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 )
 RowDecorations.displayName = 'RowDecorations'
 
-const TokenBadge: React.FC<{ count: number }> = ({ count }) => {
-	return <p className="text-[10px] opacity-60">{formatTokenCount(count)}</p>
+const TokenBadge: React.FC<{ count: number; isSelected?: boolean }> = ({
+	count,
+	isSelected = false,
+}) => {
+	return (
+		<p
+			className="text-[10px]"
+			style={{
+				opacity: isSelected ? 0.8 : 0.6,
+				color: isSelected ? 'var(--vscode-testing-iconPassed)' : 'inherit',
+			}}
+		>
+			{formatTokenCount(count)}
+		</p>
+	)
 }
 
 export default RowDecorations

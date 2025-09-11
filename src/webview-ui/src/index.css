@@ -18,6 +18,11 @@
 
   /* Generic borders/surfaces */
   --color-border: var(--vscode-panel-border, var(--vscode-contrastBorder));
+  
+  /* Selection states */
+  --color-success: var(--vscode-testing-iconPassed);
+  --color-warning: var(--vscode-testing-iconQueued);
+  --color-selection-bg: var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.1));
 }
 
 /* Default surface text alignment to VS Code, keep bg transparent for webview */

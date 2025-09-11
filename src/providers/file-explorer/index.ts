@@ -28,8 +28,8 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private _isBuildingTree = false // Prevent overlapping tree builds
-    // Always-excluded patterns that never show in the UI; keep minimal (.git only)
-    private readonly _excludedDirs = ['.git', '.hg', '.svn']
+	// Always-excluded patterns that never show in the UI; keep minimal (.git only)
+	private readonly _excludedDirs = ['.git', '.hg', '.svn']
 	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
 	private static readonly READ_GITIGNORE_KEY = 'overwrite.readGitignore'
 
@@ -48,13 +48,13 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		)
 	}
 
-    /** Loads excluded folders from workspace state. */
-    private _loadExcludedFolders(): string {
-        return this._context.workspaceState.get(
-            FileExplorerWebviewProvider.EXCLUDED_FOLDERS_KEY,
-            '',
-        )
-    }
+	/** Loads excluded folders from workspace state. */
+	private _loadExcludedFolders(): string {
+		return this._context.workspaceState.get(
+			FileExplorerWebviewProvider.EXCLUDED_FOLDERS_KEY,
+			'',
+		)
+	}
 
 	/** Saves both settings to workspace state. */
 	private async _saveSettings(payload: SaveSettingsPayload): Promise<void> {
@@ -460,23 +460,23 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	/**
 	 * Fetches the file tree and sends it to the webview.
 	 */
-    private async _handleGetFileTree(
-        payload?: GetFileTreePayload,
-    ): Promise<void> {
-        if (!this._view) return
+	private async _handleGetFileTree(
+		payload?: GetFileTreePayload,
+	): Promise<void> {
+		if (!this._view) return
 
-        try {
-            if (this._isBuildingTree) {
-                return
-            }
-            this._isBuildingTree = true
-            // Resolve settings from payload or persisted state
-            const persisted = this._loadSettings()
-            const excludedFolders =
-                payload?.excludedFolders ?? persisted.excludedFolders
-            const readGitignore = payload?.readGitignore ?? persisted.readGitignore
+		try {
+			if (this._isBuildingTree) {
+				return
+			}
+			this._isBuildingTree = true
+			// Resolve settings from payload or persisted state
+			const persisted = this._loadSettings()
+			const excludedFolders =
+				payload?.excludedFolders ?? persisted.excludedFolders
+			const readGitignore = payload?.readGitignore ?? persisted.readGitignore
 
-            // Do not persist here to avoid double-writes; persistence is handled by 'saveSettings'.
+			// Do not persist here to avoid double-writes; persistence is handled by 'saveSettings'.
 
 			const excludedFoldersArray = excludedFolders
 				? excludedFolders
@@ -497,17 +497,17 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				command: 'updateFileTree',
 				payload: workspaceFiles,
 			})
-        } catch (error) {
-            this._handleError(error, 'Error getting workspace files')
-            // Optionally send specific error state to webview
-            this._view.webview.postMessage({
-                command: 'showError',
-                message: `Error getting workspace files: ${error instanceof Error ? error.message : String(error)}`,
-            })
-        } finally {
-            this._isBuildingTree = false
-        }
-    }
+		} catch (error) {
+			this._handleError(error, 'Error getting workspace files')
+			// Optionally send specific error state to webview
+			this._view.webview.postMessage({
+				command: 'showError',
+				message: `Error getting workspace files: ${error instanceof Error ? error.message : String(error)}`,
+			})
+		} finally {
+			this._isBuildingTree = false
+		}
+	}
 
 	/**
 	 * Opens the specified file in the VS Code editor.

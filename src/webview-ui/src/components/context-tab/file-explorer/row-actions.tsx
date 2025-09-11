@@ -66,15 +66,15 @@ const RowActions: React.FC<RowActionsProps> = React.memo(
 				<Wrapper>
 					{showDeselect ? (
 						<ActionButton
-							icon="close"
 							title="Deselect all"
 							onPress={() => onDeselectAllInSubtree?.()}
+							isSelected={true}
 						/>
 					) : (
 						<ActionButton
-							icon="add"
 							title="Select all"
 							onPress={() => onSelectAllInSubtree?.()}
+							isSelected={false}
 						/>
 					)}
 				</Wrapper>
@@ -84,9 +84,9 @@ const RowActions: React.FC<RowActionsProps> = React.memo(
 		return (
 			<Wrapper>
 				<ActionButton
-					icon={fileIsSelected ? 'close' : 'add'}
 					title={fileIsSelected ? 'Deselect' : 'Select'}
 					onPress={() => onToggleFile?.()}
+					isSelected={fileIsSelected}
 				/>
 			</Wrapper>
 		)

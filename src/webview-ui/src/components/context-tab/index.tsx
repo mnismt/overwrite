@@ -230,13 +230,12 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 			{/* Fixed footer with compact tokens + actions */}
 			<div className="fixed bottom-0 left-0 right-0 border-t bg-bg/95 backdrop-blur px-3 py-2 z-10">
-				<div className="flex items-center gap-3">
+				<div className="flex items-center gap-3 h-full">
 					<TokenStats
 						selectedCount={selectedCount}
 						className="flex-grow"
 						tokenStats={tokenStats}
 						skippedFiles={[]}
-						compact
 					/>
 					<CopyActions
 						onCopy={({ includeXml: inc, userInstructions }) =>
