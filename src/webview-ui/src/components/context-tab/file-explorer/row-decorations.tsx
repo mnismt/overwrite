@@ -89,19 +89,13 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 			}
 		}
 		if (parts.length === 0) return null
-		return (
-			<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-				{parts}
-			</div>
-		)
+		return <div className="flex items-center gap-4">{parts}</div>
 	},
 )
 RowDecorations.displayName = 'RowDecorations'
 
 const TokenBadge: React.FC<{ count: number }> = ({ count }) => {
-	return (
-		<vscode-badge variant="counter">{formatTokenCount(count)}</vscode-badge>
-	)
+	return <p className="text-[10px] opacity-60">{formatTokenCount(count)}</p>
 }
 
 export default RowDecorations

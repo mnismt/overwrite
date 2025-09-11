@@ -31,11 +31,12 @@ The Context Tab in the Webview Panel is the primary interface for selecting file
 - Requirement 2.1.6: Selected Files Summary: Display a simple counter below the tree showing how many files/folders are currently selected.
 - Requirement 2.1.7: User Instructions Input:
   - Provide a <textarea> below the selected files summary for the user's specific instructions (<user_instructions> tag content).
-- Requirement 2.1.8: Copy to Clipboard Buttons:
-  - Implement a "Copy Context" button: Dynamically generates and copies <file_map>, <file_contents>, and <user_instructions> to the clipboard.
-  - Implement an "Copy Context + XML Instructions" button: Dynamically generates and copies <file_map>, <file_contents>, <xml_formatting_instructions>, and <user_instructions> to the clipboard.
-  - Both buttons should use vscode.env.clipboard.writeText.
-  - The actual XML content should be generated at copy time, not displayed.
+- Requirement 2.1.8: Copy to Clipboard Buttons (sticky footer):
+  - Provide two actions side by side in the footer:
+    - "Copy Context" — generates <file_map>, <file_contents>, and <user_instructions> and copies to clipboard.
+    - "Copy Context + XML Instructions" — also includes <xml_formatting_instructions>.
+  - Both buttons use vscode.env.clipboard.writeText.
+  - The XML content is generated at copy time (not displayed).
 - Requirement 2.1.9: Background Processing (No UI Display): The extension host must still implement the logic to:
   - Generate the <file_map> tag (hierarchical structure).
   - Read and format the content for <file_contents>.
@@ -43,13 +44,10 @@ The Context Tab in the Webview Panel is the primary interface for selecting file
 - Requirement 2.1.10: Double click on the selected files in the tree view should open the file in the editor.
   - Implement a double click handler on the tree view to open the selected file in the editor.
   - Row action buttons do not toggle folder expand/collapse; clicks are captured and stopped to avoid bubbling to the tree row.
-- Requirement 2.1.11: Count and display the tokens number of files selected.
-  - When a file is selected, the extension should count the tokens number of the file and display it in the tree view:
-    - If the file is a folder, the extension should count the tokens number of all files in the folder
-    - If the file is a file, the extension should count the tokens number of the file
-  - Below the User instructions textarea, display two text lines:
-    - Show the total tokens + user instructions textarea content (for Copy Context button)
-    - Show the total tokens + user instructions textarea content + xml formatting instructions (for Copy Context + XML Instructions button)
+- Requirement 2.1.11: Count and display token usage and surface a compact summary.
+  - When a file is selected, count tokens per file and show counts in the tree (folders show summed counts).
+  - The Context tab layout pins the User Instructions at the top and a footer at the bottom; only the file tree scrolls.
+  - The footer shows a compact token summary (files, instructions, total, total+XML) and contains two actions side by side: “Copy Context” and “Copy Context + XML Instructions”.
 - Requirement 2.1.12: Preserve the selection state when the webview is reopened.
   - When the webview is reopened, it should restore the previously selected files (use retainContextWhenHidden option in the webview options)
 - Requirement 2.1.13: Multi-Root Workspace Support.
@@ -66,7 +64,7 @@ The Context Tab in the Webview Panel is the primary interface for selecting file
 
 **2.2. Applying LLM Changes (Webview Panel - Apply Tab)**
 
-Status: In Progress
+Status: Done
 
 The Apply Tab in the Webview Panel is dedicated to applying changes suggested by the LLM.
 
@@ -100,7 +98,7 @@ The Apply Tab in the Webview Panel is dedicated to applying changes suggested by
 
 **2.3. Setting (Webview Panel - Setting Tab)**
 
-Status: Todo
+Status: In Progress
 
 The setting tab in the webview panel is dedicated to setting the extension.
 

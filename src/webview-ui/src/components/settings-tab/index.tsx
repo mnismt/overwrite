@@ -69,6 +69,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 				<ExcludedFolders
 					excludedFolders={draft.excludedFolders}
 					onChangeExcludedFolders={(v) => handleChange('excludedFolders', v)}
+					onDraftChange={(v) => handleChange('excludedFolders', v)}
 				/>
 
 				{/* Sticky footer with bottom-left Save button */}

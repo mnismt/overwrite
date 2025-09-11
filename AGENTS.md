@@ -20,8 +20,6 @@ Overwrite is a Visual Studio Code extension that helps users select files and fo
 ### Development Workflow
 1. Make changes to TypeScript files in `src/`
 2. Run `pnpm watch` to compile automatically during development
-3. Run `pnpm lint` to ensure code quality
-4. Run `pnpm test` to verify functionality
 5. Use `pnpm package` for production builds
 
 ## Architecture Overview

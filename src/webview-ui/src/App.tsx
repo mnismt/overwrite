@@ -182,8 +182,8 @@ function App() {
 	)
 
 	return (
-		<main>
-			<vscode-tabs
+		<main className="h-screen overflow-hidden">
+			<vscode-tabs className="h-full overflow-hidden"
 				selected-index={activeTabIndex}
 				onvsc-tabs-select={handleTabChange}
 			>

@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react'
 interface ExcludedFoldersProps {
 	excludedFolders: string
 	onChangeExcludedFolders: (excludedFolders: string) => void
+	onDraftChange?: (excludedFolders: string) => void
 }
 
 const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 	excludedFolders,
 	onChangeExcludedFolders,
+	onDraftChange,
 }) => {
 	// Keep a responsive local state to avoid parent re-renders on every keystroke
 	const [localValue, setLocalValue] = useState(excludedFolders)
@@ -17,6 +19,14 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 		if (excludedFolders !== localValue) setLocalValue(excludedFolders)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [excludedFolders])
+
+	// Debounce emitting changes to parent to avoid re-renders on every keystroke
+	useEffect(() => {
+		const handle = setTimeout(() => {
+			onChangeExcludedFolders(localValue)
+		}, 150)
+		return () => clearTimeout(handle)
+	}, [localValue, onChangeExcludedFolders])
 
 	return (
 		<div>
@@ -40,7 +50,7 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 					const next =
 						(target as any)?.value ?? target.getAttribute('value') ?? ''
 					setLocalValue(next)
-					onChangeExcludedFolders(next)
+					onDraftChange?.(next)
 				}}
 				className="w-full min-h-[60px]"
 			/>

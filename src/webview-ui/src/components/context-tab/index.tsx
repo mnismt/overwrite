@@ -46,6 +46,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const [skippedFiles, setSkippedFiles] = useState<
 		Array<{ uri: string; reason: string; message?: string }>
 	>([])
+	// const [includeXml, setIncludeXml] = useState(false)
 
 	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -156,50 +157,90 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, [onRefresh])
 
 	return (
-		<div className="flex flex-col h-full gap-y-1 py-2">
-			{/* Explorer Top Bar */}
-			<div className="mb-2 flex items-center">
-				<vscode-button onClick={handleRefreshClick} disabled={isLoading}>
-					<span slot="start" className="codicon codicon-refresh" />
-					{isLoading ? 'Loading...' : 'Refresh'}
-				</vscode-button>
-				<vscode-textfield
-					placeholder="Search files..."
-					className="ml-2 flex-1"
-					value={searchQuery}
-					onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
-				>
-					<span slot="start" className="codicon codicon-search" />
-				</vscode-textfield>
+		<div className="flex flex-col h-full overflow-hidden gap-y-2 py-2 pb-20">
+			{/* Sticky header area (tabs are outside this component; keep this non-scrolling) */}
+			<div className="bg-bg z-10">
+				{/* User Instructions at top */}
+				<UserInstructions
+					userInstructions={userInstructions}
+					onUserInstructionsChange={setUserInstructions}
+				/>
+
+				{/* Explorer Top Bar */}
+				<div className="mt-2 mb-2 flex items-center">
+					<vscode-button onClick={handleRefreshClick} disabled={isLoading}>
+						<span slot="start" className="codicon codicon-refresh" />
+						{isLoading ? 'Loading...' : 'Refresh'}
+					</vscode-button>
+					<vscode-textfield
+						placeholder="Search files..."
+						className="ml-2 flex-1"
+						value={searchQuery}
+						onInput={(e) =>
+							setSearchQuery((e.target as HTMLInputElement).value)
+						}
+					>
+						<span slot="start" className="codicon codicon-search" />
+					</vscode-textfield>
+				</div>
 			</div>
 
-			{/* File Explorer */}
-			<FileExplorer
-				fileTreeData={fileTreeData}
-				selectedUris={selectedUris}
-				onSelect={onSelect}
-				isLoading={isLoading}
-				searchQuery={searchQuery}
-				actualTokenCounts={actualTokenCounts}
-			/>
+			{/* Scrollable tree area only */}
+			<div
+				data-testid="context-tree-scroll"
+				className="flex-1 min-h-0 overflow-auto pb-24"
+			>
+				{/* File Explorer */}
+				<FileExplorer
+					fileTreeData={fileTreeData}
+					selectedUris={selectedUris}
+					onSelect={onSelect}
+					isLoading={isLoading}
+					searchQuery={searchQuery}
+					actualTokenCounts={actualTokenCounts}
+				/>
 
-			<vscode-divider />
+				{/* Skipped files disclosure (scrolls with tree) */}
+				{skippedFiles.length > 0 && (
+					<details className="mt-2 text-xs text-error bg-warn-bg border border-warn-border rounded px-2 py-2">
+						<summary className="cursor-pointer list-none">
+							⚠️ Skipped Files ({skippedFiles.length})
+						</summary>
+						<div className="mt-1">
+							{skippedFiles.map((file, index) => (
+								<div key={index} className="mb-0.5">
+									<span className="font-mono">{file.uri.split('/').pop()}</span>
+									{' - '}
+									<span className="italic">
+										{file.reason === 'binary'
+											? 'Binary file'
+											: file.reason === 'too-large'
+												? 'Too large'
+												: 'Error'}
+									</span>
+									{file.message && (
+										<span className="text-muted"> ({file.message})</span>
+									)}
+								</div>
+							))}
+						</div>
+					</details>
+				)}
+			</div>
 
-			{/* Copy Actions and Selected Count */}
-			<CopyActions
-				selectedCount={selectedCount}
-				onCopy={onCopy}
-				userInstructions={userInstructions}
-			/>
-
-			{/* Token Statistics */}
-			<TokenStats tokenStats={tokenStats} skippedFiles={skippedFiles} />
-
-			{/* User Instructions */}
-			<UserInstructions
-				userInstructions={userInstructions}
-				onUserInstructionsChange={setUserInstructions}
-			/>
+			{/* Fixed footer with compact tokens + actions */}
+			<div className="fixed bottom-0 left-0 right-0 border-t bg-bg/95 backdrop-blur px-3 py-2 z-10">
+				<div className="mx-auto flex items-center gap-3">
+					<TokenStats tokenStats={tokenStats} skippedFiles={[]} compact />
+					<CopyActions
+						selectedCount={selectedCount}
+						onCopy={({ includeXml: inc, userInstructions }) =>
+							onCopy({ includeXml: inc, userInstructions })
+						}
+						userInstructions={userInstructions}
+					/>
+				</div>
+			</div>
 		</div>
 	)
 }
