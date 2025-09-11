@@ -17,4 +17,15 @@ export interface GetTokenCountsPayload {
 
 export interface GetFileTreePayload {
 	excludedFolders?: string // String containing excluded folder patterns, one per line
+	readGitignore?: boolean // Whether to respect .gitignore when building the tree
+}
+
+export interface SaveSettingsPayload {
+	excludedFolders: string
+	readGitignore: boolean
+}
+
+export interface UpdateSettingsPayload {
+	excludedFolders: string
+	readGitignore: boolean
 }

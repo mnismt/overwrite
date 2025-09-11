@@ -2,6 +2,7 @@ import { cn } from '../../lib/utils'
 
 interface TokenStatsProps {
 	className?: string
+	selectedCount?: number
 	tokenStats: {
 		fileTokensEstimate: number
 		userInstructionsTokens: number
@@ -14,6 +15,7 @@ interface TokenStatsProps {
 
 const TokenStats: React.FC<TokenStatsProps> = ({
 	className,
+	selectedCount,
 	tokenStats,
 	skippedFiles,
 	compact,
@@ -38,6 +40,7 @@ const TokenStats: React.FC<TokenStatsProps> = ({
 		<>
 			{/* Token Count Information */}
 			<div className={cn('mt-2 text-xs text-muted', className)}>
+				<p>Selected files: {selectedCount}</p>
 				<p>File tokens (actual): {tokenStats.fileTokensEstimate}</p>
 				<p>User instruction tokens: {tokenStats.userInstructionsTokens}</p>
 				<p>Total tokens (Copy Context): {tokenStats.totalTokens}</p>

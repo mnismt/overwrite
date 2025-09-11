@@ -1,7 +1,7 @@
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
 import { useCallback, useEffect, useState } from 'react'
 import type { VscodeTreeItem } from '../../types' // Import tree item type from root
-import './App.css' // We'll add styles later
+import './App.css'
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
 import SettingsTab from './components/settings-tab'
@@ -16,6 +16,11 @@ interface UpdateExcludedFoldersPayload {
 	excludedFolders: string
 }
 
+interface UpdateSettingsPayload {
+	excludedFolders: string
+	readGitignore: boolean
+}
+
 function App() {
 	const [activeTabIndex, setActiveTabIndex] = useState(0) // Manage by index (0: Context, 1: Apply)
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
@@ -23,9 +28,8 @@ function App() {
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 	const [errorText, setErrorText] = useState<string | null>(null) // Graceful error banner
-	const [excludedFolders, setExcludedFolders] = useState<string>(
-		'node_modules\n.git\ndist\nout\n.vscode-test',
-	) // Persisted excluded folders
+    const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
+	const [readGitignore, setReadGitignore] = useState<boolean>(true)
 
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
@@ -37,10 +41,10 @@ function App() {
 		vscode.postMessage({ command, payload })
 	}, [])
 
-	// Fetch initial file tree and excluded folders
+	// Fetch initial file tree and settings
 	useEffect(() => {
 		sendMessage('getFileTree')
-		sendMessage('getExcludedFolders')
+		sendMessage('getSettings')
 	}, [sendMessage])
 
 	// Listen for messages from extension
@@ -77,10 +81,19 @@ function App() {
 					setIsLoading(false) // Stop loading on error too
 					break
 				case 'updateExcludedFolders': {
-					// Update excluded folders from persisted state
+					// Back-compat: if extension sends legacy message, update excluded only
 					const payload = message.payload as UpdateExcludedFoldersPayload
-					if (payload?.excludedFolders) {
+					if (payload?.excludedFolders)
 						setExcludedFolders(payload.excludedFolders)
+					break
+				}
+				case 'updateSettings': {
+					const p = message.payload as UpdateSettingsPayload
+					if (p) {
+						if (typeof p.excludedFolders === 'string')
+							setExcludedFolders(p.excludedFolders)
+						if (typeof p.readGitignore === 'boolean')
+							setReadGitignore(p.readGitignore)
 					}
 					break
 				}
@@ -116,23 +129,24 @@ function App() {
 
 	// Refresh handler for the file tree (moved from potential ExplorerTab)
 	const handleRefresh = useCallback(
-		(excludedFolders?: string) => {
+		(excludedFoldersArg?: string) => {
 			setIsLoading(true)
-			sendMessage('getFileTree', { excludedFolders })
+			sendMessage('getFileTree', {
+				excludedFolders: excludedFoldersArg,
+				readGitignore,
+			})
 		},
-		[sendMessage],
+		[sendMessage, readGitignore],
 	)
 
-	// Save excluded folders handler
-	const handleSaveExcludedFolders = useCallback(
-		(newExcludedFolders: string) => {
-			setExcludedFolders(newExcludedFolders)
-			// persist to extension
-			sendMessage('saveExcludedFolders', {
-				excludedFolders: newExcludedFolders,
-			})
-			// immediately refresh file tree using the saved exclusions
-			sendMessage('getFileTree', { excludedFolders: newExcludedFolders })
+	// Save settings handler (excluded folders + readGitignore)
+	const handleSaveSettings = useCallback(
+		(payload: { excludedFolders: string; readGitignore: boolean }) => {
+			setExcludedFolders(payload.excludedFolders)
+			setReadGitignore(payload.readGitignore)
+			sendMessage('saveSettings', payload)
+			// immediately refresh file tree using the saved settings
+			sendMessage('getFileTree', payload)
 		},
 		[sendMessage],
 	)
@@ -183,7 +197,8 @@ function App() {
 
 	return (
 		<main className="h-screen overflow-hidden">
-			<vscode-tabs className="h-full overflow-hidden"
+			<vscode-tabs
+				className="h-full overflow-hidden"
 				selected-index={activeTabIndex}
 				onvsc-tabs-select={handleTabChange}
 			>
@@ -219,7 +234,8 @@ function App() {
 				<vscode-tab-panel id="settings-tab-panel">
 					<SettingsTab
 						excludedFolders={excludedFolders}
-						onSaveExcludedFolders={handleSaveExcludedFolders}
+						readGitignore={readGitignore}
+						onSaveSettings={handleSaveSettings}
 					/>
 				</vscode-tab-panel>
 			</vscode-tabs>

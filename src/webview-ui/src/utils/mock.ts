@@ -17,6 +17,7 @@ export interface VsCodeApi {
 import type { VscodeTreeItem } from '../../../types'
 
 type ExcludedFoldersPayload = { excludedFolders: string }
+type SaveSettingsPayload = { excludedFolders: string; readGitignore: boolean }
 type TokenCountsPayload = { selectedUris: string[] }
 type TokenCountPayload = { text: string; requestId: string }
 type OpenFilePayload = { fileUri: string }
@@ -91,9 +92,10 @@ function estimateTokensFromText(text: string): number {
 }
 
 export function createMockVsCodeApi(): VsCodeApi {
-	let state: unknown = {}
-	let excludedFolders = 'node_modules\n.git\ndist\nout\n.vscode-test'
-	let fileTree: VscodeTreeItem[] = buildMockFileTree()
+    let state: unknown = {}
+    let excludedFolders = ''
+    let readGitignore = true
+    let fileTree: VscodeTreeItem[] = buildMockFileTree()
 
 	const sendToWebview = (message: VsCodeMessage) => {
 		window.postMessage(message, '*')
@@ -107,21 +109,48 @@ export function createMockVsCodeApi(): VsCodeApi {
 		postMessage: (message: VsCodeMessage) => {
 			const { command, payload } = message
 			setTimeout(() => {
-				switch (command) {
-					case 'getFileTree': {
-						if (isExcludedFoldersPayload(payload)) {
-							excludedFolders = payload.excludedFolders
-						}
-						sendToWebview({ command: 'updateFileTree', payload: fileTree })
-						break
-					}
-					case 'getExcludedFolders': {
-						sendToWebview({
-							command: 'updateExcludedFolders',
-							payload: { excludedFolders },
-						})
-						break
-					}
+            switch (command) {
+                case 'getFileTree': {
+                    if (isExcludedFoldersPayload(payload)) {
+                        excludedFolders = payload.excludedFolders
+                    }
+                    if (isObject(payload) && typeof (payload as any).readGitignore === 'boolean') {
+                        readGitignore = (payload as any).readGitignore as boolean
+                    }
+                    sendToWebview({ command: 'updateFileTree', payload: fileTree })
+                    break
+                }
+                case 'getSettings': {
+                    sendToWebview({
+                        command: 'updateSettings',
+                        payload: { excludedFolders, readGitignore },
+                    })
+                    break
+                }
+                case 'saveSettings': {
+                    const p = payload as SaveSettingsPayload
+                    if (isObject(p)) {
+                        if (typeof p.excludedFolders === 'string') {
+                            excludedFolders = p.excludedFolders
+                        }
+                        if (typeof p.readGitignore === 'boolean') {
+                            readGitignore = p.readGitignore
+                        }
+                    }
+                    break
+                }
+                case 'getExcludedFolders': {
+                    sendToWebview({
+                        command: 'updateExcludedFolders',
+                        payload: { excludedFolders },
+                    })
+                    // Also send combined settings for newer clients
+                    sendToWebview({
+                        command: 'updateSettings',
+                        payload: { excludedFolders, readGitignore },
+                    })
+                    break
+                }
 					case 'saveExcludedFolders': {
 						if (isExcludedFoldersPayload(payload)) {
 							excludedFolders = payload.excludedFolders

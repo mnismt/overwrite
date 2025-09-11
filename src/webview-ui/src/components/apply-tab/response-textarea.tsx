@@ -11,11 +11,8 @@ const ResponseTextarea: React.FC<ResponseTextareaProps> = ({
 }) => {
 	return (
 		<>
-			<vscode-label
-				htmlFor="llm-response-textarea"
-				style={{ display: 'block', marginBottom: '4px' }}
-			>
-				Paste LLM Response (XML Format):
+			<vscode-label htmlFor="llm-response-textarea" className="block mb-1">
+				Paste LLM Response (XML Format)
 			</vscode-label>
 			<vscode-textarea
 				id="llm-response-textarea"

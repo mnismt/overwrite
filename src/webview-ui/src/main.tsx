@@ -22,6 +22,7 @@ import '@vscode-elements/elements/dist/vscode-badge'
 import '@vscode-elements/elements/dist/vscode-divider'
 import '@vscode-elements/elements/dist/vscode-toolbar-button'
 import '@vscode-elements/elements/dist/vscode-tree-item'
+import '@vscode-elements/elements/dist/vscode-checkbox'
 
 if (import.meta.env.DEV) {
 	await import('@vscode-elements/webview-playground')

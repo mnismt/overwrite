@@ -1,4 +1,7 @@
 import * as path from 'node:path' // Still needed for path.relative and path.join for ignore patterns
+import * as os from 'node:os'
+import * as fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import ignore from 'ignore'
 import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
@@ -11,9 +14,37 @@ const FOLDER_ICONS = {
 }
 
 const FILE_ICONS = {
-	branch: 'file', // Placeholder, not typically used for files by tree components
-	leaf: 'file', // Codicon for file
-	open: 'file', // Placeholder, not typically used for files by tree components
+    branch: 'file', // Placeholder, not typically used for files by tree components
+    leaf: 'file', // Codicon for file
+    open: 'file', // Placeholder, not typically used for files by tree components
+}
+
+// Expand common shell-style tokens in paths from git config (e.g., '~/.config/git/ignore').
+function resolveExcludesPath(input: string): string {
+    let p = input.trim()
+    if (p.startsWith('~')) {
+        p = path.join(os.homedir(), p.slice(1))
+    }
+    // Expand $HOME or $USERPROFILE
+    p = p.replace(/\$(HOME|USERPROFILE)/g, (_m, name) => {
+        const env = process.env[String(name)]
+        return env ? env : _m
+    })
+    // Expand Windows-style %VAR%
+    p = p.replace(/%([^%]+)%/g, (_m, name) => {
+        const env = process.env[name]
+        return env ? env : _m
+    })
+    // Remove surrounding quotes if present without tricky escaping
+    if (p.length >= 2) {
+        const first = p.charCodeAt(0)
+        const last = p.charCodeAt(p.length - 1)
+        // 34 = '"', 39 = '\''
+        if ((first === 34 && last === 34) || (first === 39 && last === 39)) {
+            p = p.slice(1, -1)
+        }
+    }
+    return path.resolve(p)
 }
 
 /**
@@ -112,7 +143,8 @@ async function readDirectoryRecursiveForRoot(
  * @returns A promise that resolves to an array of VscodeTreeItem objects, where each top-level item is a workspace root.
  */
 export async function getWorkspaceFileTree(
-	excludedDirs: string[],
+    excludedDirs: string[],
+    options?: { useGitignore?: boolean },
 ): Promise<VscodeTreeItem[]> {
 	const workspaceFolders = vscode.workspace.workspaceFolders
 	if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -122,42 +154,97 @@ export async function getWorkspaceFileTree(
 
 	const allRootItems: VscodeTreeItem[] = []
 
+	const useGitignore = options?.useGitignore !== false
+
 	for (const folder of workspaceFolders) {
-		const rootUri = folder.uri
-		const rootFsPath = rootUri.fsPath
-		const gitignorePath = path.join(rootFsPath, '.gitignore')
+        const rootUri = folder.uri
+        const rootFsPath = rootUri.fsPath
 
-		let ign = ignore() // Default empty ignore for this root
-		try {
-			const gitignoreContentBytes = await vscode.workspace.fs.readFile(
-				vscode.Uri.file(gitignorePath),
-			)
-			const gitignoreContent = Buffer.from(gitignoreContentBytes).toString(
-				'utf8',
-			)
-			ign = ignore().add(gitignoreContent.split(/\r?\n/)) // Handle both LF and CRLF
-		} catch (error) {
-			// If .gitignore doesn't exist or is unreadable, proceed without it for this root
-			console.warn(
-				`No .gitignore found or readable in ${rootFsPath}, proceeding without gitignore rules for this root.`,
-			)
-		}
+        // Build a comprehensive ignore rule set similar to Git's behavior:
+        // - project .gitignore
+        // - .git/info/exclude
+        // - user's global excludes file (core.excludesFile), if available
+        // The logic is best-effort and silently skips files that aren't present.
+        const allIgnoreLines: string[] = []
 
-		// Add common VS Code/Node specific ignores by default if not covered by project's .gitignore
-		// These are often in global .gitignore but good to have fallbacks.
-		// Example: ign.add(['.vscode', 'node_modules', '.git'])
-		// For now, we rely on the project's .gitignore primarily.
+        if (useGitignore) {
+            // 1) Project .gitignore (root)
+            const gitignorePath = path.join(rootFsPath, '.gitignore')
+            try {
+                const bytes = await vscode.workspace.fs.readFile(
+                    vscode.Uri.file(gitignorePath),
+                )
+                const content = Buffer.from(bytes).toString('utf8')
+                allIgnoreLines.push(...content.split(/\r?\n/))
+            } catch {
+                // No .gitignore at repo root; ignore quietly
+            }
+
+            // 2) Repo-specific excludes: .git/info/exclude
+            const repoExcludePath = path.join(rootFsPath, '.git', 'info', 'exclude')
+            try {
+                const content = fs.readFileSync(repoExcludePath, 'utf8')
+                allIgnoreLines.push(...content.split(/\r?\n/))
+            } catch {
+                // Not present or unreadable; ignore quietly
+            }
+
+            // 3) Global excludes file as configured in Git (core.excludesFile)
+            // Attempt to query Git for the actual path; if not available, try common defaults.
+            try {
+                const excludesPath = execFileSync('git', ['config', '--get', 'core.excludesFile'], {
+                    cwd: rootFsPath,
+                    encoding: 'utf8',
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                })
+                    .trim()
+                if (excludesPath) {
+                    const resolved = resolveExcludesPath(excludesPath)
+                    if (resolved && fs.existsSync(resolved)) {
+                        const content = fs.readFileSync(resolved, 'utf8')
+                        allIgnoreLines.push(...content.split(/\r?\n/))
+                    }
+                }
+            } catch {
+                // Git not available or no core.excludesFile set; try common fallbacks
+                const candidates = [
+                    path.join(os.homedir(), '.config', 'git', 'ignore'),
+                    path.join(os.homedir(), '.gitignore_global'),
+                    path.join(os.homedir(), '.gitignore'),
+                ]
+                for (const p of candidates) {
+                    try {
+                        if (fs.existsSync(p)) {
+                            const content = fs.readFileSync(p, 'utf8')
+                            allIgnoreLines.push(...content.split(/\r?\n/))
+                            break
+                        }
+                    } catch {
+                        // keep trying others
+                    }
+                }
+            }
+        }
+
+        let ign = ignore()
+        if (allIgnoreLines.length > 0) {
+            ign = ignore().add(allIgnoreLines)
+        }
+
+        // Optional: add a few extremely common fallbacks to reduce noise/perf impact
+        // only when not already covered (safe, minimal defaults)
+        ign.add(['.git', '.hg', '.svn'])
 
 		// Create ignore object for user-defined excluded patterns
 		const userIgnore = ignore().add(excludedDirs)
 
-		const subItems = await readDirectoryRecursiveForRoot(
-			rootUri,
-			rootUri, // rootUri itself is the base for relative ignore paths
-			excludedDirs,
-			ign,
-			userIgnore,
-		)
+        const subItems = await readDirectoryRecursiveForRoot(
+            rootUri,
+            rootUri, // rootUri itself is the base for relative ignore paths
+            excludedDirs,
+            ign,
+            userIgnore,
+        )
 
 		const rootItem: VscodeTreeItem = {
 			label: folder.name, // Use workspace folder name as label

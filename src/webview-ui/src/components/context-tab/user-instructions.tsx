@@ -8,19 +8,21 @@ const UserInstructions: React.FC<UserInstructionsProps> = ({
 	onUserInstructionsChange,
 }) => {
 	return (
-		<div className="mt-2 flex flex-col">
-			<label htmlFor="user-instructions">User Instructions:</label>
+		<div className="flex flex-col">
+			<vscode-label htmlFor="user-instructions" className="block mb-1">
+				User Instruction
+			</vscode-label>
 			<vscode-textarea
 				id="user-instructions"
 				resize="vertical"
-				rows={10}
+				rows={5}
 				placeholder="Enter instructions for the AI..."
 				value={userInstructions}
 				onInput={(e) => {
 					const target = e.target as HTMLInputElement
 					onUserInstructionsChange(target.value)
 				}}
-				className="mt-1 w-full min-h-[100px]"
+				className="w-full min-h-[50px]"
 			/>
 		</div>
 	)

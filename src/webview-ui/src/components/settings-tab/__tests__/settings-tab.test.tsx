@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { act } from 'react-dom/test-utils'
+import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SettingsTab from '..'
 
@@ -13,15 +13,21 @@ describe('SettingsTab', () => {
 		vi.useRealTimers()
 	})
 
-	const setup = (initial = 'node_modules\n.git') => {
+	const setup = (initial = 'node_modules\n.git', readGit = true) => {
 		const onSave = vi.fn()
 		const utils = render(
-			<SettingsTab excludedFolders={initial} onSaveExcludedFolders={onSave} />,
+			<SettingsTab
+				excludedFolders={initial}
+				readGitignore={readGit}
+				onSaveSettings={onSave}
+			/>,
 		)
 		const getSaveEl = () => screen.getByText('Save') as HTMLElement
 		const getTextarea = () =>
 			screen.getByLabelText(/Excluded Folders/i) as HTMLElement
-		return { onSave, ...utils, getSaveEl, getTextarea }
+		const getCheckbox = () =>
+			screen.getByLabelText('Respect .gitignore') as HTMLElement
+		return { onSave, ...utils, getSaveEl, getTextarea, getCheckbox }
 	}
 
 	it('renders Save disabled initially', () => {
@@ -43,7 +49,10 @@ describe('SettingsTab', () => {
 		// Click Save
 		fireEvent.click(getSaveEl())
 		expect(onSave).toHaveBeenCalledTimes(1)
-		expect(onSave).toHaveBeenCalledWith('node_modules\n.vscode')
+		expect(onSave).toHaveBeenCalledWith({
+			excludedFolders: 'node_modules\n.vscode',
+			readGitignore: true,
+		})
 
 		// Button disabled and toast visible
 		expect(getSaveEl()).toHaveAttribute('disabled')
@@ -59,7 +68,7 @@ describe('SettingsTab', () => {
 	it('resets draft and dirty when excludedFolders prop updates', async () => {
 		const onSave = vi.fn()
 		const { rerender } = render(
-			<SettingsTab excludedFolders={'a'} onSaveExcludedFolders={onSave} />,
+			<SettingsTab excludedFolders={'a'} readGitignore={true} onSaveSettings={onSave} />,
 		)
 		const textarea = screen.getByLabelText(/Excluded Folders/i)
 		;(textarea as HTMLElement).setAttribute('value', 'a\nb')
@@ -68,7 +77,7 @@ describe('SettingsTab', () => {
 
 		// Prop update (e.g., persisted value arrives)
 		rerender(
-			<SettingsTab excludedFolders={'NEW'} onSaveExcludedFolders={onSave} />,
+			<SettingsTab excludedFolders={'NEW'} readGitignore={true} onSaveSettings={onSave} />,
 		)
 
 		// Textarea reflects new prop and save returns to disabled

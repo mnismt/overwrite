@@ -37,5 +37,12 @@ export default defineConfig({
 		globals: true,
 		environment: 'jsdom',
 		setupFiles: './src/tests/setup.ts',
+		// Use process forks to avoid tinypool/worker teardown crashes in some sandboxes
+		pool: 'forks',
+		poolOptions: {
+			forks: {
+				singleFork: true,
+			},
+		},
 	},
 })

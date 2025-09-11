@@ -34,7 +34,7 @@
       "overwrite": [
         {
           "id": "overwriteFilesWebview",
-          "name": "Files",
+          "name": "Overwrite",
           "type": "webview",
           "contextualTitle": "Overwrite Files"
         }
