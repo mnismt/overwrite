@@ -1,10 +1,10 @@
 /* Ensure the webview fills the available viewport and panels can scroll */
 main {
-  height: 100vh;
+	height: 100vh;
 }
 
 vscode-tab-panel {
-  display: block;
-  height: 100%;
-  overflow: auto;
+	display: block;
+	height: 100%;
+	overflow: auto;
 }

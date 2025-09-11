@@ -75,19 +75,28 @@ The Apply Tab in the Webview Panel is dedicated to applying changes suggested by
   - Implement logic (within the Webview or extension host) to parse the pasted XML, specifically looking for <file> tags and their path and action attributes.
   - Extract <search> and <content> blocks for modify actions.
   - Extract <content> blocks for create and rewrite actions.
-- Requirement 2.2.3: "Preview & Apply Changes" Button: A button in the Webview Panel to initiate the application process. Consider adding a preview step (e.g., using VS Code's diff view) before final application.
+- Requirement 2.2.3: Separate Preview and Apply Actions:
+  - Preview: Opens native VS Code diffs without saving, comparing current workspace files to the computed “after” content from the XML.
+    - Implementation notes: use `vscode.workspace.openTextDocument({ content })` to create in‑memory documents and execute `vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title)`.
+    - Behaviors per action:
+      - create: diff empty (left) → new content (right).
+      - rewrite: original file (left; if missing, empty) → new content (right).
+      - modify: original (left) → modified (right).
+      - delete: original (left; if missing, empty) → empty (right).
+      - rename: show a preview notification of the rename plan.
+  - Apply: Writes changes to disk using VS Code APIs (see 2.2.4). Preview and Apply are independent; users may do either in any order.
 - Requirement 2.2.4: Implement File Actions using VS Code API:
-  - create: Use vscode.workspace.fs.writeFile to create a new file at the specified relative path with the provided <content>. Ensure the path is resolved correctly relative to the workspace root. Handle directory creation if needed.
-  - rewrite: Use vscode.workspace.fs.writeFile to replace the entire content of the file at the specified relative path with the provided <content>.
+  - create: Use vscode.workspace.fs.writeFile to create a new file at the specified path with the provided <content>. Ensure directory creation if needed.
+  - rewrite: Use vscode.workspace.fs.writeFile to replace the entire content of the file at the specified path with the provided <content>.
   - modify:
-    - Use vscode.workspace.openTextDocument and getText to read the target file specified by the relative path.
-    - Find the exact block of text matching the <search> content.
+    - Use vscode.workspace.openTextDocument and getText to read the target file.
+    - Find the exact block of text matching the <search> content (respect optional <occurrence> first | last | N).
     - Calculate the vscode.Range of the found block.
-    - Create a vscode.WorkspaceEdit object. Use workspaceEdit.replace(fileUri, range, content) to stage the replacement.
-    - Apply the change using vscode.workspace.applyEdit. This integrates with VS Code's undo/redo stack.
+    - Create a vscode.WorkspaceEdit and use workspaceEdit.replace(fileUri, range, content) to stage the replacement.
+    - Apply the change using vscode.workspace.applyEdit (undo/redo integration).
     - Handle errors: file not found, search block not found, multiple ambiguous matches.
-  - delete: Use vscode.workspace.fs.delete to delete the file at the specified relative path. Use { recursive: true, useTrash: true } options for safety.
-- Requirement 2.2.5: Feedback & Error Handling: Provide clear feedback using VS Code notifications (vscode.window.showInformationMessage, vscode.window.showWarningMessage, vscode.window.showErrorMessage) and potentially status updates within the Webview Panel. Report success/failure for each action.
+  - delete: Use vscode.workspace.fs.delete to delete the file at the specified path. Use { recursive: true, useTrash: true } options for safety.
+- Requirement 2.2.5: Feedback & Error Handling: Provide clear feedback via VS Code notifications and status updates within the Webview. Report success/failure for each action. For Preview, surface parse errors to the Apply tab and open no diffs.
 
 **2.3. Setting (Webview Panel - Setting Tab)**
 

@@ -72,10 +72,9 @@ export function resolveXmlPathToUri(
 }
 
 function normalizeRelative(p: string): string {
-	// Trim leading ./ and convert backslashes to slashes for consistency
-	const withoutDot = p.replace(/^\.\/?/, '')
-	// Use node path posix normalize to clean redundant segments then convert to platform separators
-	const posix = withoutDot.replace(/\\/g, '/')
+	// Only trim leading "./" or ".\\" (not bare dotfiles like ".env") and convert backslashes to slashes
+	const withoutLeadingDotSlash = p.replace(/^[.]\//, '').replace(/^[.]\\/, '')
+	const posix = withoutLeadingDotSlash.replace(/\\/g, '/')
 	return posix
 }
 

@@ -128,6 +128,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 							message.payload as { responseText: string },
 						)
 						break
+					case 'previewChanges':
+						await this._handlePreviewChanges(
+							message.payload as { responseText: string },
+						)
+						break
 					default:
 						console.warn('Received unknown message command:', message.command)
 				}
@@ -138,6 +143,223 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	// --- Private Helper Methods ---
+
+	/**
+	 * Handles the 'previewChanges' message from the webview.
+	 * Opens diff editors comparing current files to computed in-memory results.
+	 */
+	private async _handlePreviewChanges(payload: {
+		responseText: string
+	}): Promise<void> {
+		if (!payload?.responseText) {
+			vscode.window.showErrorMessage('No response text provided.')
+			return
+		}
+
+		try {
+			const parseResult = parseXmlResponse(payload.responseText)
+			if (parseResult.errors.length > 0) {
+				this._view?.webview.postMessage({
+					command: 'previewChangesResult',
+					success: false,
+					errors: parseResult.errors,
+				})
+				vscode.window.showErrorMessage(
+					`Error parsing XML: ${parseResult.errors[0]}`,
+				)
+				return
+			}
+
+			if (parseResult.fileActions.length === 0) {
+				vscode.window.showWarningMessage(
+					'No file actions found in the response.',
+				)
+				this._view?.webview.postMessage({
+					command: 'previewChangesResult',
+					success: false,
+					errors: ['No file actions found in the response.'],
+				})
+				return
+			}
+
+			// Optionally show plan
+			if (parseResult.plan) {
+				vscode.window.showInformationMessage(`Plan: ${parseResult.plan}`)
+			}
+
+			// For each file action, compute in-memory right-hand content and open diff
+			for (const fa of parseResult.fileActions) {
+				try {
+					const targetUri = this._resolvePathToUriSafe(fa.path, fa.root)
+					switch (fa.action) {
+						case 'create': {
+							const newText = fa.changes?.[0]?.content ?? ''
+							const leftDoc = await vscode.workspace.openTextDocument({
+								content: '',
+							})
+							const rightDoc = await vscode.workspace.openTextDocument({
+								content: newText,
+							})
+							await vscode.commands.executeCommand(
+								'vscode.diff',
+								leftDoc.uri,
+								rightDoc.uri,
+								`Preview: create ${fa.path}`,
+							)
+							break
+						}
+						case 'rewrite': {
+							const newText = fa.changes?.[0]?.content ?? ''
+							let leftDoc: vscode.TextDocument
+							try {
+								leftDoc = await vscode.workspace.openTextDocument(targetUri)
+							} catch {
+								leftDoc = await vscode.workspace.openTextDocument({ content: '' })
+							}
+							const rightDoc = await vscode.workspace.openTextDocument({
+								content: newText,
+								language: leftDoc.languageId,
+							})
+							await vscode.commands.executeCommand(
+								'vscode.diff',
+								leftDoc.uri,
+								rightDoc.uri,
+								`Preview: rewrite ${fa.path}`,
+							)
+							break
+						}
+						case 'modify': {
+							let leftDoc: vscode.TextDocument
+							try {
+								leftDoc = await vscode.workspace.openTextDocument(targetUri)
+							} catch {
+								vscode.window.showWarningMessage(`Preview modify skipped: file not found: ${fa.path}`)
+								break
+							}
+							const eol = leftDoc.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+							let working = leftDoc.getText()
+							for (const ch of fa.changes ?? []) {
+								if (!ch.search) continue
+								const normalizedSearch = this._normalizeToEol(ch.search, eol)
+								let idx = working.indexOf(normalizedSearch)
+								if (idx === -1) continue
+								// If multiple occurrences, respect occurrence selector
+								const nextPos = working.indexOf(normalizedSearch, idx + 1)
+								if (nextPos !== -1) {
+									const occ = ch.occurrence
+									if (occ === 'last') {
+										idx = working.lastIndexOf(normalizedSearch)
+									} else if (typeof occ === 'number' && occ > 0) {
+										idx = this._findNthOccurrence(
+											working,
+											normalizedSearch,
+											occ,
+										)
+										if (idx === -1) continue
+									}
+								}
+								working =
+									working.slice(0, idx) +
+									(ch.content ?? '') +
+									working.slice(idx + normalizedSearch.length)
+							}
+							const rightDoc = await vscode.workspace.openTextDocument({
+								content: working,
+								language: leftDoc.languageId,
+							})
+							await vscode.commands.executeCommand(
+								'vscode.diff',
+								leftDoc.uri,
+								rightDoc.uri,
+								`Preview: modify ${fa.path}`,
+							)
+							break
+						}
+						case 'delete': {
+							let leftDoc: vscode.TextDocument
+							try {
+								leftDoc = await vscode.workspace.openTextDocument(targetUri)
+							} catch {
+								// If already deleted or missing, show empty comparison
+								leftDoc = await vscode.workspace.openTextDocument({ content: '' })
+							}
+							const rightDoc = await vscode.workspace.openTextDocument({
+								content: '',
+							})
+							await vscode.commands.executeCommand(
+								'vscode.diff',
+								leftDoc.uri,
+								rightDoc.uri,
+								`Preview: delete ${fa.path}`,
+							)
+							break
+						}
+						case 'rename': {
+							vscode.window.showInformationMessage(
+								`Preview: rename ${fa.path} → ${fa.newPath ?? ''}`,
+							)
+							break
+						}
+					}
+				} catch (e) {
+					console.error('Preview error for action', fa, e)
+				}
+			}
+
+			// Notify webview to clear loading state
+			this._view?.webview.postMessage({
+				command: 'previewChangesResult',
+				success: true,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error previewing changes')
+			this._view?.webview.postMessage({
+				command: 'previewChangesResult',
+				success: false,
+				errors: [error instanceof Error ? error.message : String(error)],
+			})
+		}
+	}
+
+	private _resolvePathToUriSafe(p: string, root?: string): vscode.Uri {
+		// Reuse existing resolver via xml-parser path resolver used in file-action-handler
+		// Minimal duplication to avoid cross-file refactor
+		try {
+			// Prefer the public resolver if available
+			const { resolveXmlPathToUri } = require('../../utils/path-resolver')
+			return resolveXmlPathToUri(p, root)
+		} catch {
+			// Fallback: try to resolve as workspace-relative or absolute
+			if (path.isAbsolute(p)) return vscode.Uri.file(p)
+			const folders = vscode.workspace.workspaceFolders
+			if (!folders || folders.length === 0) return vscode.Uri.file(p)
+			const base = root
+				? (folders.find((f) => f.name === root)?.uri.fsPath ??
+					folders[0]!.uri.fsPath)
+				: folders[0]!.uri.fsPath
+			return vscode.Uri.file(path.join(base, p))
+		}
+	}
+
+	private _normalizeToEol(text: string, eol: string): string {
+		const lf = text.replace(/\r\n/g, '\n')
+		return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf
+	}
+
+	private _findNthOccurrence(
+		haystack: string,
+		needle: string,
+		n: number,
+	): number {
+		let idx = -1
+		let from = 0
+		for (let i = 0; i < n; i++) {
+			idx = haystack.indexOf(needle, from)
+			if (idx === -1) return -1
+			from = idx + needle.length
+		}
+		return idx
+	}
 
 	/**
 	 * Handles errors by showing an error message to the user.

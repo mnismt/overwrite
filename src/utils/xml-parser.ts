@@ -149,22 +149,22 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
  * @returns The extracted content or undefined if not found.
  */
 function extractContentBetweenMarkers(text: string): string | undefined {
-  // Be liberal: accept markers with or without surrounding newlines/whitespace.
-  // We look for the first '===' and the last '===' and trim whitespace around them.
-  const s = text.trim()
-  const first = s.indexOf('===')
-  if (first === -1) return undefined
-  const last = s.lastIndexOf('===')
-  if (last === -1 || last <= first) return undefined
-  // Start after the first marker and skip optional whitespace/newlines
-  let start = first + 3
-  while (start < s.length && /[ \t\r\n]/.test(s[start]!)) start++
-  // End before the last marker, trim trailing whitespace/newlines
-  let end = last
-  let endTrim = end - 1
-  while (endTrim >= 0 && /[ \t\r\n]/.test(s[endTrim]!)) endTrim--
-  if (endTrim < start) return ''
-  return s.slice(start, endTrim + 1)
+	// Be liberal: accept markers with or without surrounding newlines/whitespace.
+	// We look for the first '===' and the last '===' and trim whitespace around them.
+	const s = text.trim()
+	const first = s.indexOf('===')
+	if (first === -1) return undefined
+	const last = s.lastIndexOf('===')
+	if (last === -1 || last <= first) return undefined
+	// Start after the first marker and skip optional whitespace/newlines
+	let start = first + 3
+	while (start < s.length && /[ \t\r\n]/.test(s[start]!)) start++
+	// End before the last marker, trim trailing whitespace/newlines
+	const end = last
+	let endTrim = end - 1
+	while (endTrim >= 0 && /[ \t\r\n]/.test(s[endTrim]!)) endTrim--
+	if (endTrim < start) return ''
+	return s.slice(start, endTrim + 1)
 }
 
 /**
@@ -172,34 +172,35 @@ function extractContentBetweenMarkers(text: string): string | undefined {
  * Keeps the slice from the first <Plan|file> to the last </Plan|file>.
  */
 function sanitizeResponse(raw: string): string {
-  let s = raw.trim()
-  // Remove triple backtick fences if present
-  if (s.startsWith('```')) {
-    // Drop opening fence line
-    s = s.replace(/^```[\w-]*\s*\n?/, '')
-  }
-  if (s.endsWith('```')) {
-    s = s.replace(/\n?```\s*$/, '')
-  }
-  // Find useful XML region
-  const startIdxOptions = [
-    s.indexOf('<file '),
-    s.indexOf('<Plan'),
-  ].filter((i) => i >= 0) as number[]
-  const startIdx = startIdxOptions.length ? Math.min(...startIdxOptions) : -1
-  if (startIdx >= 0) s = s.slice(startIdx)
+	let s = raw.trim()
+	// Remove triple backtick fences if present
+	if (s.startsWith('```')) {
+		// Drop opening fence line
+		s = s.replace(/^```[\w-]*\s*\n?/, '')
+	}
+	if (s.endsWith('```')) {
+		s = s.replace(/\n?```\s*$/, '')
+	}
+	// Find useful XML region
+	const startIdxOptions = [s.indexOf('<file '), s.indexOf('<Plan')].filter(
+		(i) => i >= 0,
+	) as number[]
+	const startIdx = startIdxOptions.length ? Math.min(...startIdxOptions) : -1
+	if (startIdx >= 0) s = s.slice(startIdx)
 
-  // Determine end by the last closing tag of interest
-  const lastCloseFile = s.lastIndexOf('</file>')
-  const lastClosePlan1 = s.lastIndexOf('</Plan>')
-  const lastClosePlan2 = s.lastIndexOf('</plan>')
-  const lastClose = Math.max(lastCloseFile, lastClosePlan1, lastClosePlan2)
-  if (lastClose > -1) {
-    // Include the closing tag
-    const end = lastClose + (s.slice(lastClose).toLowerCase().startsWith('</file>') ? 7 : 7)
-    s = s.slice(0, end)
-  }
-  return s.trim()
+	// Determine end by the last closing tag of interest
+	const lastCloseFile = s.lastIndexOf('</file>')
+	const lastClosePlan1 = s.lastIndexOf('</Plan>')
+	const lastClosePlan2 = s.lastIndexOf('</plan>')
+	const lastClose = Math.max(lastCloseFile, lastClosePlan1, lastClosePlan2)
+	if (lastClose > -1) {
+		// Include the closing tag
+		const end =
+			lastClose +
+			(s.slice(lastClose).toLowerCase().startsWith('</file>') ? 7 : 7)
+		s = s.slice(0, end)
+	}
+	return s.trim()
 }
 
 /**

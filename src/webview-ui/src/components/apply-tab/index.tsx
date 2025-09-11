@@ -7,11 +7,13 @@ import type { ApplyChangeResponse, ApplyResult } from './types'
 
 interface ApplyTabProps {
 	onApply: (responseText: string) => void
+	onPreview: (responseText: string) => void
 }
 
-const ApplyTab: React.FC<ApplyTabProps> = ({ onApply }) => {
+const ApplyTab: React.FC<ApplyTabProps> = ({ onApply, onPreview }) => {
 	const [responseText, setResponseText] = useState('')
 	const [isApplying, setIsApplying] = useState(false)
+	const [isPreviewing, setIsPreviewing] = useState(false)
 	const [results, setResults] = useState<ApplyResult[] | null>(null)
 	const [errors, setErrors] = useState<string[] | null>(null)
 
@@ -27,6 +29,16 @@ const ApplyTab: React.FC<ApplyTabProps> = ({ onApply }) => {
 		onApply(responseText)
 	}, [onApply, responseText])
 
+	const handlePreview = useCallback(() => {
+		if (!responseText.trim()) {
+			setErrors(['Please paste an XML response first.'])
+			return
+		}
+		setIsPreviewing(true)
+		setErrors(null)
+		onPreview(responseText)
+	}, [onPreview, responseText])
+
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data as ApplyChangeResponse
@@ -39,6 +51,13 @@ const ApplyTab: React.FC<ApplyTabProps> = ({ onApply }) => {
 				} else {
 					setErrors(message.errors || ['Unknown error occurred'])
 					setResults(null)
+				}
+			}
+
+			if (message.command === 'previewChangesResult') {
+				setIsPreviewing(false)
+				if (!message.success) {
+					setErrors(message.errors || ['Unknown error occurred'])
 				}
 			}
 		}
@@ -69,6 +88,8 @@ const ApplyTab: React.FC<ApplyTabProps> = ({ onApply }) => {
 			/>
 			<ApplyActions
 				isApplying={isApplying}
+				isPreviewing={isPreviewing}
+				onPreview={handlePreview}
 				onApply={handleApply}
 				handleButtonKeyDown={handleButtonKeyDown}
 			/>

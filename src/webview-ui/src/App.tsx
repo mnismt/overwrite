@@ -96,6 +96,9 @@ function App() {
 					// ApplyTab listens for this and updates its own state.
 					// Handle here to avoid unknown-command warnings.
 					break
+				case 'previewChangesResult':
+					// ApplyTab listens for this and updates its own state.
+					break
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}
@@ -165,8 +168,15 @@ function App() {
 	// Apply Tab: Handle applying changes
 	const handleApply = useCallback(
 		(responseText: string) => {
-			sendMessage('applyChanges', { responseText }) // Define this command
-			// TODO: Handle apply feedback
+			sendMessage('applyChanges', { responseText })
+		},
+		[sendMessage],
+	)
+
+	// Apply Tab: Handle previewing changes (opens diff editors, no writes)
+	const handlePreview = useCallback(
+		(responseText: string) => {
+			sendMessage('previewChanges', { responseText })
 		},
 		[sendMessage],
 	)
@@ -199,7 +209,7 @@ function App() {
 					Apply
 				</vscode-tab-header>
 				<vscode-tab-panel id="apply-tab-panel">
-					<ApplyTab onApply={handleApply} />
+					<ApplyTab onApply={handleApply} onPreview={handlePreview} />
 				</vscode-tab-panel>
 
 				{/* Settings Tab */}
