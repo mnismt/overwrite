@@ -1,5 +1,7 @@
 # Overwrite README
 
+[![CI](https://github.com/mnismt/aboverepo/actions/workflows/ci.yml/badge.svg)](https://github.com/mnismt/aboverepo/actions/workflows/ci.yml)
+
 **Overwrite** is a Visual Studio Code extension inspired by RepoPrompt. It helps you select files and folders from your workspace, build structured XML prompts for Large Language Models (LLMs) including code context, and apply LLM-suggested changes back to your local files.
 
 ## Features

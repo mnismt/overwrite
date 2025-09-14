@@ -67,7 +67,9 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
 		fireEvent.click(previewButton)
 
 		expect(mockOnPreview).toHaveBeenCalledTimes(1)
@@ -84,7 +86,9 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const applyButton = screen.getByText('Apply Changes').closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 		fireEvent.click(applyButton)
 
 		expect(mockOnApply).toHaveBeenCalledTimes(1)
@@ -101,8 +105,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Previewing…').closest('vscode-button')!
-		const applyButton = screen.getByText('Apply Changes').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Previewing…')
+			.closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 
 		expect(previewButton).toHaveAttribute('disabled')
 		expect(applyButton).toHaveAttribute('disabled')
@@ -119,8 +127,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!
-		const applyButton = screen.getByText('Applying Changes…').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Applying Changes…')
+			.closest('vscode-button')!
 
 		expect(previewButton).toHaveAttribute('disabled')
 		expect(applyButton).toHaveAttribute('disabled')
@@ -137,7 +149,9 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
 		const keyEvent = { key: 'Enter', preventDefault: vi.fn() }
 
 		fireEvent.keyDown(previewButton, keyEvent)
@@ -160,7 +174,9 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const applyButton = screen.getByText('Apply Changes').closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 		const keyEvent = { key: ' ', preventDefault: vi.fn() }
 
 		fireEvent.keyDown(applyButton, keyEvent)
@@ -183,8 +199,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!
-		const applyButton = screen.getByText('Applying Changes…').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Applying Changes…')
+			.closest('vscode-button')!
 
 		expect(previewButton).toHaveAttribute('disabled')
 		expect(applyButton).toHaveAttribute('disabled')
@@ -200,8 +220,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButtonPreviewing = screen.getByText('Previewing…').closest('vscode-button')!
-		const applyButtonPreviewing = screen.getByText('Apply Changes').closest('vscode-button')!
+		const previewButtonPreviewing = screen
+			.getByText('Previewing…')
+			.closest('vscode-button')!
+		const applyButtonPreviewing = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 
 		expect(previewButtonPreviewing).toHaveAttribute('disabled')
 		expect(applyButtonPreviewing).toHaveAttribute('disabled')
@@ -218,8 +242,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!
-		const applyButton = screen.getByText('Apply Changes').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 
 		// Preview button should have secondary appearance
 		expect(previewButton).toHaveAttribute('appearance', 'secondary')
@@ -238,8 +266,12 @@ describe('ApplyActions', () => {
 			/>,
 		)
 
-		const previewButton = screen.getByText('Preview Changes').closest('vscode-button')!
-		const applyButton = screen.getByText('Apply Changes').closest('vscode-button')!
+		const previewButton = screen
+			.getByText('Preview Changes')
+			.closest('vscode-button')!
+		const applyButton = screen
+			.getByText('Apply Changes')
+			.closest('vscode-button')!
 
 		expect(previewButton).not.toHaveAttribute('disabled')
 		expect(applyButton).not.toHaveAttribute('disabled')

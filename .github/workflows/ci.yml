@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-extension:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        vscode-version: ['1.85.0', 'stable']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm check-types
+
+      - name: Run extension tests
+        run: pnpm test
+        env:
+          VSCODE_VERSION: ${{ matrix.vscode-version }}
+
+  test-webview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install webview dependencies
+        run: pnpm -C src/webview-ui install
+
+      - name: Run webview tests
+        run: pnpm -C src/webview-ui test --run
+        timeout-minutes: 10
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test-extension, test-webview]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install webview dependencies
+        run: pnpm -C src/webview-ui install
+
+      - name: Build extension
+        run: pnpm package
+
+      - name: Create VSIX package
+        run: pnpm vscode:package
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-vsix
+          path: '*.vsix'
+          retention-days: 3
