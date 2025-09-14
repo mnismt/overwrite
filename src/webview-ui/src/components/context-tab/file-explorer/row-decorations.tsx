@@ -58,7 +58,12 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 							position: 'relative',
 						}}
 					>
-						{showBadge ? <TokenBadge count={folderTokenTotal} /> : null}
+						{showBadge ? (
+							<TokenBadge
+								count={folderTokenTotal}
+								folderState={folderSelectionState}
+							/>
+						) : null}
 					</div>,
 				)
 			}
@@ -88,16 +93,35 @@ const RowDecorations: React.FC<RowDecorationsProps> = React.memo(
 )
 RowDecorations.displayName = 'RowDecorations'
 
-const TokenBadge: React.FC<{ count: number; isSelected?: boolean }> = ({
-	count,
-	isSelected = false,
-}) => {
+const TokenBadge: React.FC<{
+	count: number
+	isSelected?: boolean
+	folderState?: FolderSelectionState
+}> = ({ count, isSelected = false, folderState }) => {
+	let color = 'inherit'
+	let opacity = 0.6
+
+	if (folderState) {
+		// For folders, use color based on selection state
+		if (folderState === 'full') {
+			color = 'var(--vscode-testing-iconPassed)' // green
+			opacity = 0.8
+		} else if (folderState === 'partial') {
+			color = 'var(--vscode-testing-iconQueued)' // yellow
+			opacity = 0.8
+		}
+	} else if (isSelected) {
+		// For files, use green when selected
+		color = 'var(--vscode-testing-iconPassed)'
+		opacity = 0.8
+	}
+
 	return (
 		<p
 			className="text-[10px]"
 			style={{
-				opacity: isSelected ? 0.8 : 0.6,
-				color: isSelected ? 'var(--vscode-testing-iconPassed)' : 'inherit',
+				opacity,
+				color,
 			}}
 		>
 			{formatTokenCount(count)}

@@ -1,5 +1,4 @@
-import { render, screen } from '@testing-library/react'
-import React from 'react'
+import { render } from '@testing-library/react'
 import type { VscodeTreeItem } from '../../../../../types'
 import ContextTab from '../index'
 
@@ -35,8 +34,12 @@ describe('ContextTab layout', () => {
 		expect(rows[0]).toHaveTextContent(/^\s*Selected files:\s*0\s*$/)
 		expect(rows[1]).toHaveTextContent(/^\s*File tokens \(actual\):\s*0\s*$/)
 		expect(rows[2]).toHaveTextContent(/^\s*User instruction tokens:\s*0\s*$/)
-		expect(rows[3]).toHaveTextContent(/^\s*Total tokens \(Copy Context\):\s*0\s*$/)
-		expect(rows[4]).toHaveTextContent(/^\s*Total tokens \(Copy Context \+ XML\):\s*5000\s*$/)
+		expect(rows[3]).toHaveTextContent(
+			/^\s*Total tokens \(Copy Context\):\s*0\s*$/,
+		)
+		expect(rows[4]).toHaveTextContent(
+			/^\s*Total tokens \(Copy Context \+ XML\):\s*5000\s*$/,
+		)
 
 		// Dual buttons via custom web components
 		const buttons = footer.querySelectorAll('vscode-button')
