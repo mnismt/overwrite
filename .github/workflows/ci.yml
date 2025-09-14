@@ -28,7 +28,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Lint
         run: pnpm lint
@@ -59,10 +59,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Install webview dependencies
-        run: pnpm -C src/webview-ui install
+        run: pnpm -C src/webview-ui install --no-frozen-lockfile
 
       - name: Run webview tests
         run: pnpm -C src/webview-ui test --run
@@ -87,10 +87,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Install webview dependencies
-        run: pnpm -C src/webview-ui install
+        run: pnpm -C src/webview-ui install --no-frozen-lockfile
 
       - name: Build extension
         run: pnpm package
