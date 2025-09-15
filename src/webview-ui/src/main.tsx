@@ -29,7 +29,7 @@ if (import.meta.env.DEV) {
 }
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
-		{import.meta.env.DEV ? <vscode-dev-toolbar /> : null}
+		{/* {import.meta.env.DEV ? <vscode-dev-toolbar /> : null} */}
 		<App />
 	</StrictMode>,
 )

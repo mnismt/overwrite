@@ -26,7 +26,9 @@ const ActionButton: React.FC<MiniActionButtonProps> = React.memo(
 					? 'var(--vscode-errorForeground)'
 					: 'var(--vscode-testing-iconPassed)'
 			}
-			return hovered ? '#ffffff' : '#007ACC'
+			return hovered 
+				? 'var(--vscode-button-foreground)' 
+				: 'var(--vscode-foreground)'
 		}
 
 		return (
