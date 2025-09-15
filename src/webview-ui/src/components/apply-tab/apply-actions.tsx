@@ -21,7 +21,6 @@ const ApplyActions: React.FC<ApplyActionsProps> = ({
 	return (
 		<div className="flex gap-2 mt-2">
 			<vscode-button
-				appearance="secondary"
 				onClick={onPreview}
 				onKeyDown={(e) => handleButtonKeyDown(e, onPreview)}
 				disabled={isPreviewing || isApplying}

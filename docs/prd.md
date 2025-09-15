@@ -95,6 +95,7 @@ The Apply Tab in the Webview Panel is dedicated to applying changes suggested by
     - Handle errors: file not found, search block not found, multiple ambiguous matches.
   - delete: Use vscode.workspace.fs.delete to delete the file at the specified path. Use { recursive: true, useTrash: true } options for safety.
 - Requirement 2.2.5: Feedback & Error Handling: Provide clear feedback via VS Code notifications and status updates within the Webview. Report success/failure for each action. For Preview, surface parse errors to the Apply tab and open no diffs.
+- Requirement 2.2.6: Table-Based Preview Interface: Replace diff-based preview with structured table showing Path | Description | Changes | Actions. Display change counts (+X −Y) with visual progress bars. Include per-row apply buttons for individual file operations alongside bulk apply functionality.
 
 **2.3. Setting (Webview Panel - Setting Tab)**
 
@@ -204,3 +205,6 @@ interface VscodeTreeItem {
 **6. Updates**
 
 - Tests: Added unit tests for file-explorer (RowActions, MiniActionButton, RowDecorations, TreeNode, FileExplorer selection flows).
+- Preview Enhancements:
+  - Fixed syntax highlighting in diff previews by implementing language detection from file extensions (TypeScript, JavaScript, CSS, etc.)
+  - Fixed "unsaved" state issue by automatically saving documents after applying workspace edits

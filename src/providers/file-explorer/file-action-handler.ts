@@ -88,6 +88,12 @@ async function handleCreateAction(
 		edit.createFile(fileUri, { overwrite: false, ignoreIfExists: false })
 		edit.insert(fileUri, new vscode.Position(0, 0), content)
 		const applied = await vscode.workspace.applyEdit(edit)
+
+		// Save the document if it's open to avoid "unsaved" state
+		if (applied) {
+			await saveDocumentIfOpen(fileUri)
+		}
+
 		results.push({
 			path: fileAction.path,
 			action: 'create',
@@ -189,6 +195,10 @@ async function handleModifyAction(
 
 		if (successCount > 0) {
 			await vscode.workspace.applyEdit(workspaceEdit)
+
+			// Save the document if it's open to avoid "unsaved" state
+			await saveDocumentIfOpen(fileUri)
+
 			results.push({
 				path: fileAction.path,
 				action: 'modify',
@@ -242,6 +252,12 @@ async function handleRewriteAction(
 		const edit = new vscode.WorkspaceEdit()
 		edit.replace(fileUri, fullRange, content)
 		const applied = await vscode.workspace.applyEdit(edit)
+
+		// Save the document if it's open to avoid "unsaved" state
+		if (applied) {
+			await saveDocumentIfOpen(fileUri)
+		}
+
 		results.push({
 			path: fileAction.path,
 			action: 'rewrite',
@@ -370,4 +386,25 @@ function findNthOccurrence(
 		from = idx + needle.length
 	}
 	return idx
+}
+
+/**
+ * Attempts to save a document if it's currently open in VS Code.
+ * This ensures that workspace edits are persisted to disk and the file
+ * doesn't remain in an "unsaved" state in the editor.
+ */
+async function saveDocumentIfOpen(fileUri: vscode.Uri): Promise<void> {
+	try {
+		// Check if the document is currently open
+		const openDoc = vscode.workspace.textDocuments.find(
+			(doc) => doc.uri.toString() === fileUri.toString(),
+		)
+
+		if (openDoc?.isDirty) {
+			await openDoc.save()
+		}
+	} catch (error) {
+		// Log the error but don't throw - save failures shouldn't break the entire operation
+		console.warn(`Failed to save document ${fileUri.fsPath}:`, error)
+	}
 }

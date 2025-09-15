@@ -112,6 +112,9 @@ function App() {
 				case 'previewChangesResult':
 					// ApplyTab listens for this and updates its own state.
 					break
+				case 'applyRowChangeResult':
+					// ApplyTab listens for this and updates its own state.
+					break
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}
@@ -195,6 +198,14 @@ function App() {
 		[sendMessage],
 	)
 
+	// Apply Tab: Handle applying individual row
+	const handleApplyRow = useCallback(
+		(responseText: string, rowIndex: number) => {
+			sendMessage('applyRowChange', { responseText, rowIndex })
+		},
+		[sendMessage],
+	)
+
 	return (
 		<main className="h-screen overflow-hidden">
 			<vscode-tabs
@@ -224,7 +235,11 @@ function App() {
 					Apply
 				</vscode-tab-header>
 				<vscode-tab-panel id="apply-tab-panel">
-					<ApplyTab onApply={handleApply} onPreview={handlePreview} />
+					<ApplyTab
+						onApply={handleApply}
+						onPreview={handlePreview}
+						onApplyRow={handleApplyRow}
+					/>
 				</vscode-tab-panel>
 
 				{/* Settings Tab */}

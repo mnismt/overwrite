@@ -20,7 +20,7 @@ describe('ResultsDisplay', () => {
 		expect(screen.getByText('Results:')).toBeInTheDocument()
 		expect(screen.getByText('Errors:')).toBeInTheDocument()
 
-		errors.forEach(error => {
+		errors.forEach((error) => {
 			expect(screen.getByText(error)).toBeInTheDocument()
 		})
 	})
@@ -117,10 +117,10 @@ describe('ResultsDisplay', () => {
 		expect(screen.getByText('Results:')).toBeInTheDocument()
 		expect(screen.getByText('Errors:')).toBeInTheDocument()
 		expect(screen.getByText('File Operations:')).toBeInTheDocument()
-		
+
 		// Error content
 		expect(screen.getByText('Some operation failed')).toBeInTheDocument()
-		
+
 		// Result content
 		expect(screen.getByText('/src/success.ts')).toBeInTheDocument()
 		expect(screen.getByText('Success')).toBeInTheDocument()
@@ -200,7 +200,7 @@ describe('ResultsDisplay', () => {
 		// Check status badges
 		const successBadges = screen.getAllByText('Success')
 		const failedBadges = screen.getAllByText('Failed')
-		
+
 		expect(successBadges).toHaveLength(2)
 		expect(failedBadges).toHaveLength(1)
 	})
@@ -211,13 +211,16 @@ describe('ResultsDisplay', () => {
 				path: '/very/long/path/to/some/deeply/nested/file/with/a/very/long/name.tsx',
 				action: 'modify',
 				success: true,
-				message: 'This is a very long success message that might wrap to multiple lines in the table cell and should be handled gracefully by the component',
+				message:
+					'This is a very long success message that might wrap to multiple lines in the table cell and should be handled gracefully by the component',
 			},
 		]
 
 		render(<ResultsDisplay results={results} errors={null} />)
 
-		const longPath = screen.getByText('/very/long/path/to/some/deeply/nested/file/with/a/very/long/name.tsx')
+		const longPath = screen.getByText(
+			'/very/long/path/to/some/deeply/nested/file/with/a/very/long/name.tsx',
+		)
 		const longMessage = screen.getByText(/This is a very long success message/)
 
 		// Check that long content is rendered

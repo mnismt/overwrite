@@ -267,7 +267,9 @@ describe('ApplyTab', () => {
 		expect(screen.getByTestId('errors')).toBeInTheDocument()
 
 		// Then start a new apply operation
-		fireEvent.change(textarea, { target: { value: '<file>new content</file>' } })
+		fireEvent.change(textarea, {
+			target: { value: '<file>new content</file>' },
+		})
 		fireEvent.click(applyButton)
 
 		// Errors should be cleared
@@ -286,7 +288,9 @@ describe('ApplyTab', () => {
 		expect(screen.getByTestId('errors')).toBeInTheDocument()
 
 		// Then start a new preview operation
-		fireEvent.change(textarea, { target: { value: '<file>new content</file>' } })
+		fireEvent.change(textarea, {
+			target: { value: '<file>new content</file>' },
+		})
 		fireEvent.click(previewButton)
 
 		// Errors should be cleared

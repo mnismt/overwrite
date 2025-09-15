@@ -6,15 +6,12 @@ describe('ResponseTextarea', () => {
 	it('renders label and textarea with correct attributes', () => {
 		const mockOnTextChange = vi.fn()
 
-		render(
-			<ResponseTextarea
-				responseText=""
-				onTextChange={mockOnTextChange}
-			/>,
-		)
+		render(<ResponseTextarea responseText="" onTextChange={mockOnTextChange} />)
 
 		const label = screen.getByText('Paste LLM Response (XML Format)')
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 
 		expect(label).toBeInTheDocument()
 		expect(textarea).toBeInTheDocument()
@@ -33,21 +30,20 @@ describe('ResponseTextarea', () => {
 			/>,
 		)
 
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 		expect(textarea).toHaveValue(testText)
 	})
 
 	it('calls onTextChange when textarea input changes', () => {
 		const mockOnTextChange = vi.fn()
 
-		render(
-			<ResponseTextarea
-				responseText=""
-				onTextChange={mockOnTextChange}
-			/>,
-		)
+		render(<ResponseTextarea responseText="" onTextChange={mockOnTextChange} />)
 
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 		const newText = '<file path="example.ts" action="create">new content</file>'
 
 		fireEvent.input(textarea, { target: { value: newText } })
@@ -63,14 +59,11 @@ describe('ResponseTextarea', () => {
 	it('handles multiple text changes', () => {
 		const mockOnTextChange = vi.fn()
 
-		render(
-			<ResponseTextarea
-				responseText=""
-				onTextChange={mockOnTextChange}
-			/>,
-		)
+		render(<ResponseTextarea responseText="" onTextChange={mockOnTextChange} />)
 
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 
 		fireEvent.input(textarea, { target: { value: 'first change' } })
 		fireEvent.input(textarea, { target: { value: 'second change' } })
@@ -82,15 +75,12 @@ describe('ResponseTextarea', () => {
 	it('has proper accessibility attributes', () => {
 		const mockOnTextChange = vi.fn()
 
-		render(
-			<ResponseTextarea
-				responseText=""
-				onTextChange={mockOnTextChange}
-			/>,
-		)
+		render(<ResponseTextarea responseText="" onTextChange={mockOnTextChange} />)
 
 		const label = screen.getByText('Paste LLM Response (XML Format)')
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 
 		// Check that label is associated with textarea
 		expect(label).toHaveAttribute('htmlFor', 'llm-response-textarea')
@@ -107,9 +97,11 @@ describe('ResponseTextarea', () => {
 			/>,
 		)
 
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 		expect(textarea).toHaveValue('some initial text')
-		
+
 		fireEvent.input(textarea, { target: { value: '' } })
 
 		expect(mockOnTextChange).toHaveBeenCalledWith(
@@ -135,14 +127,11 @@ describe('ResponseTextarea', () => {
 	</file>
 </files>`.trim()
 
-		render(
-			<ResponseTextarea
-				responseText=""
-				onTextChange={mockOnTextChange}
-			/>,
-		)
+		render(<ResponseTextarea responseText="" onTextChange={mockOnTextChange} />)
 
-		const textarea = screen.getByPlaceholderText('Paste the full XML response from the AI here...')
+		const textarea = screen.getByPlaceholderText(
+			'Paste the full XML response from the AI here...',
+		)
 		fireEvent.input(textarea, { target: { value: largeXml } })
 
 		expect(mockOnTextChange).toHaveBeenCalledWith(

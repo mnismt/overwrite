@@ -249,9 +249,8 @@ describe('ApplyActions', () => {
 			.getByText('Apply Changes')
 			.closest('vscode-button')!
 
-		// Preview button should have secondary appearance
-		expect(previewButton).toHaveAttribute('appearance', 'secondary')
-		// Apply button should not have appearance attribute (default primary)
+		// Both buttons should not have appearance attribute (using default styling)
+		expect(previewButton).not.toHaveAttribute('appearance')
 		expect(applyButton).not.toHaveAttribute('appearance')
 	})
 

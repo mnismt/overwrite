@@ -93,11 +93,7 @@ describe('RowDecorations', () => {
 
 		it('displays green color for selected file token count', () => {
 			render(
-				<RowDecorations
-					isFolder={false}
-					fileIsSelected
-					fileTokenCount={789}
-				/>,
+				<RowDecorations isFolder={false} fileIsSelected fileTokenCount={789} />,
 			)
 			const tokenBadge = screen.getByText(/789/)
 			expect(tokenBadge).toHaveStyle({

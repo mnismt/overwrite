@@ -9,6 +9,7 @@ import {
 import { countManyWithInfo, encodeText } from '../../services/token-counter'
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
+import { getLanguageIdFromPath } from '../../utils/language-detection'
 import { parseXmlResponse } from '../../utils/xml-parser'
 import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
@@ -164,6 +165,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 							message.payload as { responseText: string },
 						)
 						break
+					case 'applyRowChange':
+						await this._handleApplyRowChange(
+							message.payload as { responseText: string; rowIndex: number },
+						)
+						break
 					default:
 						console.warn('Received unknown message command:', message.command)
 				}
@@ -218,135 +224,17 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				vscode.window.showInformationMessage(`Plan: ${parseResult.plan}`)
 			}
 
-			// For each file action, compute in-memory right-hand content and open diff
-			for (const fa of parseResult.fileActions) {
-				try {
-					const targetUri = this._resolvePathToUriSafe(fa.path, fa.root)
-					switch (fa.action) {
-						case 'create': {
-							const newText = fa.changes?.[0]?.content ?? ''
-							const leftDoc = await vscode.workspace.openTextDocument({
-								content: '',
-							})
-							const rightDoc = await vscode.workspace.openTextDocument({
-								content: newText,
-							})
-							await vscode.commands.executeCommand(
-								'vscode.diff',
-								leftDoc.uri,
-								rightDoc.uri,
-								`Preview: create ${fa.path}`,
-							)
-							break
-						}
-						case 'rewrite': {
-							const newText = fa.changes?.[0]?.content ?? ''
-							let leftDoc: vscode.TextDocument
-							try {
-								leftDoc = await vscode.workspace.openTextDocument(targetUri)
-							} catch {
-								leftDoc = await vscode.workspace.openTextDocument({
-									content: '',
-								})
-							}
-							const rightDoc = await vscode.workspace.openTextDocument({
-								content: newText,
-								language: leftDoc.languageId,
-							})
-							await vscode.commands.executeCommand(
-								'vscode.diff',
-								leftDoc.uri,
-								rightDoc.uri,
-								`Preview: rewrite ${fa.path}`,
-							)
-							break
-						}
-						case 'modify': {
-							let leftDoc: vscode.TextDocument
-							try {
-								leftDoc = await vscode.workspace.openTextDocument(targetUri)
-							} catch {
-								vscode.window.showWarningMessage(
-									`Preview modify skipped: file not found: ${fa.path}`,
-								)
-								break
-							}
-							const eol = leftDoc.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
-							let working = leftDoc.getText()
-							for (const ch of fa.changes ?? []) {
-								if (!ch.search) continue
-								const normalizedSearch = this._normalizeToEol(ch.search, eol)
-								let idx = working.indexOf(normalizedSearch)
-								if (idx === -1) continue
-								// If multiple occurrences, respect occurrence selector
-								const nextPos = working.indexOf(normalizedSearch, idx + 1)
-								if (nextPos !== -1) {
-									const occ = ch.occurrence
-									if (occ === 'last') {
-										idx = working.lastIndexOf(normalizedSearch)
-									} else if (typeof occ === 'number' && occ > 0) {
-										idx = this._findNthOccurrence(
-											working,
-											normalizedSearch,
-											occ,
-										)
-										if (idx === -1) continue
-									}
-								}
-								working =
-									working.slice(0, idx) +
-									(ch.content ?? '') +
-									working.slice(idx + normalizedSearch.length)
-							}
-							const rightDoc = await vscode.workspace.openTextDocument({
-								content: working,
-								language: leftDoc.languageId,
-							})
-							await vscode.commands.executeCommand(
-								'vscode.diff',
-								leftDoc.uri,
-								rightDoc.uri,
-								`Preview: modify ${fa.path}`,
-							)
-							break
-						}
-						case 'delete': {
-							let leftDoc: vscode.TextDocument
-							try {
-								leftDoc = await vscode.workspace.openTextDocument(targetUri)
-							} catch {
-								// If already deleted or missing, show empty comparison
-								leftDoc = await vscode.workspace.openTextDocument({
-									content: '',
-								})
-							}
-							const rightDoc = await vscode.workspace.openTextDocument({
-								content: '',
-							})
-							await vscode.commands.executeCommand(
-								'vscode.diff',
-								leftDoc.uri,
-								rightDoc.uri,
-								`Preview: delete ${fa.path}`,
-							)
-							break
-						}
-						case 'rename': {
-							vscode.window.showInformationMessage(
-								`Preview: rename ${fa.path} → ${fa.newPath ?? ''}`,
-							)
-							break
-						}
-					}
-				} catch (e) {
-					console.error('Preview error for action', fa, e)
-				}
-			}
+			// Generate preview data for the table instead of opening diffs
+			const { analyzeFileActions } = await import(
+				'../../services/preview-analyzer.js'
+			)
+			const previewData = await analyzeFileActions(parseResult.fileActions)
 
-			// Notify webview to clear loading state
+			// Send preview data to webview
 			this._view?.webview.postMessage({
 				command: 'previewChangesResult',
 				success: true,
+				previewData,
 			})
 		} catch (error) {
 			this._handleError(error, 'Error previewing changes')
@@ -688,6 +576,93 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			this._handleError(error, 'Error applying changes')
 			this._view?.webview.postMessage({
 				command: 'applyChangesResult',
+				success: false,
+				errors: [error instanceof Error ? error.message : String(error)],
+			})
+		}
+	}
+
+	/**
+	 * Handles the 'applyRowChange' message from the webview.
+	 * Applies a single file action specified by rowIndex.
+	 */
+	private async _handleApplyRowChange(payload: {
+		responseText: string
+		rowIndex: number
+	}): Promise<void> {
+		if (!payload?.responseText) {
+			vscode.window.showErrorMessage('No response text provided.')
+			return
+		}
+
+		try {
+			// Parse the XML response
+			const parseResult = parseXmlResponse(payload.responseText)
+
+			// If there are parsing errors, show them to the user
+			if (parseResult.errors.length > 0) {
+				this._view?.webview.postMessage({
+					command: 'applyRowChangeResult',
+					success: false,
+					errors: parseResult.errors,
+				})
+				vscode.window.showErrorMessage(
+					`Error parsing XML: ${parseResult.errors[0]}`,
+				)
+				return
+			}
+
+			// If there are no file actions, warn the user
+			if (parseResult.fileActions.length === 0) {
+				this._view?.webview.postMessage({
+					command: 'applyRowChangeResult',
+					success: false,
+					errors: ['No file actions found in the response.'],
+				})
+				return
+			}
+
+			// Check if rowIndex is valid
+			if (
+				payload.rowIndex < 0 ||
+				payload.rowIndex >= parseResult.fileActions.length
+			) {
+				this._view?.webview.postMessage({
+					command: 'applyRowChangeResult',
+					success: false,
+					errors: [`Invalid row index: ${payload.rowIndex}`],
+				})
+				return
+			}
+
+			// Get the specific file action for this row
+			const targetAction = parseResult.fileActions[payload.rowIndex]
+
+			// Apply only this file action
+			const results = await applyFileActions([targetAction], this._view)
+
+			// Send results to webview
+			this._view?.webview.postMessage({
+				command: 'applyRowChangeResult',
+				success: true,
+				results,
+			})
+
+			// Show notification for single action
+			const result = results[0]
+			if (result?.success) {
+				vscode.window.showInformationMessage(
+					`Successfully applied ${result.action} to ${result.path}`,
+				)
+			} else {
+				vscode.window.showErrorMessage(
+					`Failed to apply ${targetAction.action} to ${targetAction.path}: ${result?.message || 'Unknown error'}`,
+				)
+			}
+		} catch (error) {
+			this._handleError(error, 'Error applying row change')
+			this._view?.webview.postMessage({
+				command: 'applyRowChangeResult',
 				success: false,
 				errors: [error instanceof Error ? error.message : String(error)],
 			})
