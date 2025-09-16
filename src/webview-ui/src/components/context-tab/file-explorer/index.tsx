@@ -1,13 +1,15 @@
-import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
 import React, {
 	startTransition,
 	useCallback,
 	useDeferredValue,
+	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from 'react'
 import type { VscodeTreeItem } from '../../../../../types'
 import { getVsCodeApi } from '../../../utils/vscode'
+import { FileTreeSkeleton, LoadingOverlay } from '../../loading'
 import { filterTreeData, getAllDescendantPaths } from '../utils'
 import type { FolderSelectionState } from './row-decorations'
 import TreeNode from './tree-node'
@@ -23,6 +25,8 @@ interface FileExplorerProps {
 	actualTokenCounts: Record<string, number>
 }
 
+type LoadingPhase = 'initial' | 'skeleton' | 'progressive' | 'complete'
+
 const FileExplorer: React.FC<FileExplorerProps> = ({
 	fileTreeData,
 	selectedUris,
@@ -31,9 +35,40 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	searchQuery,
 	actualTokenCounts,
 }) => {
+	// Loading phase management
+	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('initial')
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [prevFileTreeData, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
+
 	// Defer heavy recalculations when selection/token counts change massively
 	const deferredSelectedUris = useDeferredValue(selectedUris)
 	const deferredTokenCounts = useDeferredValue(actualTokenCounts)
+
+	// Loading phase effects
+	useEffect(() => {
+		if (isLoading) {
+			// If we have existing data, this is a refresh
+			if (fileTreeData.length > 0) {
+				setIsRefreshing(true)
+				setLoadingPhase('initial')
+			} else {
+				setIsRefreshing(false)
+				setLoadingPhase('skeleton')
+			}
+		} else {
+			// Data has loaded
+			if (fileTreeData.length > 0) {
+				setLoadingPhase('progressive')
+				setTimeout(() => {
+					setLoadingPhase('complete')
+					setIsRefreshing(false)
+				}, 300)
+			} else {
+				setLoadingPhase('initial')
+			}
+			setPrevFileTreeData(fileTreeData)
+		}
+	}, [isLoading, fileTreeData.length])
 
 	// Filtered items based on search
 	const visibleItems = useMemo(() => {
@@ -128,7 +163,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		items: VscodeTreeItem[],
 		depth = 0,
 	): React.ReactNode[] => {
-		return items.map((item) => {
+		return items.map((item, itemIndex) => {
 			const isFolder = !!(item.subItems && item.subItems.length > 0)
 			const totalDescFiles = index.descendantFileCount.get(item.value) || 0
 			const selectedDescFiles = selectedCountMap.get(item.value) || 0
@@ -138,7 +173,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			const folderTokens = isFolder ? tokenTotalsMap.get(item.value) || 0 : 0
 			const fileSelected = !isFolder && deferredSelectedUris.has(item.value)
 			const fileTokens = !isFolder ? deferredTokenCounts[item.value] || 0 : 0
-			const isOpen = depth === 0
+			const isOpen = item.open ?? depth === 0
 
 			return (
 				<TreeNode
@@ -177,21 +212,53 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		vscode.postMessage({ command: 'openFile', payload: { fileUri: uri } })
 	}, [])
 
+	// Determine what content to show based on loading phase
+	const renderContent = () => {
+		switch (loadingPhase) {
+			case 'initial':
+				return (
+					<div className="flex justify-center items-center h-full min-h-32">
+						<vscode-progress-ring />
+					</div>
+				)
+
+			case 'skeleton':
+				return <FileTreeSkeleton itemCount={15} className="px-2" />
+
+			case 'progressive':
+			case 'complete':
+				return (
+					<div
+						className={`tree-container ${loadingPhase === 'complete' ? 'loaded' : 'loading'}`}
+					>
+						<vscode-tree
+							onDoubleClick={handleTreeDoubleClick}
+							expand-mode="singleClick"
+							indent-guides
+						>
+							{renderTreeItems(visibleItems)}
+						</vscode-tree>
+					</div>
+				)
+
+			default:
+				return (
+					<div className="flex justify-center items-center h-full">
+						<vscode-progress-ring />
+					</div>
+				)
+		}
+	}
+
 	return (
-		<div className="flex-1 overflow-auto mb-2">
-			{isLoading ? (
-				<div className="flex justify-center items-center h-full">
-					<vscode-progress-ring />
-				</div>
-			) : (
-				<vscode-tree
-					onDoubleClick={handleTreeDoubleClick}
-					expand-mode="singleClick"
-					indent-guides
-				>
-					{renderTreeItems(visibleItems)}
-				</vscode-tree>
-			)}
+		<div className="flex-1 overflow-auto mb-2 relative">
+			{renderContent()}
+
+			{/* Refresh overlay - shows when refreshing existing data */}
+			<LoadingOverlay
+				isVisible={isRefreshing && loadingPhase === 'initial'}
+				message="Refreshing files..."
+			/>
 		</div>
 	)
 }

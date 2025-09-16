@@ -31,3 +31,115 @@
   background: transparent;
   font-family: var(--vscode-editor-font-family, ui-sans-serif, system-ui);
 }
+
+/* Loading Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Skeleton Loading Styles */
+.skeleton-container {
+  @apply space-y-1;
+  opacity: 1; /* Ensure skeleton shows immediately */
+}
+
+.skeleton-tree-item {
+  @apply animate-pulse;
+  /* Remove fadeIn animation to avoid conflicts */
+}
+
+.skeleton-icon {
+  @apply w-4 h-4 rounded;
+  background: linear-gradient(
+    90deg,
+    var(--vscode-editor-selectionBackground, rgba(255, 255, 255, 0.1)) 0%,
+    var(--vscode-editor-selectionHighlightBackground, rgba(255, 255, 255, 0.2)) 50%,
+    var(--vscode-editor-selectionBackground, rgba(255, 255, 255, 0.1)) 100%
+  );
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-text {
+  @apply h-4 rounded;
+  background: linear-gradient(
+    90deg,
+    var(--vscode-editor-selectionBackground, rgba(255, 255, 255, 0.1)) 0%,
+    var(--vscode-editor-selectionHighlightBackground, rgba(255, 255, 255, 0.2)) 50%,
+    var(--vscode-editor-selectionBackground, rgba(255, 255, 255, 0.1)) 100%
+  );
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  @apply absolute inset-0 bg-bg/80 backdrop-blur-sm;
+  @apply flex items-center justify-center;
+  @apply transition-opacity duration-300;
+  z-index: 10;
+}
+
+.loading-content {
+  @apply flex flex-col items-center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.loading-message {
+  animation: pulse 2s infinite;
+}
+
+/* Tree Container Transitions - Simplified to avoid conflicts */
+.tree-container {
+  @apply transition-opacity duration-300 ease-out;
+  opacity: 0;
+}
+
+.tree-container.loading {
+  @apply opacity-80;
+}
+
+.tree-container.loaded {
+  @apply opacity-100;
+}
+
+/* Preserve original tree item behavior - no interference with hover */
+vscode-tree-item {
+  transition: background-color 0.2s ease-out;
+}

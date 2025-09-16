@@ -39,24 +39,25 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 			{rows && rows.length > 0 && (
 				<div>
 					<h4 className="mb-3 font-medium">Proposed Changes:</h4>
-					<vscode-table>
+					<vscode-table columns='["50%","35%","10%","5%"]'>
 						<vscode-table-header>
 							<vscode-table-row>
-								<vscode-table-header-cell style={{ width: '40%' }}>Path</vscode-table-header-cell>
-								<vscode-table-header-cell style={{ width: '35%' }}>Description</vscode-table-header-cell>
-								<vscode-table-header-cell style={{ width: '15%' }}>Changes</vscode-table-header-cell>
-								<vscode-table-header-cell style={{ width: '10%' }}>Actions</vscode-table-header-cell>
+								<vscode-table-header-cell>Path</vscode-table-header-cell>
+								<vscode-table-header-cell>Description</vscode-table-header-cell>
+								<vscode-table-header-cell>Changes</vscode-table-header-cell>
+								<vscode-table-header-cell className="text-center">
+									Actions
+								</vscode-table-header-cell>
 							</vscode-table-row>
 						</vscode-table-header>
 						<vscode-table-body>
 							{rows.map((row, index) => (
 								<vscode-table-row key={index}>
-									<vscode-table-cell 
-										className="align-top py-2" 
-										style={{ 
-											width: '40%',
+									<vscode-table-cell
+										className="align-top py-2"
+										style={{
 											wordBreak: 'break-word',
-											whiteSpace: 'normal'
+											whiteSpace: 'normal',
 										}}
 									>
 										<div className="font-mono text-sm break-words">
@@ -68,12 +69,11 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 											)}
 										</div>
 									</vscode-table-cell>
-									<vscode-table-cell 
+									<vscode-table-cell
 										className="align-top py-2"
-										style={{ 
-											width: '35%',
+										style={{
 											wordBreak: 'break-word',
-											whiteSpace: 'normal'
+											whiteSpace: 'normal',
 										}}
 									>
 										<div className="text-sm break-words">
@@ -85,10 +85,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 											)}
 										</div>
 									</vscode-table-cell>
-									<vscode-table-cell 
-										className="align-top py-2"
-										style={{ width: '15%' }}
-									>
+									<vscode-table-cell className="align-top py-2" style={{}}>
 										<div className="flex flex-col gap-1">
 											<div className="text-xs font-mono">
 												{row.changes.added > 0 && (
@@ -96,22 +93,25 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 														+{row.changes.added}
 													</span>
 												)}
-												{row.changes.added > 0 && row.changes.removed > 0 && ' '}
+												{row.changes.added > 0 &&
+													row.changes.removed > 0 &&
+													' '}
 												{row.changes.removed > 0 && (
 													<span className="text-red-600">
 														−{row.changes.removed}
 													</span>
 												)}
-												{row.changes.added === 0 && row.changes.removed === 0 && (
-													<span className="text-muted">—</span>
-												)}
+												{row.changes.added === 0 &&
+													row.changes.removed === 0 && (
+														<span className="text-muted">—</span>
+													)}
 											</div>
 											<ChangeBar changes={row.changes} />
 										</div>
 									</vscode-table-cell>
-									<vscode-table-cell 
+									<vscode-table-cell
 										className="align-top py-2 text-center"
-										style={{ width: '10%' }}
+										style={{}}
 									>
 										<vscode-button
 											onClick={() => onApplyRow(index)}

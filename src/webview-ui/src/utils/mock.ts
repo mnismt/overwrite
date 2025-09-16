@@ -52,34 +52,296 @@ function isOpenFilePayload(v: unknown): v is OpenFilePayload {
 }
 
 function buildMockFileTree(): VscodeTreeItem[] {
-	// Minimal, but realistic, VscodeTreeItem-shaped mock
+	// Minimal, but realistic, VscodeTreeItem-shaped mock with expanded first level
 	const tree: VscodeTreeItem[] = [
 		{
-			label: 'workspace',
-			value: 'file:///mock/workspace',
+			label: 'portfolio',
+			value: 'file:///mock/portfolio',
 			icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+			open: true, // Default to expanded like VS Code
 			subItems: [
 				{
-					label: 'src',
-					value: 'file:///mock/workspace/src',
+					label: '.cursor',
+					value: 'file:///mock/portfolio/.cursor',
 					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
 					subItems: [
 						{
-							label: 'index.tsx',
-							value: 'file:///mock/workspace/src/index.tsx',
-							icons: { branch: 'file', open: 'file', leaf: 'file' },
-						},
-						{
-							label: 'app.ts',
-							value: 'file:///mock/workspace/src/app.ts',
+							label: 'rules',
+							value: 'file:///mock/portfolio/.cursor/rules',
 							icons: { branch: 'file', open: 'file', leaf: 'file' },
 						},
 					],
 				},
 				{
-					label: 'README.md',
-					value: 'file:///mock/workspace/README.md',
+					label: '.husky',
+					value: 'file:///mock/portfolio/.husky',
+					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+					subItems: [
+						{
+							label: '_',
+							value: 'file:///mock/portfolio/.husky/_',
+							icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+							subItems: [
+								{
+									label: '.gitignore',
+									value: 'file:///mock/portfolio/.husky/_/.gitignore',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'applypatch-msg',
+									value: 'file:///mock/portfolio/.husky/_/applypatch-msg',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'commit-msg',
+									value: 'file:///mock/portfolio/.husky/_/commit-msg',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'h',
+									value: 'file:///mock/portfolio/.husky/_/h',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'husky.sh',
+									value: 'file:///mock/portfolio/.husky/_/husky.sh',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'post-applypatch',
+									value: 'file:///mock/portfolio/.husky/_/post-applypatch',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'post-checkout',
+									value: 'file:///mock/portfolio/.husky/_/post-checkout',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'post-commit',
+									value: 'file:///mock/portfolio/.husky/_/post-commit',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'post-merge',
+									value: 'file:///mock/portfolio/.husky/_/post-merge',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'post-rewrite',
+									value: 'file:///mock/portfolio/.husky/_/post-rewrite',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-applypatch',
+									value: 'file:///mock/portfolio/.husky/_/pre-applypatch',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-auto-gc',
+									value: 'file:///mock/portfolio/.husky/_/pre-auto-gc',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-commit',
+									value: 'file:///mock/portfolio/.husky/_/pre-commit',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-merge-commit',
+									value: 'file:///mock/portfolio/.husky/_/pre-merge-commit',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-push',
+									value: 'file:///mock/portfolio/.husky/_/pre-push',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'pre-rebase',
+									value: 'file:///mock/portfolio/.husky/_/pre-rebase',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+								{
+									label: 'prepare-commit-msg',
+									value: 'file:///mock/portfolio/.husky/_/prepare-commit-msg',
+									icons: { branch: 'file', open: 'file', leaf: 'file' },
+								},
+							],
+						},
+						{
+							label: 'pre-commit',
+							value: 'file:///mock/portfolio/.husky/pre-commit',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+					],
+				},
+				{
+					label: '.next',
+					value: 'file:///mock/portfolio/.next',
 					icons: { branch: 'file', open: 'file', leaf: 'file' },
+				},
+				{
+					label: '.vscode',
+					value: 'file:///mock/portfolio/.vscode',
+					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+					subItems: [
+						{
+							label: 'docs',
+							value: 'file:///mock/portfolio/.vscode/docs',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'public',
+							value: 'file:///mock/portfolio/.vscode/public',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'src',
+							value: 'file:///mock/portfolio/.vscode/src',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+					],
+				},
+				{
+					label: 'docs',
+					value: 'file:///mock/portfolio/docs',
+					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+					subItems: [
+						{
+							label: 'public',
+							value: 'file:///mock/portfolio/docs/public',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'src',
+							value: 'file:///mock/portfolio/docs/src',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+					],
+				},
+				{
+					label: 'public',
+					value: 'file:///mock/portfolio/public',
+					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+					subItems: [],
+				},
+				{
+					label: 'src',
+					value: 'file:///mock/portfolio/src',
+					icons: { branch: 'folder', open: 'folder-opened', leaf: 'file' },
+					subItems: [
+						{
+							label: '.env.example',
+							value: 'file:///mock/portfolio/src/.env.example',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.eslintignore',
+							value: 'file:///mock/portfolio/src/.eslintignore',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.eslintrc.js',
+							value: 'file:///mock/portfolio/src/.eslintrc.js',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.gitignore',
+							value: 'file:///mock/portfolio/src/.gitignore',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.lintstagedrc.json',
+							value: 'file:///mock/portfolio/src/.lintstagedrc.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.prettierrc',
+							value: 'file:///mock/portfolio/src/.prettierrc',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.prettierrc.json',
+							value: 'file:///mock/portfolio/src/.prettierrc.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.release-it.json',
+							value: 'file:///mock/portfolio/src/.release-it.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: '.windsurftrules',
+							value: 'file:///mock/portfolio/src/.windsurftrules',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'CHANGELOG.md',
+							value: 'file:///mock/portfolio/src/CHANGELOG.md',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'components.json',
+							value: 'file:///mock/portfolio/src/components.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'docker-compose.yml',
+							value: 'file:///mock/portfolio/src/docker-compose.yml',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'Dockerfile',
+							value: 'file:///mock/portfolio/src/Dockerfile',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'next.config.mjs',
+							value: 'file:///mock/portfolio/src/next.config.mjs',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'package.json',
+							value: 'file:///mock/portfolio/src/package.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'pnpm-lock.yaml',
+							value: 'file:///mock/portfolio/src/pnpm-lock.yaml',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'postcss.config.mjs',
+							value: 'file:///mock/portfolio/src/postcss.config.mjs',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'README.md',
+							value: 'file:///mock/portfolio/src/README.md',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'sync-local.sh',
+							value: 'file:///mock/portfolio/src/sync-local.sh',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'sync-remote.sh',
+							value: 'file:///mock/portfolio/src/sync-remote.sh',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'tailwind.config.ts',
+							value: 'file:///mock/portfolio/src/tailwind.config.ts',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+						{
+							label: 'tsconfig.json',
+							value: 'file:///mock/portfolio/src/tsconfig.json',
+							icons: { branch: 'file', open: 'file', leaf: 'file' },
+						},
+					],
 				},
 			],
 		},

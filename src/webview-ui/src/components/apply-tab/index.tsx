@@ -5,6 +5,7 @@ import PreviewTable from './preview-table'
 import ResponseTextarea from './response-textarea'
 import ResultsDisplay from './results-display'
 import type { ApplyChangeResponse, ApplyResult, PreviewData } from './types'
+import { lintXmlText, preprocessXmlText } from './preprocess'
 
 interface ApplyTabProps {
 	onApply: (responseText: string) => void
@@ -23,6 +24,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	const [results, setResults] = useState<ApplyResult[] | null>(null)
 	const [errors, setErrors] = useState<string[] | null>(null)
 	const [previewData, setPreviewData] = useState<PreviewData | null>(null)
+  const [lints, setLints] = useState<string[]>([])
 
 	const handleApply = useCallback(() => {
 		if (!responseText.trim()) {
@@ -33,7 +35,11 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		setIsApplying(true)
 		setResults(null)
 		setErrors(null)
-		onApply(responseText)
+
+		// Preprocess the text before sending
+		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		setLints([...new Set([...changes, ...issues])])
+		onApply(cleaned)
 	}, [onApply, responseText])
 
 	const handlePreview = useCallback(() => {
@@ -44,7 +50,11 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		setIsPreviewing(true)
 		setErrors(null)
 		setPreviewData(null)
-		onPreview(responseText)
+
+		// Preprocess before previewing as well
+		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		setLints([...new Set([...changes, ...issues])])
+		onPreview(cleaned)
 	}, [onPreview, responseText])
 
 	const handleApplyRow = useCallback(
@@ -54,7 +64,9 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				return
 			}
 			if (onApplyRow) {
-				onApplyRow(responseText, rowIndex)
+				const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+				setLints([...new Set([...changes, ...issues])])
+				onApplyRow(cleaned, rowIndex)
 			}
 		},
 		[onApplyRow, responseText],
@@ -103,7 +115,15 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 
 	const handleTextChange = useCallback((event: React.SyntheticEvent) => {
 		const target = event.target as HTMLTextAreaElement
-		setResponseText(target.value)
+		const value = target.value
+		setResponseText(value)
+		// Live lint as user pastes/edits
+		try {
+			const liveIssues = lintXmlText(value)
+			setLints(liveIssues)
+		} catch {
+			// be forgiving in live lint
+		}
 	}, [])
 
 	const handleButtonKeyDown = useCallback(
@@ -121,6 +141,19 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				responseText={responseText}
 				onTextChange={handleTextChange}
 			/>
+      {/* Lint / normalization notes */}
+      {lints && lints.length > 0 && (
+        <div className="mt-2 p-2 rounded border border-warn-border bg-warn-bg">
+          <div className="text-xs font-medium text-muted mb-1">Lint</div>
+          <ul className="text-xs list-disc ml-5">
+            {lints.map((m, i) => (
+              <li key={i} className="text-muted">
+                {m}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 			<ApplyActions
 				isApplying={isApplying}
 				isPreviewing={isPreviewing}

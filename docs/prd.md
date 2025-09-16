@@ -105,17 +105,10 @@ The setting tab in the webview panel is dedicated to setting the extension.
 
 - Requirement 2.3.0: Move the Excluded folders textarea to the Setting Tab (Requirement 2.1.14)
 - Requirement 2.3.1: Support reading .gitignore (checkbox)
-- Requirement 2.3.2: Support enable/disable token usages per file
 
 **3. User Interface (UI) / User Experience (UX)**
 
-- Integration: Leverage standard VS Code UI components: Activity Bar, Webview Panel, Status Bar, Notifications, Command Palette.
-- Layout:
-  - Webview Panel (Tabs):
-    - Context Tab: Combines file exploration/selection and context/instruction building.
-    - Apply Tab: Applies changes from the LLM.
-- Responsiveness: Use asynchronous operations (async/await) for all file system access and potentially long-running tasks (parsing, context generation) to keep the UI responsive. Use vscode.Progress API for long operations.
-- Consistency: Follow VS Code UI/UX guidelines.
+
 
 **4. Technical Considerations**
 
