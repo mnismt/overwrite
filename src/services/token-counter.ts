@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import * as vscode from 'vscode'
+import { looksBinary } from '../utils/file-system'
 
 /**
  * A singleton, long-lived tokenizer.
@@ -35,11 +36,6 @@ const MAX_PARALLEL = 8 // don't read more than N files at once
  * cleared on *extension* deactivate / workspace close.
  */
 const cache = new Map<string, { mtime: number; size: number; tokens: number }>()
-
-/** Quick & dirty binary sniffer: 0x00 in the first 8000 bytes */
-function looksBinary(chunk: Uint8Array): boolean {
-	return chunk.some((byte) => byte === 0)
-}
 
 /**
  * Interface for skipped file results

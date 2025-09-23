@@ -1,6 +1,7 @@
 import * as path from 'node:path' // Still needed for path.relative for file map display logic
 import * as vscode from 'vscode' // For vscode.workspace.fs and vscode.Uri
 import type { VscodeTreeItem } from '../types'
+import { isBinaryFile } from '../utils/file-system'
 import { XML_FORMATTING_INSTRUCTIONS } from './xml-instruction'
 
 // Helper function moved to module scope
@@ -131,6 +132,14 @@ export async function generateFileContents(
 			// Ensure it's a file using vscode.workspace.fs.stat
 			const stat = await vscode.workspace.fs.stat(fileUri)
 			if (stat.type === vscode.FileType.File) {
+				// Check if the file is binary and skip it
+				const isBinary = await isBinaryFile(fileUri)
+				if (isBinary) {
+					console.log('Skipping binary file:', fileUri.fsPath)
+					contentsStr += `File: ${fileUri.fsPath}\n*** Skipped: Binary file ***\n\n`
+					continue
+				}
+
 				const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
 				const content = Buffer.from(contentBuffer).toString('utf8')
 				// Use full fsPath in the header as per user's example
