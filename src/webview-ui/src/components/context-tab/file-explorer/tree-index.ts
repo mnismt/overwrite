@@ -1,4 +1,4 @@
-import type { VscodeTreeItem } from '../../../../../types'
+import type { VscodeTreeItem } from '../../../types'
 
 export interface IndexedNode {
 	children: string[]

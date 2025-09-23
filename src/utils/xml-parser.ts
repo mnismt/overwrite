@@ -40,28 +40,28 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 			result.plan = planMatch[1].trim()
 		}
 
-    // Extract file actions
-    const fileRegex = /<file\s+([^>]*)>([\s\S]*?)<\/\s*file\s*>/gi
-    let fileMatch: RegExpExecArray | null
-    let fileIndex = 0
+		// Extract file actions
+		const fileRegex = /<file\s+([^>]*)>([\s\S]*?)<\/\s*file\s*>/gi
+		let fileMatch: RegExpExecArray | null
+		let fileIndex = 0
 
 		// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
-    while ((fileMatch = fileRegex.exec(cleaned)) !== null) {
-      const [, rawAttrs, fileContent] = fileMatch
-      const attrs = parseAttributes(rawAttrs)
-      const pathAttr = attrs.path
-      const actionAttr = attrs.action
+		while ((fileMatch = fileRegex.exec(cleaned)) !== null) {
+			const [, rawAttrs, fileContent] = fileMatch
+			const attrs = parseAttributes(rawAttrs)
+			const pathAttr = attrs.path
+			const actionAttr = attrs.action
 
-      if (!pathAttr || !actionAttr) {
-        const trimmedAttrs = rawAttrs.trim().slice(0, 120)
-        result.errors.push(
-          `Missing required attribute: path or action (at <file> #${
-            fileIndex + 1
-          }, attrs="${trimmedAttrs}")`,
-        )
-        fileIndex++
-        continue
-      }
+			if (!pathAttr || !actionAttr) {
+				const trimmedAttrs = rawAttrs.trim().slice(0, 120)
+				result.errors.push(
+					`Missing required attribute: path or action (at <file> #${
+						fileIndex + 1
+					}, attrs="${trimmedAttrs}")`,
+				)
+				fileIndex++
+				continue
+			}
 
 			const fileAction: FileAction = {
 				path: pathAttr,
@@ -141,10 +141,10 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 				}
 			}
 
-      result.fileActions.push(fileAction)
-      fileIndex++
-    }
-  } catch (error) {
+			result.fileActions.push(fileAction)
+			fileIndex++
+		}
+	} catch (error) {
 		result.errors.push(`Failed to parse XML: ${error}`)
 	}
 

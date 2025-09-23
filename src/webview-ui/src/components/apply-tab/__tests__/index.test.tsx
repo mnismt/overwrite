@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ApplyTab from '../index'
-import type { ApplyChangeResponse } from '../types'
+import type { ApplyChangeResponse, ApplyResult } from '../types'
 
 // Mock VS Code API
 const postMessageSpy = vi.fn()
@@ -73,7 +73,7 @@ vi.mock('../results-display', () => ({
 		results,
 		errors,
 	}: {
-		results: any[] | null
+		results: ApplyResult[] | null
 		errors: string[] | null
 	}) => (
 		<div data-testid="mock-results-display">

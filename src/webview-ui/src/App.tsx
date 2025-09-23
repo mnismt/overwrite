@@ -1,6 +1,6 @@
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
 import { useCallback, useEffect, useState } from 'react'
-import type { VscodeTreeItem } from '../../types' // Import tree item type from root
+import type { VscodeTreeItem } from './types' // Import tree item type from local types
 import './App.css'
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
@@ -27,7 +27,7 @@ function App() {
 	// selectedPaths renamed to selectedUris, stores Set of URI strings
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
-	const [errorText, setErrorText] = useState<string | null>(null) // Graceful error banner
+	const [, setErrorText] = useState<string | null>(null) // Graceful error banner
 	const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
 	const [readGitignore, setReadGitignore] = useState<boolean>(true)
 

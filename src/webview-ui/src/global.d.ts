@@ -42,7 +42,7 @@ import type {
 } from '@vscode-elements/elements/dist/vscode-split-layout/vscode-split-layout'
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
 import type { VscTreeSelectEvent } from '@vscode-elements/elements/dist/vscode-tree/vscode-tree'
-import type { VscodeTreeItem } from '../../../types'
+import type { VscodeTreeItem } from './types'
 
 type ElementProps<I> = Partial<Omit<I, keyof HTMLElement>>
 type CustomEventHandler<E> = (e: E) => void

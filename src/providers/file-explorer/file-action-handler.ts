@@ -66,42 +66,42 @@ export async function applyFileActions(
  * Handles the 'create' file action.
  */
 async function handleCreateAction(
-    fileAction: FileAction,
-    fileUri: vscode.Uri,
-    results: FileActionResult[],
+	fileAction: FileAction,
+	fileUri: vscode.Uri,
+	results: FileActionResult[],
 ): Promise<void> {
-    try {
-        if (!fileAction.changes || fileAction.changes.length === 0) {
-            throw new Error('No content provided for create action')
-        }
-        const content = fileAction.changes[0].content
+	try {
+		if (!fileAction.changes || fileAction.changes.length === 0) {
+			throw new Error('No content provided for create action')
+		}
+		const content = fileAction.changes[0].content
 
-        // Ensure parent directory exists
-        const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
-        try {
-            await vscode.workspace.fs.createDirectory(dirUri)
-        } catch (e) {
-            // ignore; createDirectory is idempotent
-        }
+		// Ensure parent directory exists
+		const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
+		try {
+			await vscode.workspace.fs.createDirectory(dirUri)
+		} catch (e) {
+			// ignore; createDirectory is idempotent
+		}
 
-        // If the file already exists, treat create as a no-op for idempotency
-        try {
-            await vscode.workspace.fs.stat(fileUri)
-            results.push({
-                path: fileAction.path,
-                action: 'create',
-                success: true,
-                message: 'File already exists (skipped create)',
-            })
-            return
-        } catch {
-            // not exists, continue to create
-        }
+		// If the file already exists, treat create as a no-op for idempotency
+		try {
+			await vscode.workspace.fs.stat(fileUri)
+			results.push({
+				path: fileAction.path,
+				action: 'create',
+				success: true,
+				message: 'File already exists (skipped create)',
+			})
+			return
+		} catch {
+			// not exists, continue to create
+		}
 
-        const edit = new vscode.WorkspaceEdit()
-        edit.createFile(fileUri, { overwrite: false, ignoreIfExists: false })
-        edit.insert(fileUri, new vscode.Position(0, 0), content)
-        const applied = await vscode.workspace.applyEdit(edit)
+		const edit = new vscode.WorkspaceEdit()
+		edit.createFile(fileUri, { overwrite: false, ignoreIfExists: false })
+		edit.insert(fileUri, new vscode.Position(0, 0), content)
+		const applied = await vscode.workspace.applyEdit(edit)
 
 		// Save the document if it's open to avoid "unsaved" state
 		if (applied) {

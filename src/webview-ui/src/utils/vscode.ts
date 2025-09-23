@@ -1,6 +1,6 @@
 // src/webview-ui/src/utils/vscode.ts
 
-import type { VscodeTreeItem } from '../../../types'
+import type { VscodeTreeItem } from '../types'
 import { createMockVsCodeApi } from './mock'
 
 // Keep in sync with global.d.ts

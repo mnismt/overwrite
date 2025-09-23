@@ -29,6 +29,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private _isBuildingTree = false // Prevent overlapping tree builds
+	private _treeBuildTimeout: NodeJS.Timeout | null = null // Timeout for tree building
 	// Always-excluded patterns that never show in the UI; keep minimal (.git only)
 	private readonly _excludedDirs = ['.git', '.hg', '.svn']
 	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
@@ -354,32 +355,63 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		if (!this._view) return
 
 		try {
+			// Clear any existing timeout
+			if (this._treeBuildTimeout) {
+				clearTimeout(this._treeBuildTimeout)
+				this._treeBuildTimeout = null
+			}
+
 			if (this._isBuildingTree) {
+				// Set a timeout to prevent infinite blocking
+				this._treeBuildTimeout = setTimeout(() => {
+					this._isBuildingTree = false
+					this._treeBuildTimeout = null
+					console.warn('Tree building operation timed out after 30 seconds')
+					this._view?.webview.postMessage({
+						command: 'showError',
+						message: 'Tree building operation timed out. Please try again.',
+					})
+					vscode.window.showErrorMessage(
+						'Tree building operation timed out. Please try again.',
+					)
+				}, 30000) // 30 second timeout
+
 				return
 			}
+
 			this._isBuildingTree = true
-			// Resolve settings from payload or persisted state
-			const persisted = this._loadSettings()
-			const excludedFolders =
-				payload?.excludedFolders ?? persisted.excludedFolders
-			const readGitignore = payload?.readGitignore ?? persisted.readGitignore
 
-			// Do not persist here to avoid double-writes; persistence is handled by 'saveSettings'.
+			// Set a timeout for this operation
+			const timeoutPromise = new Promise<never>((_, reject) => {
+				this._treeBuildTimeout = setTimeout(() => {
+					reject(
+						new Error('Tree building operation timed out after 30 seconds'),
+					)
+				}, 30000)
+			})
 
-			const excludedFoldersArray = excludedFolders
-				? excludedFolders
+			// Race the tree building against the timeout
+			const excludedFoldersArray = payload?.excludedFolders
+				? payload.excludedFolders
 						.split(/\r?\n/)
 						.map((line) => line.trim())
 						.filter((line) => line.length > 0 && !line.startsWith('#'))
-				: []
+				: this._loadSettings()
+						.excludedFolders.split(/\r?\n/)
+						.map((line) => line.trim())
+						.filter((line) => line.length > 0 && !line.startsWith('#'))
 
 			// Combine with default excluded dirs
 			const allExcludedDirs = [...this._excludedDirs, ...excludedFoldersArray]
 
-			// Use the imported function, passing exclusions and gitignore flag
-			const workspaceFiles = await getWorkspaceFileTree(allExcludedDirs, {
-				useGitignore: readGitignore,
-			})
+			const workspaceFiles = await Promise.race([
+				getWorkspaceFileTree(allExcludedDirs, {
+					useGitignore:
+						payload?.readGitignore ?? this._loadSettings().readGitignore,
+				}),
+				timeoutPromise,
+			])
+
 			this._fullTreeCache = workspaceFiles // Cache the full tree
 			this._view.webview.postMessage({
 				command: 'updateFileTree',
@@ -393,7 +425,12 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				message: `Error getting workspace files: ${error instanceof Error ? error.message : String(error)}`,
 			})
 		} finally {
+			// Clear the flag and timeout
 			this._isBuildingTree = false
+			if (this._treeBuildTimeout) {
+				clearTimeout(this._treeBuildTimeout)
+				this._treeBuildTimeout = null
+			}
 		}
 	}
 

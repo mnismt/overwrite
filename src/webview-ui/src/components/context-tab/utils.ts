@@ -1,4 +1,4 @@
-import type { VscodeTreeItem } from '../../../../types'
+import type { VscodeTreeItem } from '../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 
 // Count tokens in a string using the extension's encoder for consistency

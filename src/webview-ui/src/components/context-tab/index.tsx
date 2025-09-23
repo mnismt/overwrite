@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { VscodeTreeItem } from '../../../../types'
+import type { VscodeTreeItem } from '../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 import CopyActions from './copy-actions'
 import FileExplorer from './file-explorer/index'
@@ -168,14 +168,14 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 				{/* Explorer Top Bar */}
 				<div className="mt-2 mb-2 flex items-center">
-					<vscode-button 
-						onClick={handleRefreshClick} 
+					<vscode-button
+						onClick={handleRefreshClick}
 						disabled={isLoading}
 						className="transition-all duration-200 ease-out"
 					>
-						<span 
-							slot="start" 
-							className={`codicon codicon-refresh transition-transform duration-500 ${isLoading ? 'animate-spin' : ''}`} 
+						<span
+							slot="start"
+							className={`codicon codicon-refresh transition-transform duration-500 ${isLoading ? 'animate-spin' : ''}`}
 						/>
 						{isLoading ? 'Loading...' : 'Refresh'}
 					</vscode-button>
@@ -198,7 +198,9 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				className="flex-1 min-h-0 overflow-auto pb-24 transition-all duration-300 ease-out"
 			>
 				{/* File Explorer */}
-				<div className={`transition-opacity duration-300 ${isLoading ? 'opacity-95' : 'opacity-100'}`}>
+				<div
+					className={`transition-opacity duration-300 ${isLoading ? 'opacity-95' : 'opacity-100'}`}
+				>
 					<FileExplorer
 						fileTreeData={fileTreeData}
 						selectedUris={selectedUris}

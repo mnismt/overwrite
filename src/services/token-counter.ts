@@ -7,7 +7,7 @@ import * as vscode from 'vscode'
  * Creating it once shaves tens of ms off every request.
  */
 let enc: { encode: (text: string) => number[] } | null = null
-let pLimit: ((fn: () => Promise<any>) => Promise<any>) | null = null
+let pLimit: (<T>(fn: () => Promise<T>) => Promise<T>) | null = null
 
 async function getEncoder() {
 	if (!enc) {

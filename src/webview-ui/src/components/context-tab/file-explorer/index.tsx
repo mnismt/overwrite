@@ -7,7 +7,7 @@ import React, {
 	useRef,
 	useState,
 } from 'react'
-import type { VscodeTreeItem } from '../../../../../types'
+import type { VscodeTreeItem } from '../../../types'
 import { getVsCodeApi } from '../../../utils/vscode'
 import { FileTreeSkeleton, LoadingOverlay } from '../../loading'
 import { filterTreeData, getAllDescendantPaths } from '../utils'
@@ -38,7 +38,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Loading phase management
 	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('initial')
 	const [isRefreshing, setIsRefreshing] = useState(false)
-	const [prevFileTreeData, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
+	const [, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
 
 	// Defer heavy recalculations when selection/token counts change massively
 	const deferredSelectedUris = useDeferredValue(selectedUris)
@@ -163,7 +163,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		items: VscodeTreeItem[],
 		depth = 0,
 	): React.ReactNode[] => {
-		return items.map((item, itemIndex) => {
+		return items.map((item, _itemIndex) => {
 			const isFolder = !!(item.subItems && item.subItems.length > 0)
 			const totalDescFiles = index.descendantFileCount.get(item.value) || 0
 			const selectedDescFiles = selectedCountMap.get(item.value) || 0

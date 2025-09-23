@@ -14,7 +14,7 @@ export interface VsCodeApi {
 	setState: (newState: unknown) => void
 }
 
-import type { VscodeTreeItem } from '../../../types'
+import type { VscodeTreeItem } from '../types'
 
 type ExcludedFoldersPayload = { excludedFolders: string }
 type SaveSettingsPayload = { excludedFolders: string; readGitignore: boolean }
@@ -378,9 +378,11 @@ export function createMockVsCodeApi(): VsCodeApi {
 						}
 						if (
 							isObject(payload) &&
-							typeof (payload as any).readGitignore === 'boolean'
+							typeof (payload as { readGitignore?: boolean }).readGitignore ===
+								'boolean'
 						) {
-							readGitignore = (payload as any).readGitignore as boolean
+							readGitignore = (payload as { readGitignore?: boolean })
+								.readGitignore as boolean
 						}
 						sendToWebview({ command: 'updateFileTree', payload: fileTree })
 						break

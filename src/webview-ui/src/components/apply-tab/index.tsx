@@ -1,11 +1,11 @@
 import type React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import ApplyActions from './apply-actions'
+import { lintXmlText, preprocessXmlText } from './preprocess'
 import PreviewTable from './preview-table'
 import ResponseTextarea from './response-textarea'
 import ResultsDisplay from './results-display'
 import type { ApplyChangeResponse, ApplyResult, PreviewData } from './types'
-import { lintXmlText, preprocessXmlText } from './preprocess'
 
 interface ApplyTabProps {
 	onApply: (responseText: string) => void
@@ -24,7 +24,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	const [results, setResults] = useState<ApplyResult[] | null>(null)
 	const [errors, setErrors] = useState<string[] | null>(null)
 	const [previewData, setPreviewData] = useState<PreviewData | null>(null)
-  const [lints, setLints] = useState<string[]>([])
+	const [lints, setLints] = useState<string[]>([])
 
 	const handleApply = useCallback(() => {
 		if (!responseText.trim()) {
@@ -64,7 +64,11 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				return
 			}
 			if (onApplyRow) {
-				const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+				const {
+					text: cleaned,
+					changes,
+					issues,
+				} = preprocessXmlText(responseText)
 				setLints([...new Set([...changes, ...issues])])
 				onApplyRow(cleaned, rowIndex)
 			}
@@ -141,19 +145,19 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				responseText={responseText}
 				onTextChange={handleTextChange}
 			/>
-      {/* Lint / normalization notes */}
-      {lints && lints.length > 0 && (
-        <div className="mt-2 p-2 rounded border border-warn-border bg-warn-bg">
-          <div className="text-xs font-medium text-muted mb-1">Lint</div>
-          <ul className="text-xs list-disc ml-5">
-            {lints.map((m, i) => (
-              <li key={i} className="text-muted">
-                {m}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+			{/* Lint / normalization notes */}
+			{lints && lints.length > 0 && (
+				<div className="mt-2 p-2 rounded border border-warn-border bg-warn-bg">
+					<div className="text-xs font-medium text-muted mb-1">Lint</div>
+					<ul className="text-xs list-disc ml-5">
+						{lints.map((m, i) => (
+							<li key={i} className="text-muted">
+								{m}
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
 			<ApplyActions
 				isApplying={isApplying}
 				isPreviewing={isPreviewing}

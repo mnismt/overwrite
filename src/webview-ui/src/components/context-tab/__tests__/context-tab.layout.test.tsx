@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react'
-import type { VscodeTreeItem } from '../../../../../types'
+import type { VscodeTreeItem } from '../../../types'
 import ContextTab from '../index'
 
 vi.mock('../../../utils/vscode', () => ({

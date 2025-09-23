@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { VscodeTreeItem } from '../../../../../types'
+import type { VscodeTreeItem } from '../../../../types'
 import { buildTreeIndex } from '../tree-index'
 
 describe('buildTreeIndex', () => {

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ResultsDisplay from '../results-display'
 import type { ApplyResult } from '../types'
@@ -20,9 +20,9 @@ describe('ResultsDisplay', () => {
 		expect(screen.getByText('Results:')).toBeInTheDocument()
 		expect(screen.getByText('Errors:')).toBeInTheDocument()
 
-		errors.forEach((error) => {
+		for (const error of errors) {
 			expect(screen.getByText(error)).toBeInTheDocument()
-		})
+		}
 	})
 
 	it('displays successful results in table format', () => {

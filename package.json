@@ -7,7 +7,7 @@
   "description": "Overwrite helps you curate workspace context into structured prompts and safely apply LLM-suggested diffs in VS Code.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mnismt/aboverepo.git"
+    "url": "https://github.com/mnismt/overwrite.git"
   },
   "version": "0.0.3",
   "engines": {

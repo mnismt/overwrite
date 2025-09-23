@@ -46,9 +46,8 @@ const ExcludedFolders: React.FC<ExcludedFoldersProps> = ({
 				placeholder="Enter folder patterns to exclude (e.g., node_modules, .git, dist)..."
 				value={localValue}
 				onInput={(e) => {
-					const target = e.target as unknown as { value?: string } & HTMLElement
-					const next =
-						(target as any)?.value ?? target.getAttribute('value') ?? ''
+					const target = e.target as HTMLTextAreaElement
+					const next = target.value ?? ''
 					setLocalValue(next)
 					onDraftChange?.(next)
 				}}

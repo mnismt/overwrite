@@ -6,6 +6,31 @@ import ignore from 'ignore'
 import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
 
+/** Quick & dirty binary sniffer: 0x00 in the first 8000 bytes */
+export function looksBinary(chunk: Uint8Array): boolean {
+	return chunk.some((byte) => byte === 0)
+}
+
+/**
+ * Checks if a file is binary by reading a small chunk and looking for null bytes
+ */
+export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
+	try {
+		const stats = await vscode.workspace.fs.stat(uri)
+		if (stats.type !== vscode.FileType.File) {
+			return false
+		}
+
+		// Read first 8KB to check for binary content
+		const content = await vscode.workspace.fs.readFile(uri)
+		const chunk = content.slice(0, 8000)
+		return looksBinary(chunk)
+	} catch {
+		// If we can't read the file, assume it's not binary
+		return false
+	}
+}
+
 // Define icons for files and folders (can be customized further)
 const FOLDER_ICONS = {
 	branch: 'folder', // Codicon for closed folder

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { VscodeTreeItem } from '../../../../../types'
+import type { VscodeTreeItem } from '../../../types'
 import RowActions from './row-actions'
 import RowDecorations, { type FolderSelectionState } from './row-decorations'
 

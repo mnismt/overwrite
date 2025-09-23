@@ -39,7 +39,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 			{rows && rows.length > 0 && (
 				<div>
 					<h4 className="mb-3 font-medium">Proposed Changes:</h4>
-					<vscode-table columns='["50%","35%","10%","5%"]'>
+					<vscode-table columns={['50%', '35%', '10%', '5%']}>
 						<vscode-table-header>
 							<vscode-table-row>
 								<vscode-table-header-cell>Path</vscode-table-header-cell>
