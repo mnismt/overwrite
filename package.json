@@ -10,6 +10,7 @@
     "url": "https://github.com/mnismt/overwrite.git"
   },
   "version": "0.0.3",
+  "icon": "resources/overwrite-logo.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -26,7 +27,7 @@
         {
           "id": "overwrite",
           "title": "Overwrite",
-          "icon": "$(repo-clone)"
+          "icon": "resources/overwrite-logo.png"
         }
       ]
     },
