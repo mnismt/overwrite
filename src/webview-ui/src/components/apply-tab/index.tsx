@@ -11,12 +11,14 @@ interface ApplyTabProps {
 	onApply: (responseText: string) => void
 	onPreview: (responseText: string) => void
 	onApplyRow?: (responseText: string, rowIndex: number) => void
+	onPreviewRow?: (responseText: string, rowIndex: number) => void
 }
 
 const ApplyTab: React.FC<ApplyTabProps> = ({
 	onApply,
 	onPreview,
 	onApplyRow,
+	onPreviewRow,
 }) => {
 	const [responseText, setResponseText] = useState('')
 	const [isApplying, setIsApplying] = useState(false)
@@ -76,6 +78,25 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		[onApplyRow, responseText],
 	)
 
+	const handlePreviewRow = useCallback(
+		(rowIndex: number) => {
+			if (!responseText.trim()) {
+				setErrors(['Please paste an XML response first.'])
+				return
+			}
+			if (onPreviewRow) {
+				const {
+					text: cleaned,
+					changes,
+					issues,
+				} = preprocessXmlText(responseText)
+				setLints([...new Set([...changes, ...issues])])
+				onPreviewRow(cleaned, rowIndex)
+			}
+		},
+		[onPreviewRow, responseText],
+	)
+
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data as ApplyChangeResponse
@@ -98,7 +119,8 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 					setErrors(null)
 				} else {
 					setErrors(message.errors || ['Unknown error occurred'])
-					setPreviewData(null)
+					// Set previewData if it exists (for error display), otherwise null
+					setPreviewData(message.previewData || null)
 				}
 			}
 
@@ -171,6 +193,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				<PreviewTable
 					previewData={previewData}
 					onApplyRow={handleApplyRow}
+					onPreviewRow={handlePreviewRow}
 					isApplying={isApplying}
 				/>
 			) : (

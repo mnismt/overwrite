@@ -115,6 +115,9 @@ function App() {
 				case 'applyRowChangeResult':
 					// ApplyTab listens for this and updates its own state.
 					break
+				case 'previewRowChangeResult':
+					// Row-level preview acknowledgement; UI opens diff directly in VS Code.
+					break
 				default:
 					console.warn('Received unknown message command:', message.command)
 			}
@@ -206,6 +209,14 @@ function App() {
 		[sendMessage],
 	)
 
+	// Apply Tab: Handle previewing an individual row (opens a diff for that file action)
+	const handlePreviewRow = useCallback(
+		(responseText: string, rowIndex: number) => {
+			sendMessage('previewRowChange', { responseText, rowIndex })
+		},
+		[sendMessage],
+	)
+
 	return (
 		<main className="h-screen overflow-hidden">
 			<vscode-tabs
@@ -239,6 +250,7 @@ function App() {
 						onApply={handleApply}
 						onPreview={handlePreview}
 						onApplyRow={handleApplyRow}
+						onPreviewRow={handlePreviewRow}
 					/>
 				</vscode-tab-panel>
 

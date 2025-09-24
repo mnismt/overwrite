@@ -5,12 +5,14 @@ import type { PreviewData } from './types'
 interface PreviewTableProps {
 	previewData: PreviewData | null
 	onApplyRow: (rowIndex: number) => void
+	onPreviewRow?: (rowIndex: number) => void
 	isApplying?: boolean
 }
 
 const PreviewTable: React.FC<PreviewTableProps> = ({
 	previewData,
 	onApplyRow,
+	onPreviewRow,
 	isApplying = false,
 }) => {
 	if (!previewData) {
@@ -38,13 +40,18 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 
 			{rows && rows.length > 0 && (
 				<div>
-					<h4 className="mb-3 font-medium">Proposed Changes:</h4>
-					<vscode-table columns={['50%', '35%', '10%', '5%']}>
+					<vscode-table columns={['30%', '40%', '20%', '10%']}>
 						<vscode-table-header>
 							<vscode-table-row>
-								<vscode-table-header-cell>Path</vscode-table-header-cell>
-								<vscode-table-header-cell>Description</vscode-table-header-cell>
-								<vscode-table-header-cell>Changes</vscode-table-header-cell>
+								<vscode-table-header-cell className="px-1">
+									Path
+								</vscode-table-header-cell>
+								<vscode-table-header-cell className="px-1">
+									Description
+								</vscode-table-header-cell>
+								<vscode-table-header-cell className="px-1">
+									Changes
+								</vscode-table-header-cell>
 								<vscode-table-header-cell className="text-center">
 									Actions
 								</vscode-table-header-cell>
@@ -54,7 +61,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 							{rows.map((row, index) => (
 								<vscode-table-row key={index}>
 									<vscode-table-cell
-										className="align-top py-2"
+										className="align-top py-2 px-1"
 										style={{
 											wordBreak: 'break-word',
 											whiteSpace: 'normal',
@@ -70,7 +77,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 										</div>
 									</vscode-table-cell>
 									<vscode-table-cell
-										className="align-top py-2"
+										className="align-top py-2 px-1"
 										style={{
 											wordBreak: 'break-word',
 											whiteSpace: 'normal',
@@ -85,7 +92,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 											)}
 										</div>
 									</vscode-table-cell>
-									<vscode-table-cell className="align-top py-2" style={{}}>
+									<vscode-table-cell className="align-top py-2 px-1" style={{}}>
 										<div className="flex flex-col gap-1">
 											<div className="text-xs font-mono">
 												{row.changes.added > 0 && (
@@ -110,17 +117,29 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 										</div>
 									</vscode-table-cell>
 									<vscode-table-cell
-										className="align-top py-2 text-center"
+										className="align-top py-2 px-1 text-center"
 										style={{}}
 									>
-										<vscode-button
-											onClick={() => onApplyRow(index)}
-											disabled={row.hasError || isApplying}
-											aria-label={`Apply ${row.action} to ${row.path}`}
-											title={`Apply ${row.action} to ${row.path}`}
-										>
-											<span className="codicon codicon-play"></span>
-										</vscode-button>
+										<div className="flex flex-col items-center justify-center gap-2">
+											<vscode-button
+												onClick={() => onPreviewRow?.(index)}
+												disabled={row.hasError || row.action === 'rename'}
+												aria-label={`Preview ${row.action} for ${row.path}`}
+												title={`Preview ${row.action} for ${row.path}`}
+												className="h-6"
+											>
+												<span className="codicon codicon-play"></span>
+											</vscode-button>
+											<vscode-button
+												onClick={() => onApplyRow(index)}
+												disabled={row.hasError || isApplying}
+												aria-label={`Apply ${row.action} to ${row.path}`}
+												title={`Apply ${row.action} to ${row.path}`}
+												className="h-6"
+											>
+												<span className="codicon codicon-edit"></span>
+											</vscode-button>
+										</div>
 									</vscode-table-cell>
 								</vscode-table-row>
 							))}

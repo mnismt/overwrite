@@ -171,6 +171,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 							message.payload as { responseText: string; rowIndex: number },
 						)
 						break
+					case 'previewRowChange':
+						await this._handlePreviewRowChange(
+							message.payload as { responseText: string; rowIndex: number },
+						)
+						break
 					default:
 						console.warn('Received unknown message command:', message.command)
 				}
@@ -197,10 +202,16 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		try {
 			const parseResult = parseXmlResponse(payload.responseText)
 			if (parseResult.errors.length > 0) {
+				// Create minimal preview data with errors so PreviewTable can render
+				const previewData = {
+					rows: [],
+					errors: parseResult.errors,
+				}
 				this._view?.webview.postMessage({
 					command: 'previewChangesResult',
 					success: false,
 					errors: parseResult.errors,
+					previewData,
 				})
 				vscode.window.showErrorMessage(
 					`Error parsing XML: ${parseResult.errors[0]}`,
@@ -212,10 +223,16 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				vscode.window.showWarningMessage(
 					'No file actions found in the response.',
 				)
+				// Create minimal preview data with errors so PreviewTable can render
+				const previewData = {
+					rows: [],
+					errors: ['No file actions found in the response.'],
+				}
 				this._view?.webview.postMessage({
 					command: 'previewChangesResult',
 					success: false,
 					errors: ['No file actions found in the response.'],
+					previewData,
 				})
 				return
 			}
@@ -239,10 +256,18 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			})
 		} catch (error) {
 			this._handleError(error, 'Error previewing changes')
+			// Create minimal preview data with errors so PreviewTable can render
+			const errorMessage =
+				error instanceof Error ? error.message : String(error)
+			const previewData = {
+				rows: [],
+				errors: [errorMessage],
+			}
 			this._view?.webview.postMessage({
 				command: 'previewChangesResult',
 				success: false,
-				errors: [error instanceof Error ? error.message : String(error)],
+				errors: [errorMessage],
+				previewData,
 			})
 		}
 	}
@@ -700,6 +725,167 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			this._handleError(error, 'Error applying row change')
 			this._view?.webview.postMessage({
 				command: 'applyRowChangeResult',
+				success: false,
+				errors: [error instanceof Error ? error.message : String(error)],
+			})
+		}
+	}
+
+	/**
+	 * Handles previewing a single row (file action) by opening a diff view.
+	 */
+	private async _handlePreviewRowChange(payload: {
+		responseText: string
+		rowIndex: number
+	}): Promise<void> {
+		if (!payload?.responseText) {
+			vscode.window.showErrorMessage('No response text provided.')
+			return
+		}
+
+		try {
+			const parseResult = parseXmlResponse(payload.responseText)
+			if (parseResult.errors.length > 0) {
+				this._view?.webview.postMessage({
+					command: 'previewRowChangeResult',
+					success: false,
+					errors: parseResult.errors,
+				})
+				vscode.window.showErrorMessage(
+					`Error parsing XML: ${parseResult.errors[0]}`,
+				)
+				return
+			}
+
+			if (
+				payload.rowIndex < 0 ||
+				payload.rowIndex >= parseResult.fileActions.length
+			) {
+				this._view?.webview.postMessage({
+					command: 'previewRowChangeResult',
+					success: false,
+					errors: [`Invalid row index: ${payload.rowIndex}`],
+				})
+				return
+			}
+
+			const targetAction = parseResult.fileActions[payload.rowIndex]
+
+			if (targetAction.action === 'rename') {
+				vscode.window.showWarningMessage(
+					'Preview is not available for rename operations.',
+				)
+				this._view?.webview.postMessage({
+					command: 'previewRowChangeResult',
+					success: true,
+				})
+				return
+			}
+
+			// Resolve original URI if exists
+			let originalUri: vscode.Uri | null = null
+			try {
+				originalUri = this._resolvePathToUriSafe(
+					targetAction.path,
+					targetAction.root,
+				)
+				await vscode.workspace.fs.stat(originalUri)
+			} catch {
+				originalUri = null
+			}
+
+			// Determine proposed text based on action
+			let proposedText = ''
+			const language = getLanguageIdFromPath(targetAction.path)
+
+			if (
+				targetAction.action === 'create' ||
+				targetAction.action === 'rewrite'
+			) {
+				proposedText = targetAction.changes?.[0]?.content ?? ''
+			} else if (targetAction.action === 'modify') {
+				if (!originalUri) {
+					throw new Error('Target file does not exist for modify action')
+				}
+				const document = await vscode.workspace.openTextDocument(originalUri)
+				const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+				let fullText = document.getText()
+				for (const change of targetAction.changes ?? []) {
+					if (!change.search)
+						throw new Error('Missing <search> for modify change')
+					const normalizedSearch = this._normalizeToEol(change.search, eol)
+					let searchPos = fullText.indexOf(normalizedSearch)
+					if (searchPos === -1) {
+						throw new Error(
+							`Search text not found: "${normalizedSearch.slice(0, 30)}..."`,
+						)
+					}
+					const nextPos = fullText.indexOf(normalizedSearch, searchPos + 1)
+					if (nextPos !== -1) {
+						const occ = (change as { occurrence?: 'first' | 'last' | number })
+							.occurrence
+						if (occ === 'last') {
+							searchPos = fullText.lastIndexOf(normalizedSearch)
+						} else if (typeof occ === 'number' && occ > 0) {
+							const nth = this._findNthOccurrence(
+								fullText,
+								normalizedSearch,
+								occ,
+							)
+							if (nth === -1)
+								throw new Error(`occurrence=${occ} not found for search`)
+							searchPos = nth
+						} // default to first
+					}
+					const before = fullText.slice(0, searchPos)
+					const after = fullText.slice(searchPos + normalizedSearch.length)
+					fullText = `${before}${change.content}${after}`
+				}
+				proposedText = fullText
+			} else if (targetAction.action === 'delete') {
+				proposedText = ''
+			}
+
+			// Build left/right documents for diff
+			let leftUri: vscode.Uri
+			let rightDoc = await vscode.workspace.openTextDocument({
+				language,
+				content: proposedText,
+			})
+
+			if (targetAction.action === 'create' || !originalUri) {
+				// No original file: left side is empty
+				const emptyLeft = await vscode.workspace.openTextDocument({
+					language,
+					content: '',
+				})
+				leftUri = emptyLeft.uri
+			} else if (targetAction.action === 'delete') {
+				// Deleting: right side empty, left is original
+				leftUri = originalUri!
+				rightDoc = await vscode.workspace.openTextDocument({
+					language,
+					content: '',
+				})
+			} else {
+				leftUri = originalUri!
+			}
+
+			await vscode.commands.executeCommand(
+				'vscode.diff',
+				leftUri,
+				rightDoc.uri,
+				`Preview: ${targetAction.action} ${targetAction.path}`,
+			)
+
+			this._view?.webview.postMessage({
+				command: 'previewRowChangeResult',
+				success: true,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error previewing row change')
+			this._view?.webview.postMessage({
+				command: 'previewRowChangeResult',
 				success: false,
 				errors: [error instanceof Error ? error.message : String(error)],
 			})

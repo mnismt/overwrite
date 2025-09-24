@@ -70,7 +70,6 @@ describe('PreviewTable', () => {
 			<PreviewTable previewData={previewData} onApplyRow={mockOnApplyRow} />,
 		)
 
-		expect(screen.getByText('Proposed Changes:')).toBeInTheDocument()
 		expect(screen.getByText('src/test.ts')).toBeInTheDocument()
 		expect(screen.getByText('Create new test file')).toBeInTheDocument()
 		expect(screen.getByText('+10')).toBeInTheDocument()
