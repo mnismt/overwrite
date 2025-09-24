@@ -6,13 +6,168 @@ import ignore from 'ignore'
 import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
 
-/** Quick & dirty binary sniffer: 0x00 in the first 8000 bytes */
+// Comprehensive list of binary file extensions
+const BINARY_EXTENSIONS = new Set([
+	// Images
+	'.jpg',
+	'.jpeg',
+	'.png',
+	'.gif',
+	'.bmp',
+	'.tiff',
+	'.tif',
+	'.webp',
+	'.svg',
+	'.ico',
+	'.heic',
+	'.avif',
+	// Videos
+	'.mp4',
+	'.avi',
+	'.mov',
+	'.mkv',
+	'.wmv',
+	'.flv',
+	'.webm',
+	'.m4v',
+	'.3gp',
+	'.ogv',
+	// Audio
+	'.mp3',
+	'.wav',
+	'.flac',
+	'.aac',
+	'.ogg',
+	'.wma',
+	'.m4a',
+	'.opus',
+	'.oga',
+	// Archives
+	'.zip',
+	'.rar',
+	'.7z',
+	'.tar',
+	'.gz',
+	'.bz2',
+	'.xz',
+	'.lzma',
+	'.cab',
+	'.dmg',
+	'.iso',
+	// Executables
+	'.exe',
+	'.dll',
+	'.so',
+	'.dylib',
+	'.app',
+	'.deb',
+	'.rpm',
+	'.msi',
+	'.pkg',
+	// Documents
+	'.pdf',
+	'.doc',
+	'.docx',
+	'.xls',
+	'.xlsx',
+	'.ppt',
+	'.pptx',
+	'.odt',
+	'.ods',
+	'.odp',
+	// Fonts
+	'.ttf',
+	'.otf',
+	'.woff',
+	'.woff2',
+	'.eot',
+	// Other binary formats
+	'.bin',
+	'.dat',
+	'.db',
+	'.sqlite',
+	'.sqlite3',
+	'.class',
+	'.pyc',
+	'.o',
+	'.obj',
+])
+
+// Magic number signatures for common binary formats
+const MAGIC_NUMBERS = [
+	{ signature: [0xff, 0xd8, 0xff], format: 'JPEG' },
+	{ signature: [0x89, 0x50, 0x4e, 0x47], format: 'PNG' },
+	{ signature: [0x47, 0x49, 0x46, 0x38], format: 'GIF' },
+	{ signature: [0x25, 0x50, 0x44, 0x46], format: 'PDF' },
+	{ signature: [0x50, 0x4b, 0x03, 0x04], format: 'ZIP' },
+	{ signature: [0x50, 0x4b, 0x05, 0x06], format: 'ZIP (empty)' },
+	{ signature: [0x7f, 0x45, 0x4c, 0x46], format: 'ELF' },
+	{ signature: [0x4d, 0x5a], format: 'PE/EXE' },
+	{ signature: [0xca, 0xfe, 0xba, 0xbe], format: 'Mach-O' },
+]
+
+function checkMagicNumbers(chunk: Uint8Array): boolean {
+	for (const { signature } of MAGIC_NUMBERS) {
+		if (chunk.length >= signature.length) {
+			let matches = true
+			for (let i = 0; i < signature.length; i++) {
+				if (chunk[i] !== signature[i]) {
+					matches = false
+					break
+				}
+			}
+			if (matches) return true
+		}
+	}
+	return false
+}
+
+function analyzeByteContent(chunk: Uint8Array): boolean {
+	if (chunk.length === 0) return false
+
+	let nonPrintableCount = 0
+	let nullByteCount = 0
+
+	for (const byte of chunk) {
+		// Count null bytes
+		if (byte === 0) {
+			nullByteCount++
+		}
+		// Count non-printable characters (excluding common whitespace)
+		else if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+			nonPrintableCount++
+		}
+		// Very high bytes that are uncommon in text
+		else if (byte > 126) {
+			nonPrintableCount++
+		}
+	}
+
+	// If more than 1% null bytes, likely binary
+	if (nullByteCount > chunk.length * 0.01) {
+		return true
+	}
+
+	// If more than 30% non-printable characters, likely binary
+	if (nonPrintableCount > chunk.length * 0.3) {
+		return true
+	}
+
+	return false
+}
+
 export function looksBinary(chunk: Uint8Array): boolean {
-	return chunk.some((byte) => byte === 0)
+	// First check magic numbers (most reliable)
+	if (checkMagicNumbers(chunk)) {
+		return true
+	}
+
+	// Then analyze byte content
+	return analyzeByteContent(chunk)
 }
 
 /**
- * Checks if a file is binary by reading a small chunk and looking for null bytes
+ * Checks if a file is binary using extension-based detection first, then content analysis
  */
 export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 	try {
@@ -21,7 +176,14 @@ export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 			return false
 		}
 
-		// Read first 8KB to check for binary content
+		// First, check if the file extension indicates a binary file (fastest method)
+		const fileName = uri.path.toLowerCase()
+		const extension = fileName.substring(fileName.lastIndexOf('.'))
+		if (BINARY_EXTENSIONS.has(extension)) {
+			return true
+		}
+
+		// If extension is unknown, read first 8KB to check for binary content
 		const content = await vscode.workspace.fs.readFile(uri)
 		const chunk = content.slice(0, 8000)
 		return looksBinary(chunk)
