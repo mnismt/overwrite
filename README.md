@@ -1,6 +1,8 @@
 # Overwrite
 
-![Overwrite logo](resources/overwrite-logo.png)
+<p align="left">
+  <img src="resources/overwrite-logo.png" alt="Overwrite logo" width="200" />
+</p>
 
 A concise VS Code extension to build high‑quality XML prompts from selected workspace files and apply LLM‑suggested changes back to your code.
 
