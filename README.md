@@ -7,7 +7,7 @@
 A concise VS Code extension to build high‑quality XML prompts from selected workspace files and apply LLM‑suggested changes back to your code.
 
 <p align="center">
-  <img src="resources/screenshot-1.jpg" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
+  <img src="https://github.com/user-attachments/assets/9701b7a7-5f39-4961-81ae-24d0b2d75157" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
 </p>
 
 ## Features
@@ -25,9 +25,9 @@ A concise VS Code extension to build high‑quality XML prompts from selected wo
   - Excluded folders editor and optional .gitignore support (in progress).
   - Privacy-preserving telemetry controls.
 
-## Screenshots
-
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b80f2319-19bb-43cd-9c10-4b15fe1ef4a6" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
+</p>
 
 ## How to use
 

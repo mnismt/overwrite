@@ -41,8 +41,6 @@ class TelemetryService {
 			return
 		}
 
-		console.log(`[telemetry] start with ${apiKey}`)
-
 		this.client = new PostHog(apiKey, { host: 'https://us.i.posthog.com' })
 
 		// Persist anonymous id; never use VS Code machineId directly
