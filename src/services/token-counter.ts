@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import * as vscode from 'vscode'
 import { looksBinary } from '../utils/file-system'
+import { telemetry } from './telemetry'
 
 /**
  * A singleton, long-lived tokenizer.
@@ -105,6 +106,12 @@ export async function countTokens(uri: vscode.Uri): Promise<number> {
 
 			stream.on('error', (error) => {
 				hasError = true
+				// Track token counting errors
+				try {
+					telemetry.trackUnhandled('backend', error)
+				} catch (e) {
+					console.warn('[telemetry] failed to track token counter error', e)
+				}
 				reject(error)
 			})
 
@@ -205,6 +212,12 @@ export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 
 				stream.on('error', (error) => {
 					hasError = true
+					// Track token counting errors
+					try {
+						telemetry.trackUnhandled('backend', error)
+					} catch (e) {
+						console.warn('[telemetry] failed to track token counter error', e)
+					}
 					reject(error)
 				})
 

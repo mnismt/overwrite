@@ -6,6 +6,7 @@ import {
 	generateFileMap,
 	generatePrompt,
 } from '../../prompts'
+import { telemetry } from '../../services/telemetry'
 import { countManyWithInfo, encodeText } from '../../services/token-counter'
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
@@ -82,7 +83,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 	public resolveWebviewView(
 		webviewView: vscode.WebviewView,
-		context: vscode.WebviewViewResolveContext,
+		_context: vscode.WebviewViewResolveContext,
 		_token: vscode.CancellationToken,
 	) {
 		this._view = webviewView
@@ -115,6 +116,19 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			console.log('Message received from webview:', message)
 			try {
 				switch (message.command) {
+					case 'webviewError':
+						// Track webview errors sent from the frontend
+						try {
+							const errorData = message.payload as {
+								error: string
+								stack?: string
+								context?: string
+							}
+							telemetry.trackUnhandled('webview', new Error(errorData.error))
+						} catch (e) {
+							console.warn('[telemetry] failed to track webview error', e)
+						}
+						break
 					case 'getFileTree':
 						// Payload may contain excluded folders
 						await this._handleGetFileTree(message.payload as GetFileTreePayload)
@@ -322,6 +336,14 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		const errorMessage = error instanceof Error ? error.message : String(error)
 		console.error(`${contextMessage}:`, error)
 		vscode.window.showErrorMessage(`${contextMessage}: ${errorMessage}`)
+
+		// Track unhandled errors
+		try {
+			telemetry.trackUnhandled('backend', error)
+		} catch (e) {
+			console.warn('[telemetry] failed to track error', e)
+		}
+
 		// Optionally send error back to webview if needed
 		// this._view?.webview.postMessage({ command: 'showError', message: `${contextMessage}: ${errorMessage}` });
 	}
@@ -369,6 +391,13 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		payload: SaveSettingsPayload,
 	): Promise<void> {
 		await this._saveSettings(payload)
+
+		// Track settings saved event
+		try {
+			telemetry.captureSettings()
+		} catch (e) {
+			console.warn('[telemetry] failed to capture settings_saved', e)
+		}
 	}
 
 	/**
@@ -553,6 +582,20 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			// Copy to clipboard
 			await vscode.env.clipboard.writeText(prompt)
 			vscode.window.showInformationMessage('Context copied to clipboard!')
+
+			// Track copy action with sampling (20%)
+			try {
+				// Count total tokens in the prompt
+				const tokenCount = await encodeText(prompt)
+
+				telemetry.captureCopyAction({
+					token_count: tokenCount,
+					source: includeXml ? 'context_xml' : 'context',
+					selected_file_count: selectedUriStrings.size,
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture copy action', e)
+			}
 		} catch (error) {
 			this._handleError(error, 'Error generating or copying context')
 		}
@@ -569,12 +612,28 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			return
 		}
 
+		const requestId = telemetry.generateRequestId()
+		const startTime = Date.now()
+
 		try {
 			// Parse the XML response
 			const parseResult = parseXmlResponse(payload.responseText)
 
 			// If there are parsing errors, show them to the user
 			if (parseResult.errors.length > 0) {
+				const duration = Date.now() - startTime
+
+				// Track apply failed due to parsing errors
+				try {
+					telemetry.captureApplyFlow('apply_failed', requestId, {
+						duration_ms: duration,
+						error_code: 'ParseError',
+						files_touched_count: 0,
+					})
+				} catch (e) {
+					console.warn('[telemetry] failed to capture apply_failed', e)
+				}
+
 				// Send errors back to webview
 				this._view?.webview.postMessage({
 					command: 'applyChangesResult',
@@ -591,6 +650,19 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 			// If there are no file actions, warn the user
 			if (parseResult.fileActions.length === 0) {
+				const duration = Date.now() - startTime
+
+				// Track apply failed due to no actions
+				try {
+					telemetry.captureApplyFlow('apply_failed', requestId, {
+						duration_ms: duration,
+						error_code: 'NoActions',
+						files_touched_count: 0,
+					})
+				} catch (e) {
+					console.warn('[telemetry] failed to capture apply_failed', e)
+				}
+
 				vscode.window.showWarningMessage(
 					'No file actions found in the response.',
 				)
@@ -600,6 +672,27 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 					errors: ['No file actions found in the response.'],
 				})
 				return
+			}
+
+			// Track apply started
+			try {
+				// Count diff hunks (estimate based on modify actions with changes)
+				const diffHunkCount = parseResult.fileActions.reduce(
+					(count, action) => {
+						if (action.action === 'modify' && action.changes) {
+							return count + action.changes.length
+						}
+						return count
+					},
+					0,
+				)
+
+				telemetry.captureApplyFlow('apply_started', requestId, {
+					planned_files_count: parseResult.fileActions.length,
+					diff_hunk_count: diffHunkCount,
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture apply_started', e)
 			}
 
 			// Show the plan if available
@@ -614,6 +707,26 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				this._view,
 			)
 
+			const duration = Date.now() - startTime
+			const successCount = results.filter((r) => r.success).length
+			const totalCount = results.length
+
+			// Track apply completed
+			try {
+				telemetry.captureApplyFlow('apply_completed', requestId, {
+					duration_ms: duration,
+					files_touched_count: successCount,
+					diff_hunk_count: parseResult.fileActions.reduce((count, action) => {
+						if (action.action === 'modify' && action.changes) {
+							return count + action.changes.length
+						}
+						return count
+					}, 0),
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture apply_completed', e)
+			}
+
 			// Send results to webview
 			this._view?.webview.postMessage({
 				command: 'applyChangesResult',
@@ -622,9 +735,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			})
 
 			// Show summary notification
-			const successCount = results.filter((r) => r.success).length
-			const totalCount = results.length
-
 			if (successCount === totalCount) {
 				vscode.window.showInformationMessage(
 					`Successfully applied all ${totalCount} file operations.`,
@@ -635,6 +745,19 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				)
 			}
 		} catch (error) {
+			const duration = Date.now() - startTime
+
+			// Track apply failed due to execution error
+			try {
+				telemetry.captureApplyFlow('apply_failed', requestId, {
+					duration_ms: duration,
+					error_code: error instanceof Error ? error.name : 'Error',
+					files_touched_count: 0,
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture apply_failed', e)
+			}
+
 			this._handleError(error, 'Error applying changes')
 			this._view?.webview.postMessage({
 				command: 'applyChangesResult',
@@ -900,13 +1023,57 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	): Promise<void> {
 		if (!this._view) return
 
+		const requestId = telemetry.generateRequestId()
+		const startTime = Date.now()
+
 		try {
 			const urisToCount = Array.isArray(payload?.selectedUris)
 				? payload.selectedUris
 				: []
 
 			const uris = urisToCount.map((uriString) => vscode.Uri.parse(uriString))
+
+			// Calculate total selected size for bucketing
+			let totalSizeBytes = 0
+			for (const uri of uris) {
+				try {
+					const stat = await vscode.workspace.fs.stat(uri)
+					if (stat.type === vscode.FileType.File) {
+						totalSizeBytes += stat.size
+					}
+				} catch {
+					// Skip files that can't be accessed
+				}
+			}
+
+			// Track token count started
+			try {
+				telemetry.captureTokenCount('token_count_started', requestId, {
+					selected_file_count: uris.length,
+					total_selected_size: telemetry.bucketFileSize(totalSizeBytes),
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture token_count_started', e)
+			}
+
 			const { tokenCounts, skippedFiles } = await countManyWithInfo(uris)
+
+			const duration = Date.now() - startTime
+			const totalTokens = Object.values(tokenCounts).reduce(
+				(sum, count) => sum + count,
+				0,
+			)
+
+			// Track token count completed
+			try {
+				telemetry.captureTokenCount('token_count_completed', requestId, {
+					duration_ms: duration,
+					estimated_tokens_total: totalTokens,
+					cache_hit: false, // Will be enhanced when cache hit tracking is added to token counter
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture token_count_completed', e)
+			}
 
 			// Send the results back to the webview
 			this._view.webview.postMessage({
@@ -919,6 +1086,18 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				console.log('Skipped files during token counting:', skippedFiles)
 			}
 		} catch (error) {
+			const duration = Date.now() - startTime
+
+			// Track token count failed
+			try {
+				telemetry.captureTokenCount('token_count_failed', requestId, {
+					duration_ms: duration,
+					error_code: error instanceof Error ? error.name : 'Error',
+				})
+			} catch (e) {
+				console.warn('[telemetry] failed to capture token_count_failed', e)
+			}
+
 			this._handleError(error, 'Error calculating token counts')
 			// Send empty counts back on error
 			this._view.webview.postMessage({
@@ -937,8 +1116,27 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}): Promise<void> {
 		if (!this._view) return
 
+		const startTime = Date.now()
+
 		try {
 			const tokenCount = await encodeText(payload.text)
+
+			const duration = Date.now() - startTime
+
+			// Track single token count (minimal telemetry for text operations)
+			try {
+				telemetry.captureTokenCount(
+					'token_count_completed',
+					payload.requestId,
+					{
+						duration_ms: duration,
+						estimated_tokens_total: tokenCount,
+						cache_hit: false,
+					},
+				)
+			} catch (e) {
+				console.warn('[telemetry] failed to capture single token count', e)
+			}
 
 			// Send the response back to the webview
 			this._view.webview.postMessage({
@@ -947,6 +1145,21 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				tokenCount,
 			})
 		} catch (error) {
+			const duration = Date.now() - startTime
+
+			// Track token count failed for single text
+			try {
+				telemetry.captureTokenCount('token_count_failed', payload.requestId, {
+					duration_ms: duration,
+					error_code: error instanceof Error ? error.name : 'Error',
+				})
+			} catch (e) {
+				console.warn(
+					'[telemetry] failed to capture single token count failure',
+					e,
+				)
+			}
+
 			this._handleError(error, 'Error calculating token count for text')
 			// Send fallback response
 			this._view.webview.postMessage({

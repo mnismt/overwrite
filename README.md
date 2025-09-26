@@ -23,6 +23,7 @@ A concise VS Code extension to build high‑quality XML prompts from selected wo
   - Apply safely via VS Code APIs with undo/redo and clear error feedback.
 - Settings
   - Excluded folders editor and optional .gitignore support (in progress).
+  - Privacy-preserving telemetry controls.
 
 ## Screenshots
 
@@ -34,6 +35,16 @@ A concise VS Code extension to build high‑quality XML prompts from selected wo
 2. In Explorer/Context, pick files and add your task instructions.
 3. Click Copy Context (or Copy Context + XML Instructions) and paste into your LLM.
 4. Paste the LLM XML response into Apply, preview diffs, then apply.
+
+## Privacy & Telemetry
+
+Overwrite includes **optional, anonymous telemetry** to help improve the extension. We collect usage patterns and performance metrics while maintaining strict privacy:
+
+- **Anonymous data only** - No file paths, contents, or personal information
+- **Transparent implementation** - All telemetry code is open source
+- **Easy opt-out** - Disable via VS Code settings or extension preferences
+
+For complete details, see [TELEMETRY.md](TELEMETRY.md).
 
 ## Requirements
 

@@ -1,5 +1,6 @@
 import path from 'node:path'
 import * as vscode from 'vscode'
+import { telemetry } from '../../services/telemetry'
 import { resolveXmlPathToUri } from '../../utils/path-resolver'
 import type { FileAction } from '../../utils/xml-parser'
 
@@ -51,6 +52,13 @@ export async function applyFileActions(
 					})
 			}
 		} catch (error) {
+			// Track file action errors
+			try {
+				telemetry.trackUnhandled('backend', error)
+			} catch (e) {
+				console.warn('[telemetry] failed to track file action error', e)
+			}
+
 			results.push({
 				path: fileAction.path,
 				action: fileAction.action,

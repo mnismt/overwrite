@@ -33,12 +33,78 @@ function App() {
 
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
-		const vscode = getVsCodeApi()
+		try {
+			const vscode = getVsCodeApi()
 
-		if (command === 'getFileTree') {
-			setIsLoading(true)
+			if (command === 'getFileTree') {
+				setIsLoading(true)
+			}
+			vscode.postMessage({ command, payload })
+		} catch (error) {
+			console.error('Error sending message to extension:', error)
+			// Send error to extension for telemetry
+			try {
+				const vscode = getVsCodeApi()
+				vscode.postMessage({
+					command: 'webviewError',
+					payload: {
+						error: error instanceof Error ? error.message : String(error),
+						context: `sendMessage(${command})`,
+					},
+				})
+			} catch (e) {
+				console.error('Failed to send error to extension:', e)
+			}
 		}
-		vscode.postMessage({ command, payload })
+	}, [])
+
+	// Global error handling for webview
+	useEffect(() => {
+		const handleError = (event: ErrorEvent) => {
+			console.error('Unhandled error in webview:', event.error)
+			try {
+				const vscode = getVsCodeApi()
+				vscode.postMessage({
+					command: 'webviewError',
+					payload: {
+						error:
+							event.error instanceof Error
+								? event.error.message
+								: String(event.error),
+						context: 'global error handler',
+					},
+				})
+			} catch (e) {
+				console.error('Failed to send error to extension:', e)
+			}
+		}
+
+		const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+			console.error('Unhandled promise rejection in webview:', event.reason)
+			try {
+				const vscode = getVsCodeApi()
+				vscode.postMessage({
+					command: 'webviewError',
+					payload: {
+						error:
+							event.reason instanceof Error
+								? event.reason.message
+								: String(event.reason),
+						context: 'unhandled promise rejection',
+					},
+				})
+			} catch (e) {
+				console.error('Failed to send error to extension:', e)
+			}
+		}
+
+		window.addEventListener('error', handleError)
+		window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+		return () => {
+			window.removeEventListener('error', handleError)
+			window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+		}
 	}, [])
 
 	// Fetch initial file tree and settings
