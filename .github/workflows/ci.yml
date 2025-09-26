@@ -30,6 +30,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Setup headless display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          export DISPLAY=:99
+          Xvfb :99 -ac -screen 0 1280x1024x16 &
+          echo "Waiting for display to be ready..."
+          sleep 3
+
       - name: Lint
         run: pnpm lint
 
@@ -37,9 +46,13 @@ jobs:
         run: pnpm check-types
 
       - name: Run extension tests
-        run: pnpm test
+        run: |
+          echo "Running tests with VS Code version: ${{ matrix.vscode-version }}"
+          pnpm test
+        timeout-minutes: 10
         env:
           VSCODE_VERSION: ${{ matrix.vscode-version }}
+          DISPLAY: :99
 
   test-webview:
     runs-on: ubuntu-latest
@@ -65,7 +78,9 @@ jobs:
         run: pnpm -C src/webview-ui install --no-frozen-lockfile
 
       - name: Run webview tests
-        run: pnpm -C src/webview-ui test --run
+        run: |
+          echo "Running webview tests..."
+          pnpm -C src/webview-ui test --run
         timeout-minutes: 10
 
   build:
