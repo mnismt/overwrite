@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.8.0",
   "publisher": "mnismt",
   "license": "MIT",
-  "description": "Overwrite helps you curate workspace context into structured prompts and safely apply LLM-suggested diffs in VS Code.",
+  "description": "Pack your entire repo in a single prompt",
   "repository": {
     "type": "git",
     "url": "https://github.com/mnismt/overwrite.git"
@@ -67,7 +67,8 @@
     "apply",
     "ai",
     "llm",
-    "patch"
+    "patch",
+    "repoprompt"
   ],
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
