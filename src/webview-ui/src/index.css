@@ -32,6 +32,16 @@
   font-family: var(--vscode-editor-font-family, ui-sans-serif, system-ui);
 }
 
+/* Ensure VS Code table elements allow wheel events to bubble up */
+vscode-table,
+vscode-table-header,
+vscode-table-body,
+vscode-table-row,
+vscode-table-cell,
+vscode-table-header-cell {
+  overflow: visible !important;
+}
+
 /* Loading Animations */
 @keyframes shimmer {
   0% {

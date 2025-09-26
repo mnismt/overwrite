@@ -25,6 +25,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 		<div className="mt-4">
 			<vscode-divider className="my-4"></vscode-divider>
 
+			{/* Fixed errors section */}
 			{errors && errors.length > 0 && (
 				<div className="mb-4 p-3 bg-warn-bg border border-warn-border rounded">
 					<h4 className="text-error font-medium mb-2">Preview Errors:</h4>
@@ -38,6 +39,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 				</div>
 			)}
 
+			{/* Table area */}
 			{rows && rows.length > 0 && (
 				<div>
 					<vscode-table columns={['30%', '40%', '20%', '10%']}>

@@ -162,43 +162,49 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	)
 
 	return (
-		<div className="py-2">
-			<ResponseTextarea
-				responseText={responseText}
-				onTextChange={handleTextChange}
-			/>
-			{/* Lint / normalization notes */}
-			{lints && lints.length > 0 && (
-				<div className="mt-2 p-2 rounded border border-warn-border bg-warn-bg">
-					<div className="text-xs font-medium text-muted mb-1">Lint</div>
-					<ul className="text-xs list-disc ml-5">
-						{lints.map((m, i) => (
-							<li key={i} className="text-muted">
-								{m}
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-			<ApplyActions
-				isApplying={isApplying}
-				isPreviewing={isPreviewing}
-				onPreview={handlePreview}
-				onApply={handleApply}
-				handleButtonKeyDown={handleButtonKeyDown}
-			/>
-
-			{/* Show preview table if we have preview data, otherwise show results */}
-			{previewData ? (
-				<PreviewTable
-					previewData={previewData}
-					onApplyRow={handleApplyRow}
-					onPreviewRow={handlePreviewRow}
-					isApplying={isApplying}
+		<div className="flex flex-col h-full overflow-hidden gap-y-2 py-2 pb-20">
+			{/* Fixed header area */}
+			<div className="bg-bg z-10">
+				<ResponseTextarea
+					responseText={responseText}
+					onTextChange={handleTextChange}
 				/>
-			) : (
-				<ResultsDisplay results={results} errors={errors} />
-			)}
+				{/* Lint / normalization notes */}
+				{lints && lints.length > 0 && (
+					<div className="mt-2 p-2 rounded border border-warn-border bg-warn-bg">
+						<div className="text-xs font-medium text-muted mb-1">Lint</div>
+						<ul className="text-xs list-disc ml-5">
+							{lints.map((m, i) => (
+								<li key={i} className="text-muted">
+									{m}
+								</li>
+							))}
+						</ul>
+					</div>
+				)}
+				<ApplyActions
+					isApplying={isApplying}
+					isPreviewing={isPreviewing}
+					onPreview={handlePreview}
+					onApply={handleApply}
+					handleButtonKeyDown={handleButtonKeyDown}
+				/>
+			</div>
+
+			{/* Scrollable content area */}
+			<div className="flex-1 min-h-0 overflow-auto pb-12">
+				{/* Show preview table if we have preview data, otherwise show results */}
+				{previewData ? (
+					<PreviewTable
+						previewData={previewData}
+						onApplyRow={handleApplyRow}
+						onPreviewRow={handlePreviewRow}
+						isApplying={isApplying}
+					/>
+				) : (
+					<ResultsDisplay results={results} errors={errors} />
+				)}
+			</div>
 		</div>
 	)
 }

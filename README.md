@@ -1,10 +1,14 @@
 # Overwrite
 
-<p align="left">
+<p align="center">
   <img src="resources/overwrite-logo.png" alt="Overwrite logo" width="200" />
 </p>
 
 A concise VS Code extension to build high‑quality XML prompts from selected workspace files and apply LLM‑suggested changes back to your code.
+
+<p align="center">
+  <img src="resources/screenshot-1.jpg" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
+</p>
 
 ## Features
 
@@ -19,6 +23,10 @@ A concise VS Code extension to build high‑quality XML prompts from selected wo
   - Apply safely via VS Code APIs with undo/redo and clear error feedback.
 - Settings
   - Excluded folders editor and optional .gitignore support (in progress).
+
+## Screenshots
+
+
 
 ## How to use
 
