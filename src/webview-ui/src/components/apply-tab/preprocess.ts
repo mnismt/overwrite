@@ -22,7 +22,7 @@ function extractContentBlocks(input: string): {
 		/<\s*(put|find|content)\s*[^>]*>([\s\S]*?)<\s*\/\s*(put|find|content)\s*>/gi
 	masked = masked.replace(blockRegex, (_m, openTag: string, inner: string) => {
 		const i = blocks.length
-		const tag = (openTag as 'put' | 'find' | 'content')
+		const tag = openTag as 'put' | 'find' | 'content'
 		blocks.push({ tag, inner })
 		return `__OW_TAG_${tag}_BLOCK_${i}__`
 	})
@@ -33,12 +33,15 @@ function restoreContentBlocks(
 	input: string,
 	blocks: Array<{ tag: 'put' | 'find' | 'content'; inner: string }>,
 ): string {
-	return input.replace(/__OW_TAG_(put|find|content)_BLOCK_(\d+)__/g, (_m, t, i) => {
-		const idx = Number(i)
-		const tag = t as 'put' | 'find' | 'content'
-		const inner = blocks[idx]?.inner ?? ''
-		return `<${tag}>${inner}</${tag}>`
-	})
+	return input.replace(
+		/__OW_TAG_(put|find|content)_BLOCK_(\d+)__/g,
+		(_m, t, i) => {
+			const idx = Number(i)
+			const tag = t as 'put' | 'find' | 'content'
+			const inner = blocks[idx]?.inner ?? ''
+			return `<${tag}>${inner}</${tag}>`
+		},
+	)
 }
 
 // Normalize curly quotes globally in non-content area.

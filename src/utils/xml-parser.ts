@@ -205,7 +205,17 @@ function extractBetweenMarkers(
 	start: string,
 	end: string,
 ): string | undefined {
-	const s = text.trim()
+	// Auto-heal common markdown/chat truncation of marker lines inside literal blocks.
+	// If a line contains only "<" or "<<", treat it as the opening marker "<<<".
+	// If a line contains only ">" or ">>", treat it as the closing marker ">>>".
+	let s = text.trim()
+	// Repair before searching for markers; operate on full-line matches only.
+	s = s
+		.replace(/^[ \t]*<\s*$/gm, '<<<')
+		.replace(/^[ \t]*<<\s*$/gm, '<<<')
+		.replace(/^[ \t]*>\s*$/gm, '>>>')
+		.replace(/^[ \t]*>>\s*$/gm, '>>>')
+
 	const first = s.indexOf(start)
 	if (first === -1) return undefined
 	const last = s.lastIndexOf(end)

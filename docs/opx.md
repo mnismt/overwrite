@@ -64,6 +64,7 @@ Supported `op` values and semantics:
 
 - Inside `<find>` and `<put>`, the payload must be wrapped between lines containing only `<<<` and `>>>`.
 - The parser takes all text strictly between those markers. Surrounding whitespace/newlines around markers are trimmed.
+- Parser auto-heal: to mitigate Markdown/chat copy issues, if a line inside `<find>`/`<put>` contains only `<` or `<<`, it is treated as `<<<`; if it contains only `>` or `>>`, it is treated as `>>>`. This repair happens before extraction and affects only full-line markers.
 
 ### Path rules
 
@@ -242,6 +243,9 @@ Manual smoke:
   - Use stable tags/attributes and simple markers.
 - Content delimiter collision:
   - `<<<`/`>>>` are uncommon; if conflicts appear, OPX v1.1 can add an optional custom `marker` attribute.
+- Markdown copy truncation of markers:
+  - The parser auto-heals full-line `<`/`<<`/`>`/`>>` into `<<<`/`>>>` inside `<find>`/`<put>` blocks.
+  - Guidance: ask models to emit OPX inside a single fenced block (e.g., ```xml … ```), and copy from within the fence.
 
 ---
 

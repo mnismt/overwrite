@@ -170,6 +170,28 @@ OK
 		assert.ok(res.errors[0]?.includes('Empty or missing marker block'))
 	})
 
+	it('auto-heals truncated markers "<"/">" into OPX markers inside <find>/<put>', () => {
+		const xml = `
+<edit file="src/app/layout.tsx" op="patch">
+  <find>
+<
+export const metadata: Metadata = { title: "A", description: "B" };
+>>>
+  </find>
+  <put>
+<<
+export const metadata: Metadata = { title: "X", description: "Y" };
+>
+  </put>
+</edit>`
+		const res = parseXmlResponse(xml)
+		assert.deepStrictEqual(res.errors, [])
+		const f = res.fileActions[0]!
+		assert.strictEqual(f.action, 'modify')
+		assert.ok((f.changes?.[0]?.search || '').includes('title: "A"'))
+		assert.ok((f.changes?.[0]?.content || '').includes('title: "X"'))
+	})
+
 	it('ignores invalid occurrence value (no error, undefined occurrence)', () => {
 		const xml = `
 <edit file="a.ts" op="patch">
