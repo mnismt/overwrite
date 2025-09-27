@@ -42,7 +42,6 @@ export const A = 1;
 		const bad2 = `<edit file="a.ts" op="move"><to path="b.ts" /></edit>`
 
 		const l1 = lintXmlText(bad1)
-		const l2 = lintXmlText(bad2)
 
 		expect(l1.some((m) => m.includes('missing file'))).toBe(true)
 		// Pre-lint does not validate child <to>; ensure no crash on preprocess
