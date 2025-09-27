@@ -1,4 +1,4 @@
-// Define interfaces for the parsed XML structure
+// Define interfaces for the parsed XML structure (public API remains the same)
 export interface FileAction {
 	path: string
 	action: 'create' | 'rewrite' | 'modify' | 'delete' | 'rename'
@@ -15,197 +15,246 @@ interface ChangeBlock {
 }
 
 interface ParseResult {
+	// OPX does not define a plan; keep for tolerance with existing callers
 	plan?: string
 	fileActions: FileAction[]
 	errors: string[]
 }
 
 /**
- * Parses an XML-formatted LLM response to extract file actions.
- * @param xmlContent The XML content string from the LLM.
- * @returns Structured representation of the file actions to perform.
+ * Parses OPX (Overwrite Patch XML) responses and returns unified FileAction[]
+ * OPX-only: accepts <edit ...> (optionally wrapped in <opx>...</opx>)
+ *
+ * op mapping:
+ * - new     -> create (requires <put>)
+ * - patch   -> modify (requires <find> and <put>)
+ * - replace -> rewrite (requires <put>)
+ * - remove  -> delete (no children)
+ * - move    -> rename (requires <to file="..."/>)
  */
 export function parseXmlResponse(xmlContent: string): ParseResult {
-	const result: ParseResult = {
-		fileActions: [],
-		errors: [],
-	}
+	const result: ParseResult = { fileActions: [], errors: [] }
 
 	try {
-		// 1) Sanitize copy-pasted chat text (trim fences, leading/trailing chatter)
 		const cleaned = sanitizeResponse(xmlContent)
-		// Extract plan
-		const planMatch = cleaned.match(/<\s*Plan\s*>([\s\S]*?)<\/\s*Plan\s*>/i)
-		if (planMatch?.[1]) {
-			result.plan = planMatch[1].trim()
+		if (!cleaned) {
+			return { fileActions: [], errors: ['Empty input'] }
 		}
 
-		// Extract file actions
-		const fileRegex = /<file\s+([^>]*)>([\s\S]*?)<\/\s*file\s*>/gi
-		let fileMatch: RegExpExecArray | null
-		let fileIndex = 0
+		// 1) Collect <edit .../> and <edit>...</edit> with document order preserved
+		const edits: Array<{
+			index: number
+			attrs: Record<string, string>
+			body: string | null
+		}> = []
 
-		// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
-		while ((fileMatch = fileRegex.exec(cleaned)) !== null) {
-			const [, rawAttrs, fileContent] = fileMatch
-			const attrs = parseAttributes(rawAttrs)
-			const pathAttr = attrs.path
-			const actionAttr = attrs.action
+		// Self-closing edits (e.g., op="remove")
+		const selfClosingRegex = /<\s*edit\b([^>]*)\/>/gi
+		for (const m of cleaned.matchAll(selfClosingRegex)) {
+			edits.push({
+				index: m.index ?? 0,
+				attrs: parseAttributes(m[1] ?? ''),
+				body: null,
+			})
+		}
 
-			if (!pathAttr || !actionAttr) {
-				const trimmedAttrs = rawAttrs.trim().slice(0, 120)
+		// Paired edits
+		const pairedRegex = /<\s*edit\b([^>]*)>([\s\S]*?)<\s*\/\s*edit\s*>/gi
+		for (const m of cleaned.matchAll(pairedRegex)) {
+			edits.push({
+				index: m.index ?? 0,
+				attrs: parseAttributes(m[1] ?? ''),
+				body: m[2] ?? '',
+			})
+		}
+
+		edits.sort((a, b) => a.index - b.index)
+
+		if (edits.length === 0) {
+			return {
+				fileActions: [],
+				errors: ['No <edit> elements found (expecting OPX)'],
+			}
+		}
+
+		let idx = 0
+		for (const e of edits) {
+			idx += 1
+			const file = e.attrs.file
+			const op = (e.attrs.op || '').toLowerCase()
+			const root = e.attrs.root
+
+			if (!file || !op) {
+				const trimmed = Object.entries(e.attrs)
+					.map(([k, v]) => `${k}="${v}"`)
+					.join(' ')
 				result.errors.push(
-					`Missing required attribute: path or action (at <file> #${
-						fileIndex + 1
-					}, attrs="${trimmedAttrs}")`,
+					`Edit #${idx}: missing required attribute(s): ${!file ? 'file ' : ''}${
+						!op ? 'op' : ''
+					}. attrs="${trimmed}"`,
 				)
-				fileIndex++
 				continue
 			}
 
-			const fileAction: FileAction = {
-				path: pathAttr,
-				action: actionAttr as FileAction['action'],
-				changes: [],
-				root: attrs.root,
+			const action = mapOpToAction(op)
+			if (!action) {
+				result.errors.push(`Edit #${idx}: unknown op="${op}"`)
+				continue
 			}
 
-			// Handle rename action
-			if (actionAttr === 'rename') {
-				const newPathMatch = fileContent.match(/<new\s+path="([^"]*)"\s*\/>/i)
-				if (newPathMatch?.[1]) {
-					fileAction.newPath = newPathMatch[1]
-				} else {
-					result.errors.push(
-						`Missing <new> element for rename action on: ${pathAttr}`,
-					)
-				}
-			} else {
-				// Extract change blocks
-				const changeRegex = /<\s*change\s*>([\s\S]*?)<\/\s*change\s*>/gi
-				let changeMatch: RegExpExecArray | null
+			const fileAction: FileAction = { path: file, action, root, changes: [] }
 
-				// biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
-				while ((changeMatch = changeRegex.exec(fileContent)) !== null) {
-					const changeContent = changeMatch[1]
-
-					// Extract description
-					const descMatch = changeContent.match(
-						/<\s*description\s*>([\s\S]*?)<\/\s*description\s*>/i,
-					)
-					const description = descMatch
-						? descMatch[1].trim()
-						: 'No description provided'
-
-					// Extract search block for modify
-					let search: string | undefined
-					if (actionAttr === 'modify') {
-						const searchMatch = changeContent.match(
-							/<\s*search\s*>([\s\S]*?)<\/\s*search\s*>/i,
-						)
-						if (searchMatch?.[1]) {
-							search = extractContentBetweenMarkers(searchMatch[1])
+			try {
+				switch (op) {
+					case 'move': {
+						// <to file="..." /> inside body
+						const body = e.body || ''
+						const toMatch = body.match(/<\s*to\b([^>]*)\/>/i)
+						const toAttrs = parseAttributes(toMatch?.[1] ?? '')
+						const newPath = toAttrs.file
+						if (!newPath) {
+							throw new Error('Missing <to file="..."/> for move')
 						}
+						fileAction.newPath = newPath
+						break
 					}
-
-					// Extract content
-					let content = ''
-					const contentMatch = changeContent.match(
-						/<\s*content\s*>([\s\S]*?)<\/\s*content\s*>/i,
-					)
-					if (contentMatch?.[1]) {
-						content = extractContentBetweenMarkers(contentMatch[1]) || ''
+					case 'remove': {
+						// nothing else needed
+						break
 					}
-
-					// Optional occurrence disambiguator
-					let occurrence: ChangeBlock['occurrence']
-					const occMatch = changeContent.match(
-						/<\s*occurrence\s*>([\s\S]*?)<\/\s*occurrence\s*>/i,
-					)
-					if (occMatch?.[1]) {
-						const occRaw = occMatch[1].trim().toLowerCase()
-						if (occRaw === 'first' || occRaw === 'last') {
-							occurrence = occRaw
-						} else {
-							const n = Number.parseInt(occRaw, 10)
+					case 'new':
+					case 'replace': {
+						const body = e.body || ''
+						const putMatch = body.match(
+							/<\s*put\s*>([\s\S]*?)<\s*\/\s*put\s*>/i,
+						)
+						if (!putMatch) throw new Error('Missing <put> block')
+						const content =
+							extractBetweenMarkers(putMatch[1] ?? '', '<<<', '>>>') ?? ''
+						fileAction.changes!.push({
+							description:
+								extractWhy(body) ??
+								(op === 'new' ? 'Create file' : 'Replace file'),
+							content,
+						})
+						break
+					}
+					case 'patch': {
+						const body = e.body || ''
+						const findMatch = body.match(
+							/<\s*find\b([^>]*)>([\s\S]*?)<\s*\/\s*find\s*>/i,
+						)
+						const putMatch = body.match(
+							/<\s*put\s*>([\s\S]*?)<\s*\/\s*put\s*>/i,
+						)
+						if (!findMatch || !putMatch)
+							throw new Error('Missing <find> or <put> for patch')
+						const findAttrs = parseAttributes(findMatch[1] ?? '')
+						const occurrenceRaw = (findAttrs.occurrence || '').toLowerCase()
+						let occurrence: ChangeBlock['occurrence']
+						if (occurrenceRaw === 'first' || occurrenceRaw === 'last')
+							occurrence = occurrenceRaw
+						else if (occurrenceRaw) {
+							const n = Number.parseInt(occurrenceRaw, 10)
 							if (!Number.isNaN(n) && n > 0) occurrence = n
 						}
+						const search = extractBetweenMarkers(
+							findMatch[2] ?? '',
+							'<<<',
+							'>>>',
+						)
+						const content =
+							extractBetweenMarkers(putMatch[1] ?? '', '<<<', '>>>') ?? ''
+						if (!search)
+							throw new Error('Empty or missing marker block in <find>')
+						fileAction.changes!.push({
+							description: extractWhy(body) ?? 'Patch region',
+							search,
+							content,
+							occurrence,
+						})
+						break
 					}
-
-					fileAction.changes!.push({
-						description,
-						search,
-						content,
-						occurrence,
-					})
 				}
-			}
 
-			result.fileActions.push(fileAction)
-			fileIndex++
+				result.fileActions.push(fileAction)
+			} catch (err) {
+				result.errors.push(
+					`Edit #${idx} (${file}): ${err instanceof Error ? err.message : String(err)}`,
+				)
+			}
 		}
 	} catch (error) {
-		result.errors.push(`Failed to parse XML: ${error}`)
+		result.errors.push(`Failed to parse OPX: ${error}`)
 	}
 
 	return result
 }
 
+/** Extract simple description from <why> if present */
+function extractWhy(body: string): string | undefined {
+	const m = body.match(/<\s*why\s*>([\s\S]*?)<\s*\/\s*why\s*>/i)
+	return m?.[1]?.trim()
+}
+
 /**
- * Extracts content between === markers in the LLM response.
- * @param text The raw text containing === markers.
- * @returns The extracted content or undefined if not found.
+ * Extracts content between custom markers like <<< and >>>, trimming outer whitespace.
  */
-function extractContentBetweenMarkers(text: string): string | undefined {
-	// Be liberal: accept markers with or without surrounding newlines/whitespace.
-	// We look for the first '===' and the last '===' and trim whitespace around them.
-	const s = text.trim()
-	const first = s.indexOf('===')
+function extractBetweenMarkers(
+	text: string,
+	start: string,
+	end: string,
+): string | undefined {
+	// Auto-heal common markdown/chat truncation of marker lines inside literal blocks.
+	// If a line contains only "<" or "<<", treat it as the opening marker "<<<".
+	// If a line contains only ">" or ">>", treat it as the closing marker ">>>".
+	let s = text.trim()
+	// Repair before searching for markers; operate on full-line matches only.
+	s = s
+		.replace(/^[ \t]*<\s*$/gm, '<<<')
+		.replace(/^[ \t]*<<\s*$/gm, '<<<')
+		.replace(/^[ \t]*>\s*$/gm, '>>>')
+		.replace(/^[ \t]*>>\s*$/gm, '>>>')
+
+	const first = s.indexOf(start)
 	if (first === -1) return undefined
-	const last = s.lastIndexOf('===')
+	const last = s.lastIndexOf(end)
 	if (last === -1 || last <= first) return undefined
-	// Start after the first marker and skip optional whitespace/newlines
-	let start = first + 3
-	while (start < s.length && /[ \t\r\n]/.test(s[start]!)) start++
-	// End before the last marker, trim trailing whitespace/newlines
-	const end = last
-	let endTrim = end - 1
-	while (endTrim >= 0 && /[ \t\r\n]/.test(s[endTrim]!)) endTrim--
-	if (endTrim < start) return ''
-	return s.slice(start, endTrim + 1)
+	let startIdx = first + start.length
+	while (startIdx < s.length && /[ \t\r\n]/.test(s[startIdx]!)) startIdx++
+	let endIdx = last - 1
+	while (endIdx >= 0 && /[ \t\r\n]/.test(s[endIdx]!)) endIdx--
+	if (endIdx < startIdx) return ''
+	return s.slice(startIdx, endIdx + 1)
 }
 
 /**
  * Strips leading/trailing noise: code fences, chat preambles/epilogues.
- * Keeps the slice from the first <Plan|file> to the last </Plan|file>.
+ * Keeps the slice from the first <edit|opx> to the last </edit|/opx>.
  */
 function sanitizeResponse(raw: string): string {
 	let s = raw.trim()
+	if (!s) return ''
 	// Remove triple backtick fences if present
-	if (s.startsWith('```')) {
-		// Drop opening fence line
-		s = s.replace(/^```[\w-]*\s*\n?/, '')
-	}
-	if (s.endsWith('```')) {
-		s = s.replace(/\n?```\s*$/, '')
-	}
-	// Find useful XML region
-	const startIdxOptions = [s.indexOf('<file '), s.indexOf('<Plan')].filter(
+	if (s.startsWith('```')) s = s.replace(/^```[\w-]*\s*\n?/, '')
+	if (s.endsWith('```')) s = s.replace(/\n?```\s*$/, '')
+
+	// If wrapped in <opx>...</opx>, keep inner slice; else start at first <edit>
+	const opxStart = s.indexOf('<opx')
+	const editStart = s.indexOf('<edit ')
+	const startIdxOptions = [opxStart, editStart].filter(
 		(i) => i >= 0,
 	) as number[]
 	const startIdx = startIdxOptions.length ? Math.min(...startIdxOptions) : -1
 	if (startIdx >= 0) s = s.slice(startIdx)
 
 	// Determine end by the last closing tag of interest
-	const lastCloseFile = s.lastIndexOf('</file>')
-	const lastClosePlan1 = s.lastIndexOf('</Plan>')
-	const lastClosePlan2 = s.lastIndexOf('</plan>')
-	const lastClose = Math.max(lastCloseFile, lastClosePlan1, lastClosePlan2)
+	const lastCloseEdit = s.lastIndexOf('</edit>')
+	const lastCloseOpx = s.lastIndexOf('</opx>')
+	const lastClose = Math.max(lastCloseEdit, lastCloseOpx)
 	if (lastClose > -1) {
-		// Include the closing tag
-		const end =
-			lastClose +
-			(s.slice(lastClose).toLowerCase().startsWith('</file>') ? 7 : 7)
+		const isOpx = s.slice(lastClose).toLowerCase().startsWith('</opx>')
+		const end = lastClose + (isOpx ? 6 : 7)
 		s = s.slice(0, end)
 	}
 	return s.trim()
@@ -213,15 +262,34 @@ function sanitizeResponse(raw: string): string {
 
 /**
  * Parses attributes from a tag attribute string into a key-value map.
+ * Accepts both double and single quotes and lowercases keys.
  */
 function parseAttributes(attrString: string): Record<string, string> {
 	const attrs: Record<string, string> = {}
-	// Matches key="value" pairs, ignoring order and whitespace
-	const regex = /(\w+)\s*=\s*"([^"]*)"/g
+	const regex = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
 	let match: RegExpExecArray | null
 	// biome-ignore lint/suspicious/noAssignInExpressions: iterative regex exec
 	while ((match = regex.exec(attrString)) !== null) {
-		attrs[match[1]] = match[2]
+		const key = match[1].toLowerCase()
+		const val = match[2] !== undefined ? match[2] : (match[3] ?? '')
+		attrs[key] = val
 	}
 	return attrs
+}
+
+function mapOpToAction(op: string): FileAction['action'] | null {
+	switch (op) {
+		case 'new':
+			return 'create'
+		case 'patch':
+			return 'modify'
+		case 'replace':
+			return 'rewrite'
+		case 'remove':
+			return 'delete'
+		case 'move':
+			return 'rename'
+		default:
+			return null
+	}
 }

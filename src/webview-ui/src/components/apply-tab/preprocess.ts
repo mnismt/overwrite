@@ -1,9 +1,9 @@
 // Lightweight, safe pre-processing for XML-like LLM responses used by Apply tab.
 // Goals:
-// - Normalize attribute quotes in <file ...> and <new .../> tags (single -> double)
+// - Normalize attribute quotes in OPX tags: <edit ...> and <to .../>
 // - Normalize curly quotes to ASCII
-// - Lowercase attribute keys (path, action, root, etc.)
-// - Do NOT touch text inside <content>...</content>
+// - Lowercase attribute keys (file, op, root, occurrence, etc.)
+// - Do NOT touch text inside literal payload blocks (<put>, <find>) or other content tags
 
 export interface PreprocessResult {
 	text: string
@@ -11,27 +11,37 @@ export interface PreprocessResult {
 	issues: string[] // lint-like warnings detected pre-parse
 }
 
-// Extract <content> blocks and replace with placeholders to avoid mutating code.
+// Extract <put> / <find> / <content> blocks and replace with placeholders to avoid mutating code.
 function extractContentBlocks(input: string): {
 	masked: string
-	blocks: string[]
+	blocks: Array<{ tag: 'put' | 'find' | 'content'; inner: string }>
 } {
-	const blocks: string[] = []
+	const blocks: Array<{ tag: 'put' | 'find' | 'content'; inner: string }> = []
 	let masked = input
-	const contentRegex = /<\s*content\s*>([\s\S]*?)<\s*\/\s*content\s*>/gi
-	masked = masked.replace(contentRegex, (_m, inner) => {
+	const blockRegex =
+		/<\s*(put|find|content)\s*[^>]*>([\s\S]*?)<\s*\/\s*(put|find|content)\s*>/gi
+	masked = masked.replace(blockRegex, (_m, openTag: string, inner: string) => {
 		const i = blocks.length
-		blocks.push(inner)
-		return `__OW_CONTENT_BLOCK_${i}__`
+		const tag = openTag as 'put' | 'find' | 'content'
+		blocks.push({ tag, inner })
+		return `__OW_TAG_${tag}_BLOCK_${i}__`
 	})
 	return { masked, blocks }
 }
 
-function restoreContentBlocks(input: string, blocks: string[]): string {
-	return input.replace(/__OW_CONTENT_BLOCK_(\d+)__/g, (_m, idxStr) => {
-		const idx = Number(idxStr)
-		return `<content>${blocks[idx] ?? ''}</content>`
-	})
+function restoreContentBlocks(
+	input: string,
+	blocks: Array<{ tag: 'put' | 'find' | 'content'; inner: string }>,
+): string {
+	return input.replace(
+		/__OW_TAG_(put|find|content)_BLOCK_(\d+)__/g,
+		(_m, t, i) => {
+			const idx = Number(i)
+			const tag = t as 'put' | 'find' | 'content'
+			const inner = blocks[idx]?.inner ?? ''
+			return `<${tag}>${inner}</${tag}>`
+		},
+	)
 }
 
 // Normalize curly quotes globally in non-content area.
@@ -77,19 +87,19 @@ function normalizeAttributeZones(nonContent: string): {
 		})
 	}
 
-	// Only adjust <file ...> opening tags and <new .../> tags
-	replaceInMatches(/<\s*file\b[^>]*>/gi, '<file>')
-	replaceInMatches(/<\s*new\b[^>]*\/>/gi, '<new/>')
+	// OPX: adjust <edit ...> opening tags and <to .../> tags
+	replaceInMatches(/<\s*edit\b[^>]*>/gi, '<edit>')
+	replaceInMatches(/<\s*to\b[^>]*\/>/gi, '<to/>')
 
 	return { out, changeNotes: notes }
 }
 
-// Lint: detect missing required attributes in <file ...> tags after normalization.
-function lintFileTags(nonContent: string): string[] {
+// Lint: detect missing required attributes in <edit ...> tags after normalization.
+function lintEditTags(nonContent: string): string[] {
 	const issues: string[] = []
-	const fileTagRegex = /<\s*file\b([^>]*)>/gi
+	const editTagRegex = /<\s*edit\b([^>]*)>/gi
 	let idx = 0
-	for (const m of nonContent.matchAll(fileTagRegex)) {
+	for (const m of nonContent.matchAll(editTagRegex)) {
 		idx++
 		const attrStr = m[1] ?? ''
 		const attrs: Record<string, string> = {}
@@ -99,12 +109,12 @@ function lintFileTags(nonContent: string): string[] {
 			const val = a[2] !== undefined ? a[2] : (a[3] ?? '')
 			attrs[key] = val
 		}
-		if (!attrs.path || !attrs.action) {
+		if (!attrs.file || !attrs.op) {
 			const trimmed = attrStr.trim().slice(0, 120)
-			const missing = [!attrs.path && 'path', !attrs.action && 'action']
+			const missing = [!attrs.file && 'file', !attrs.op && 'op']
 				.filter(Boolean)
 				.join(' and ')
-			issues.push(`File #${idx}: missing ${missing} (attrs="${trimmed}")`)
+			issues.push(`Edit #${idx}: missing ${missing} (attrs="${trimmed}")`)
 		}
 	}
 	return issues
@@ -114,7 +124,7 @@ export function preprocessXmlText(input: string): PreprocessResult {
 	const changes: string[] = []
 	const issues: string[] = []
 
-	// Protect <content> blocks
+	// Protect literal blocks
 	const { masked, blocks } = extractContentBlocks(input)
 
 	// Normalize curly quotes
@@ -126,9 +136,9 @@ export function preprocessXmlText(input: string): PreprocessResult {
 	changes.push(...attr.changeNotes)
 
 	// Lint after normalization
-	issues.push(...lintFileTags(attr.out))
+	issues.push(...lintEditTags(attr.out))
 
-	// Restore <content> blocks
+	// Restore content blocks
 	const restored = restoreContentBlocks(attr.out, blocks)
 
 	return { text: restored, changes, issues }
@@ -139,5 +149,5 @@ export function lintXmlText(input: string): string[] {
 	const { masked } = extractContentBlocks(input)
 	const curly = normalizeCurlyQuotes(masked)
 	const attr = normalizeAttributeZones(curly.out)
-	return lintFileTags(attr.out)
+	return lintEditTags(attr.out)
 }
