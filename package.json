@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/mnismt/overwrite.git"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "resources/overwrite-logo.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -67,8 +67,7 @@
     "apply",
     "ai",
     "llm",
-    "patch",
-    "repoprompt"
+    "patch"
   ],
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
