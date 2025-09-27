@@ -257,20 +257,33 @@ Manual smoke:
 ## Implementation Checklist
 
 1) Parser
-- [ ] Remove legacy parsing path and `===` marker support.
-- [ ] Implement OPX-only parsing with `<<<`/`>>>` markers.
-- [ ] Map `op` → internal actions.
+- [x] Remove legacy parsing path and `===` marker support.
+- [x] Implement OPX-only parsing with `<<<`/`>>>` markers.
+- [x] Map `op` → internal actions.
 
 2) Preprocessor
-- [ ] Normalize/lint `<edit>` and `<to>`.
-- [ ] Remove legacy tag handling and lints.
+- [x] Normalize/lint `<edit>` and `<to>`.
+- [x] Remove legacy tag handling and lints.
 
 3) Prompt text
-- [ ] Replace instruction in [src/prompts/xml-instruction.ts](file:///Users/minhthanh/Work/Side/overwrite/src/prompts/xml-instruction.ts) with OPX.
+- [x] Replace instruction in [src/prompts/xml-instruction.ts](file:///Users/minhthanh/Work/Side/overwrite/src/prompts/xml-instruction.ts) with OPX.
 
 4) Tests
-- [ ] Add OPX parser tests.
-- [ ] Update/Add webview tests for OPX samples.
+- [x] Add OPX parser tests.
+- [x] Update/Add webview tests for OPX samples.
 
 5) Manual smoke
 - [ ] Validate examples from this PRD in the dev playground.
+
+---
+
+## Release Checklist (OPX v1)
+
+- [x] Replace prompt instructions with OPX-only (src/prompts/xml-instruction.ts)
+- [x] Parser OPX-only (src/utils/xml-parser.ts) and preprocessor normalization (src/webview-ui/.../preprocess.ts)
+- [x] Backend tests green: `pnpm test`
+- [x] Webview tests green: `pnpm -C src/webview-ui test --run`
+- [ ] Optional manual smoke in dev playground (http://localhost:5173/)
+- [ ] Bump version in package.json if releasing
+- [ ] Package: `pnpm package` (or `pnpm vscode:package`)
+

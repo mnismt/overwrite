@@ -41,21 +41,34 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 			return { fileActions: [], errors: ['Empty input'] }
 		}
 
-		// 1) Collect <edit .../> self-closing (for op="remove") and paired <edit>...</edit>
-		const edits: Array<{ attrs: Record<string, string>; body: string | null }> =
-			[]
+		// 1) Collect <edit .../> and <edit>...</edit> with document order preserved
+		const edits: Array<{
+			index: number
+			attrs: Record<string, string>
+			body: string | null
+		}> = []
 
-		// Self-closing edits
+		// Self-closing edits (e.g., op="remove")
 		const selfClosingRegex = /<\s*edit\b([^>]*)\/>/gi
 		for (const m of cleaned.matchAll(selfClosingRegex)) {
-			edits.push({ attrs: parseAttributes(m[1] ?? ''), body: null })
+			edits.push({
+				index: m.index ?? 0,
+				attrs: parseAttributes(m[1] ?? ''),
+				body: null,
+			})
 		}
 
 		// Paired edits
 		const pairedRegex = /<\s*edit\b([^>]*)>([\s\S]*?)<\s*\/\s*edit\s*>/gi
 		for (const m of cleaned.matchAll(pairedRegex)) {
-			edits.push({ attrs: parseAttributes(m[1] ?? ''), body: m[2] ?? '' })
+			edits.push({
+				index: m.index ?? 0,
+				attrs: parseAttributes(m[1] ?? ''),
+				body: m[2] ?? '',
+			})
 		}
+
+		edits.sort((a, b) => a.index - b.index)
 
 		if (edits.length === 0) {
 			return {
@@ -96,7 +109,7 @@ export function parseXmlResponse(xmlContent: string): ParseResult {
 					case 'move': {
 						// <to file="..." /> inside body
 						const body = e.body || ''
-						const toMatch = body.match(/<\s*to\b([^\/>]*?)\/>/i)
+						const toMatch = body.match(/<\s*to\b([^>]*)\/>/i)
 						const toAttrs = parseAttributes(toMatch?.[1] ?? '')
 						const newPath = toAttrs.file
 						if (!newPath) {
