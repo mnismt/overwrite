@@ -9,9 +9,20 @@ const UserInstructions: React.FC<UserInstructionsProps> = ({
 }) => {
 	return (
 		<div className="flex flex-col">
-			<vscode-label htmlFor="user-instructions" className="block mb-1">
-				User Instruction
-			</vscode-label>
+			<div className="flex items-center justify-between mb-1">
+				<vscode-label htmlFor="user-instructions">
+					User Instruction
+				</vscode-label>
+				<a
+					className="text-[8px] text-muted hover:underline hover:text-fg flex items-center gap-1"
+					href="https://mnismt.com/overwrite"
+					target="_blank"
+					rel="noreferrer"
+					aria-label="Open Overwrite docs and video demo in your browser"
+				>
+					<span>Docs</span>
+				</a>
+			</div>
 			<vscode-textarea
 				id="user-instructions"
 				resize="vertical"
