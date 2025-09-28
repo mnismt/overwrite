@@ -1,10 +1,7 @@
-import * as fs from 'node:fs'
-import * as path from 'node:path'
 import * as vscode from 'vscode'
 import { getNonce } from '../../utils/webview'
 
 const DEV_WEBVIEW_URL = 'http://localhost:5173'
-const DEV_TIMEOUT = 3000 // 3 seconds timeout for dev server connection
 
 /**
  * Generates the HTML content for the webview, choosing between dev and prod.
@@ -26,14 +23,6 @@ export function getHtmlForWebview(
 function getDevHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
 	const nonce = getNonce()
 
-	// Check if we have built webview assets for fallback
-	const webviewAssetsDir = vscode.Uri.joinPath(
-		extensionUri,
-		'dist',
-		'webview-ui',
-	)
-	const hasBuiltAssets = checkIfAssetsExist(webviewAssetsDir)
-
 	// Path to codicons from the extension's node_modules
 	const codiconUri = webview.asWebviewUri(
 		vscode.Uri.joinPath(
@@ -46,114 +35,8 @@ function getDevHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
 		),
 	)
 
-	if (hasBuiltAssets) {
-		// Use built assets with development features
-		return getDevHtmlWithBuiltAssets(webview, extensionUri, nonce, codiconUri)
-	}
-
-	// Use dev server (original behavior)
+	// Use dev server (original behavior) - prefer dev server for development
 	return getDevHtmlWithServer(webview, extensionUri, nonce, codiconUri)
-}
-
-/**
- * Check if built webview assets exist and are valid.
- */
-function checkIfAssetsExist(assetsDir: vscode.Uri): boolean {
-	try {
-		const assetsPath = assetsDir.fsPath
-
-		// Check if directory exists
-		if (!fs.existsSync(assetsPath)) {
-			return false
-		}
-
-		// Check for required files
-		const requiredFiles = [
-			path.join(assetsPath, 'assets', 'index.js'),
-			path.join(assetsPath, 'assets', 'index.css'),
-			path.join(assetsPath, 'assets', 'codicon.css'),
-		]
-
-		return requiredFiles.every((file) => fs.existsSync(file))
-	} catch {
-		return false
-	}
-}
-
-/**
- * Development HTML using built assets with hot reload capabilities.
- */
-function getDevHtmlWithBuiltAssets(
-	webview: vscode.Webview,
-	extensionUri: vscode.Uri,
-	nonce: string,
-	codiconUri: vscode.Uri,
-): string {
-	const cspSource = webview.cspSource
-
-	// Paths to built assets
-	const scriptUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(
-			extensionUri,
-			'dist',
-			'webview-ui',
-			'assets',
-			'index.js',
-		),
-	)
-	const styleUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(
-			extensionUri,
-			'dist',
-			'webview-ui',
-			'assets',
-			'index.css',
-		),
-	)
-
-	// CSP for development with built assets
-	const csp = [
-		`default-src 'none'`,
-		`font-src ${cspSource} data:`,
-		`connect-src ws://localhost:5173 ${cspSource}`, // Allow WebSocket for HMR
-		`img-src ${cspSource} https: data:`,
-		`script-src 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline'`, // Allow eval for HMR
-		`style-src ${cspSource} 'unsafe-inline'`,
-	].join('; ')
-
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="${codiconUri}" rel="stylesheet" id="vscode-codicon-stylesheet" />
-  <meta http-equiv="Content-Security-Policy" content="${csp}">
-  <link rel="stylesheet" type="text/css" href="${styleUri}">
-  <title>Overwrite (Dev)</title>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
-  <script nonce="${nonce}">
-    // Pass vscode API and nonce to the webview
-    window.nonce = "${nonce}"
-    window.vscodeApi = acquireVsCodeApi()
-    
-    // Attempt to connect to Vite dev server for HMR
-    setTimeout(() => {
-      try {
-        const script = document.createElement('script')
-        script.type = 'module'
-        script.src = '${DEV_WEBVIEW_URL}/@vite/client'
-        document.head.appendChild(script)
-        console.log('[HMR] Attempting to connect to Vite dev server...')
-      } catch (err) {
-        console.log('[HMR] Could not connect to Vite dev server, using built assets')
-      }
-    }, ${DEV_TIMEOUT})
-  </script>
-</body>
-</html>`
 }
 
 /**
