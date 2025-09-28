@@ -4,11 +4,16 @@
   <img src="resources/overwrite-logo.png" alt="Overwrite logo" width="200" />
 </p>
 
-A concise VS Code extension to build high‑quality XML prompts from selected workspace files and apply LLM‑suggested changes back to your code.
+Pack your entire repo in a single prompt
 
 <p align="center">
   <img src="resources/screenshot-1.jpg" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
 </p>
+
+## Install
+
+- For VSCode (VSCode Marketplace): https://marketplace.visualstudio.com/items?itemName=mnismt.overwrite
+- For Cursor/Windsurf (OpenVSX): https://open-vsx.org/extension/mnismt/overwrite
 
 ## Features
 
