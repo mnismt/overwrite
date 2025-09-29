@@ -1,14 +1,10 @@
 # Overwrite
 
 <p align="center">
-  <img src="resources/overwrite-logo.png" alt="Overwrite logo" width="200" />
+  <img src="resources/overwrite-og.png" alt="Overwrite logo" width="200" />
 </p>
 
 Pack your entire repo in a single prompt
-
-<p align="center">
-  <img src="resources/screenshot-1.jpg" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
-</p>
 
 ## Install
 
@@ -20,12 +16,20 @@ Pack your entire repo in a single prompt
 - Explorer
   - Select files/folders with search and refresh; double‑click to open files.
   - Token counting per file and folder rollups; multi‑root workspaces supported.
+  
 - Context
   - Copy XML with <file_map>, <file_contents>, <user_instructions>, optionally <xml_formatting_instructions>.
   - Context is generated on copy (no heavy UI rendering).
+
+<p align="center">
+  <img src="resources/screenshot-1.jpg" alt="Overwrite extension interface showing the Context tab with file explorer, selected files, token counts, and copy buttons" width="800" />
+</p>
+
 - Apply
   - Paste LLM XML and preview diffs (create/modify/rewrite/delete/rename) before applying.
   - Apply safely via VS Code APIs with undo/redo and clear error feedback.
+
+
 - Settings
   - Excluded folders editor and optional .gitignore support (in progress).
   - Privacy-preserving telemetry controls.
