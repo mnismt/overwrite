@@ -1,15 +1,15 @@
 # Overwrite
 
 <p align="center">
-  <img src="resources/overwrite-og.png" alt="Overwrite logo" width="200" />
+  <img src="resources/overwrite-og.png" alt="Overwrite logo" />
 </p>
 
 Pack your entire repo in a single prompt
 
 ## Install
 
-- For VSCode (VSCode Marketplace): https://marketplace.visualstudio.com/items?itemName=mnismt.overwrite
-- For Cursor/Windsurf (OpenVSX): https://open-vsx.org/extension/mnismt/overwrite
+- For VSCode (VSCode Marketplace): <https://marketplace.visualstudio.com/items?itemName=mnismt.overwrite>
+- For Cursor/Windsurf (OpenVSX): <https://open-vsx.org/extension/mnismt/overwrite>
 
 ## Features
 
@@ -28,7 +28,6 @@ Pack your entire repo in a single prompt
 - Apply
   - Paste LLM XML and preview diffs (create/modify/rewrite/delete/rename) before applying.
   - Apply safely via VS Code APIs with undo/redo and clear error feedback.
-
 
 - Settings
   - Excluded folders editor and optional .gitignore support (in progress).
