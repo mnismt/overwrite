@@ -41,7 +41,17 @@
         }
       ]
     },
-    "commands": []
+    "commands": [],
+    "configuration": {
+      "title": "Overwrite",
+      "properties": {
+        "overwrite.telemetry.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable anonymous usage telemetry to help improve the extension. All data is anonymized and no file contents or paths are ever collected."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:package": "pnpm run package && pnpm vsce package --no-dependencies",

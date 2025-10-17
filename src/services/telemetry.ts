@@ -1,6 +1,4 @@
 import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
 import { PostHog } from 'posthog-node'
 import * as vscode from 'vscode'
 
@@ -33,16 +31,6 @@ class TelemetryService {
 		this.context = context
 		this.startedAt = Date.now()
 
-		if (!this.isEnabled()) return
-
-		const apiKey = this.getApiKey(context)
-		if (!apiKey) {
-			console.warn('[telemetry] POSTHOG_API_KEY not set; telemetry disabled')
-			return
-		}
-
-		this.client = new PostHog(apiKey, { host: 'https://us.i.posthog.com' })
-
 		// Persist anonymous id; never use VS Code machineId directly
 		this.distinctId = context.globalState.get<string>('telemetryDistinctId')
 		if (!this.distinctId) {
@@ -52,10 +40,33 @@ class TelemetryService {
 
 		this.sessionId = crypto.randomUUID()
 
+		// Initialize client if telemetry is enabled
+		this.initializeClient()
+
+		// Listen for configuration changes
+		context.subscriptions.push(
+			vscode.workspace.onDidChangeConfiguration((e) => {
+				if (
+					e.affectsConfiguration('overwrite.telemetry.enabled') ||
+					e.affectsConfiguration('telemetry.telemetryLevel')
+				) {
+					this.handleConfigurationChange()
+				}
+			}),
+		)
+	}
+
+	private initializeClient() {
+		if (!this.isEnabled()) return
+		if (this.client) return // Already initialized
+
+		const apiKey = 'phc_LBityQJ7WJhm3iikesHTPvcLGqwUrSoJqofTKJo35rg'
+		this.client = new PostHog(apiKey, { host: 'https://us.i.posthog.com' })
+
 		// Fire activation event with minimal props
 		this.capture('extension_activated', {
 			activation_time_ms: Date.now() - this.startedAt,
-			ext_version: context.extension.packageJSON?.version,
+			ext_version: this.context?.extension.packageJSON?.version,
 			vscode_version: vscode.version,
 			os: process.platform,
 			node_version: process.versions.node,
@@ -63,31 +74,34 @@ class TelemetryService {
 		})
 	}
 
-	isEnabled(): boolean {
-		return true
+	private handleConfigurationChange() {
+		if (this.isEnabled()) {
+			// Telemetry was enabled, initialize if not already done
+			this.initializeClient()
+		} else {
+			// Telemetry was disabled, shutdown client
+			if (this.client) {
+				void this.client.shutdown()
+				this.client = undefined
+			}
+		}
 	}
 
-	private getApiKey(context: vscode.ExtensionContext): string | undefined {
-		if (process.env.POSTHOG_API_KEY) return process.env.POSTHOG_API_KEY
+	isEnabled(): boolean {
+		// Check VS Code global telemetry setting
+		const globalTelemetryLevel = vscode.workspace
+			.getConfiguration('telemetry')
+			.get<string>('telemetryLevel')
+		if (globalTelemetryLevel === 'off') return false
 
-		// Fallback: try to read a .env at the extension root once at startup
-		try {
-			const root = context.extensionUri.fsPath
-			const envPath = path.join(root, '.env')
-			if (!fs.existsSync(envPath)) return undefined
-			const content = fs.readFileSync(envPath, 'utf8')
-			for (const line of content.split(/\r?\n/)) {
-				const m = line.match(/^\s*POSTHOG_API_KEY\s*=\s*(.*)\s*$/)
-				if (m) {
-					// Strip optional quotes
-					const raw = m[1]?.trim().replace(/^['"]|['"]$/g, '')
-					if (raw) return raw
-				}
-			}
-		} catch {
-			// ignore
-		}
-		return undefined
+		// Check extension-specific setting
+		const extensionTelemetryEnabled = vscode.workspace
+			.getConfiguration('overwrite.telemetry')
+			.get<boolean>('enabled', true) // default to true
+
+		console.log(`Overwrite telemetry enabled: ${extensionTelemetryEnabled}`)
+
+		return extensionTelemetryEnabled
 	}
 
 	capture(event: TelemetryEvent, properties?: Record<string, unknown>) {
