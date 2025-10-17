@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/mnismt/overwrite.git"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "icon": "resources/overwrite-logo.png",
   "engines": {
     "vscode": "^1.85.0"
