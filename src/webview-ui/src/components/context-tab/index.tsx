@@ -220,9 +220,11 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, []) // Empty deps - use refs for latest state
 
 	const handleRefreshClick = useCallback(() => {
-		// Reset skipped files and token counts when refreshing to clear any deleted files
+		// Reset skipped files when refreshing to clear any deleted files
 		setSkippedFiles([])
-		setActualTokenCounts({})
+		// Don't reset actualTokenCounts here - let the effect handle cleaning up invalid entries
+		// after the new tree arrives. This prevents the UI from showing 0 tokens during refresh.
+
 		// Call the refresh function (use persisted excluded folders on backend)
 		onRefresh()
 	}, [onRefresh])
@@ -240,6 +242,39 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 		return message ? `${label} (${message})` : label
 	}
+
+	// Effect to clean up token counts for files that no longer exist after tree refresh
+	useEffect(() => {
+		if (fileTreeData.length === 0) return
+
+		// Build set of all valid URIs in the current tree
+		const validUris = new Set<string>()
+		const collectUris = (items: VscodeTreeItem[]) => {
+			for (const item of items) {
+				validUris.add(item.value)
+				if (item.subItems) {
+					collectUris(item.subItems)
+				}
+			}
+		}
+		collectUris(fileTreeData)
+
+		// Remove token counts for URIs that no longer exist in the tree
+		setActualTokenCounts((prev) => {
+			const cleaned: Record<string, number> = {}
+			let hasChanges = false
+
+			for (const [uri, count] of Object.entries(prev)) {
+				if (validUris.has(uri)) {
+					cleaned[uri] = count
+				} else {
+					hasChanges = true
+				}
+			}
+
+			return hasChanges ? cleaned : prev
+		})
+	}, [fileTreeData])
 
 	// Cleanup effect: cancel pending token requests on unmount
 	useEffect(() => {
