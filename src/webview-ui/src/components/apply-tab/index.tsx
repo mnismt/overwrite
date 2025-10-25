@@ -55,6 +55,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		setResults(null)
 		setErrors(null)
 		setRowResults(null)
+		// Don't clear previewData here - keep it for context in case of errors
 
 		// Preprocess the text before sending
 		const { text: cleaned, changes, issues } = preprocessXmlText(currentText)
@@ -158,9 +159,15 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				vscode.postMessage({ command: 'refreshAfterApply' })
 			}, 500)
 		} else {
-			setErrors(message.errors || ['Unknown error occurred'])
+			const errors = message.errors || ['Unknown error occurred']
+			setErrors(errors)
 			setResults(null)
 			setRowResults(null)
+
+			// If we have previewData from backend, use it to show what went wrong
+			if (message.previewData) {
+				setPreviewData(message.previewData)
+			}
 		}
 	}
 
@@ -292,8 +299,8 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 
 			{/* Scrollable content area */}
 			<div className="flex-1 min-h-0 overflow-auto pb-12">
-				{/* Show preview table if we have preview data, otherwise show results */}
-				{previewData ? (
+				{/* Show preview table if we have preview data AND no standalone errors/results */}
+				{previewData && !errors && !results ? (
 					<PreviewTable
 						previewData={previewData}
 						onApplyRow={handleApplyRow}
@@ -302,7 +309,23 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 						rowResults={rowResults}
 					/>
 				) : (
-					<ResultsDisplay results={results} errors={errors} />
+					<>
+						{/* Show errors/results first if available */}
+						<ResultsDisplay results={results} errors={errors} />
+
+						{/* Show preview table below if it exists */}
+						{previewData && (
+							<div className="mt-4">
+								<PreviewTable
+									previewData={previewData}
+									onApplyRow={handleApplyRow}
+									onPreviewRow={handlePreviewRow}
+									isApplying={isApplying}
+									rowResults={rowResults}
+								/>
+							</div>
+						)}
+					</>
 				)}
 			</div>
 		</div>

@@ -39,7 +39,9 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 				const prevRow = previewData?.rows[op.rowIndex]
 				lines.push(`  - Row ${op.rowIndex + 1}: ${op.action} (succeeded)`)
 				if (prevRow?.changeBlocks) {
-					lines.push(`    Changes made: ${prevRow.changeBlocks.length} block(s)`)
+					lines.push(
+						`    Changes made: ${prevRow.changeBlocks.length} block(s)`,
+					)
 				}
 			}
 		}
@@ -54,29 +56,17 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 			return lines
 		}
 
-		lines.push(
-			'\nAttempted changes:',
-		)
+		lines.push('\nAttempted changes:')
 
 		for (let i = 0; i < row.changeBlocks.length; i++) {
 			const block = row.changeBlocks[i]
 			lines.push(`\n### Change Block ${i + 1}: ${block.description}`)
 
 			if (block.search) {
-				lines.push(
-					'\nSearch pattern (not found):',
-					'```',
-					block.search,
-					'```',
-				)
+				lines.push('\nSearch pattern (not found):', '```', block.search, '```')
 			}
 
-			lines.push(
-				'\nIntended replacement:',
-				'```',
-				block.content,
-				'```',
-			)
+			lines.push('\nIntended replacement:', '```', block.content, '```')
 		}
 
 		return lines
