@@ -38,11 +38,16 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Loading phase management
 	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('initial')
 	const [isRefreshing, setIsRefreshing] = useState(false)
-	const [, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
 
 	// Defer heavy recalculations when selection/token counts change massively
 	const deferredSelectedUris = useDeferredValue(selectedUris)
 	const deferredTokenCounts = useDeferredValue(actualTokenCounts)
+
+	// Keep refs for latest values to avoid stale closures
+	const actualTokenCountsRef = useRef(actualTokenCounts)
+	useEffect(() => {
+		actualTokenCountsRef.current = actualTokenCounts
+	}, [actualTokenCounts])
 
 	// Loading phase effects
 	useEffect(() => {
@@ -55,19 +60,20 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				setIsRefreshing(false)
 				setLoadingPhase('skeleton')
 			}
-		} else {
-			// Data has loaded
-			if (fileTreeData.length > 0) {
-				setLoadingPhase('progressive')
-				setTimeout(() => {
-					setLoadingPhase('complete')
-					setIsRefreshing(false)
-				}, 300)
-			} else {
-				setLoadingPhase('initial')
-			}
-			setPrevFileTreeData(fileTreeData)
+			return
 		}
+
+		// Data has loaded
+		if (fileTreeData.length === 0) {
+			setLoadingPhase('initial')
+			return
+		}
+
+		setLoadingPhase('progressive')
+		setTimeout(() => {
+			setLoadingPhase('complete')
+			setIsRefreshing(false)
+		}, 300)
 	}, [isLoading, fileTreeData.length])
 
 	// Filtered items based on search
@@ -92,11 +98,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		const tokenTotalsMap = new Map<string, number>()
 		for (const uri of index.postOrder) {
 			const n = index.nodes.get(uri)!
-			if (!n.isFolder) {
-				const isSelected = deferredSelectedUris.has(uri)
-				selectedCountMap.set(uri, isSelected ? 1 : 0)
-				tokenTotalsMap.set(uri, isSelected ? deferredTokenCounts[uri] || 0 : 0)
-			} else {
+			if (n.isFolder) {
 				let sc = 0
 				let tt = 0
 				for (const c of n.children) {
@@ -105,7 +107,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				}
 				selectedCountMap.set(uri, sc)
 				tokenTotalsMap.set(uri, tt)
+				continue
 			}
+			const isSelected = deferredSelectedUris.has(uri)
+			selectedCountMap.set(uri, isSelected ? 1 : 0)
+			tokenTotalsMap.set(uri, isSelected ? deferredTokenCounts[uri] || 0 : 0)
 		}
 		return { selectedCountMap, tokenTotalsMap }
 	}, [index, deferredSelectedUris, deferredTokenCounts])
@@ -124,7 +130,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	const selectAllInSubtree = useCallback(
 		(uri: string) => {
 			const node = indexRef.current.nodes.get(uri)
-			if (!node) return
+			if (node === undefined) return
 			// Yield to the browser, then perform heavy traversal in a task
 			setTimeout(() => {
 				const next = new Set(selectedUrisRef.current)
@@ -138,7 +144,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	const deselectAllInSubtree = useCallback(
 		(uri: string) => {
 			const node = indexRef.current.nodes.get(uri)
-			if (!node) return
+			if (node === undefined) return
 			setTimeout(() => {
 				const next = new Set(selectedUrisRef.current)
 				for (const u of getAllDescendantPaths(node.item)) next.delete(u)
@@ -171,8 +177,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				? getFolderSelectionState(item.value)
 				: 'none'
 			const folderTokens = isFolder ? tokenTotalsMap.get(item.value) || 0 : 0
-			const fileSelected = !isFolder && deferredSelectedUris.has(item.value)
-			const fileTokens = !isFolder ? deferredTokenCounts[item.value] || 0 : 0
+			const fileSelected = isFolder
+				? false
+				: deferredSelectedUris.has(item.value)
+			const fileTokens = isFolder ? 0 : deferredTokenCounts[item.value] || 0
 			const isOpen = item.open ?? depth === 0
 
 			return (
@@ -200,14 +208,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	// Handle actual double-clicks to open files in VS Code
 	const handleTreeDoubleClick = useCallback((e: React.MouseEvent) => {
 		const target = e.target as HTMLElement | null
-		if (!target) return
+		if (target === null) return
 		const itemEl = target.closest('vscode-tree-item') as HTMLElement | null
-		if (!itemEl) return
-		const uri = itemEl.getAttribute('data-uri')
-		if (!uri) return
+		if (itemEl === null) return
+		const uri = itemEl.dataset.uri
+		if (uri === undefined) return
 		// Only open if this is a file (not a folder)
 		const node = indexRef.current.nodes.get(uri)
-		if (!node || node.isFolder) return
+		if (node === undefined || node.isFolder) return
 		const vscode = getVsCodeApi()
 		vscode.postMessage({ command: 'openFile', payload: { fileUri: uri } })
 	}, [])

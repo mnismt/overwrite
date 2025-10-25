@@ -1,3 +1,5 @@
+import type React from 'react'
+
 interface UserInstructionsProps {
 	userInstructions: string
 	onUserInstructionsChange: (instructions: string) => void
@@ -26,14 +28,14 @@ const UserInstructions: React.FC<UserInstructionsProps> = ({
 			<vscode-textarea
 				id="user-instructions"
 				resize="vertical"
-				rows={5}
+				rows={8}
 				placeholder="Enter instructions for the AI..."
 				value={userInstructions}
 				onInput={(e) => {
 					const target = e.target as HTMLInputElement
 					onUserInstructionsChange(target.value)
 				}}
-				className="w-full min-h-[50px]"
+				className="w-full h-[200px]"
 			/>
 		</div>
 	)

@@ -10,6 +10,12 @@ export interface ChangeSummary {
 	removed: number
 }
 
+export interface ChangeBlock {
+	description: string
+	search?: string
+	content: string
+}
+
 export interface PreviewTableRow {
 	path: string
 	action: 'create' | 'rewrite' | 'modify' | 'delete' | 'rename'
@@ -18,16 +24,21 @@ export interface PreviewTableRow {
 	newPath?: string
 	hasError?: boolean
 	errorMessage?: string
-	changeBlocks?: Array<{
-		description: string
-		search?: string
-		content: string
-	}>
+	changeBlocks?: ChangeBlock[]
 }
 
 export interface PreviewData {
 	rows: PreviewTableRow[]
 	errors: string[]
+}
+
+export interface RowApplyResult {
+	rowIndex: number
+	path: string
+	action: string
+	success: boolean
+	message: string
+	isCascadeFailure?: boolean // Failed because previous row changed the file
 }
 
 export interface ApplyChangeResponse {

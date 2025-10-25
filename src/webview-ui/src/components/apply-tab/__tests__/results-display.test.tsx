@@ -1,7 +1,21 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ResultsDisplay from '../results-display'
 import type { ApplyResult } from '../types'
+
+const postMessageSpy = vi.fn()
+
+vi.mock('../../../utils/vscode', () => ({
+	getVsCodeApi: () => ({
+		postMessage: postMessageSpy,
+		getState: () => ({}),
+		setState: () => undefined,
+	}),
+}))
+
+beforeEach(() => {
+	postMessageSpy.mockClear()
+})
 
 describe('ResultsDisplay', () => {
 	it('renders nothing when no results or errors', () => {
@@ -17,6 +31,7 @@ describe('ResultsDisplay', () => {
 
 		render(<ResultsDisplay results={null} errors={errors} />)
 
+		expect(screen.getByText('Copy Errors')).toBeInTheDocument()
 		expect(screen.getByText('Results:')).toBeInTheDocument()
 		expect(screen.getByText('Errors:')).toBeInTheDocument()
 
@@ -72,6 +87,7 @@ describe('ResultsDisplay', () => {
 
 		render(<ResultsDisplay results={results} errors={null} />)
 
+		expect(screen.getByText('Copy Errors')).toBeInTheDocument()
 		const statusBadge = screen.getByText('Failed')
 		expect(statusBadge).toBeInTheDocument()
 		expect(statusBadge).toHaveAttribute('variant', 'default')
@@ -132,6 +148,7 @@ describe('ResultsDisplay', () => {
 		render(<ResultsDisplay results={results} errors={null} />)
 
 		expect(screen.getByText('Results:')).toBeInTheDocument()
+		expect(screen.queryByText('Copy Errors')).not.toBeInTheDocument()
 		// Empty results array should not show "File Operations:" section
 		expect(screen.queryByText('File Operations:')).not.toBeInTheDocument()
 		expect(screen.queryByText('Path')).not.toBeInTheDocument()
@@ -143,6 +160,7 @@ describe('ResultsDisplay', () => {
 		render(<ResultsDisplay results={null} errors={errors} />)
 
 		expect(screen.getByText('Results:')).toBeInTheDocument()
+		expect(screen.queryByText('Copy Errors')).not.toBeInTheDocument()
 		// Empty errors array should not show "Errors:" section
 		expect(screen.queryByText('Errors:')).not.toBeInTheDocument()
 	})
@@ -203,6 +221,30 @@ describe('ResultsDisplay', () => {
 
 		expect(successBadges).toHaveLength(2)
 		expect(failedBadges).toHaveLength(1)
+	})
+
+	it('copies aggregated errors via VS Code API', () => {
+		const errors = ['Global failure']
+		const results: ApplyResult[] = [
+			{
+				path: '/src/fail.ts',
+				action: 'modify',
+				success: false,
+				message: 'Patch not found',
+			},
+		]
+
+		render(<ResultsDisplay results={results} errors={errors} />)
+
+		const btn = screen.getByText('Copy Errors')
+		fireEvent.click(btn)
+
+		expect(postMessageSpy).toHaveBeenCalledWith({
+			command: 'copyApplyErrors',
+			payload: {
+				text: expect.stringContaining('/src/fail.ts (modify): Patch not found'),
+			},
+		})
 	})
 
 	it('handles long file paths and messages properly', () => {

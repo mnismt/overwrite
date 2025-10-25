@@ -7,7 +7,11 @@ import {
 	generatePrompt,
 } from '../../prompts'
 import { telemetry } from '../../services/telemetry'
-import { countManyWithInfo, encodeText } from '../../services/token-counter'
+import {
+	clearCache,
+	countManyWithInfo,
+	encodeText,
+} from '../../services/token-counter'
 import type { VscodeTreeItem } from '../../types'
 import { getWorkspaceFileTree } from '../../utils/file-system'
 import { getLanguageIdFromPath } from '../../utils/language-detection'
@@ -16,6 +20,8 @@ import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
+	FileAction,
+	FileActionChange,
 	GetFileTreePayload,
 	GetTokenCountsPayload,
 	OpenFilePayload,
@@ -27,10 +33,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'overwriteFilesWebview'
 
 	private _view?: vscode.WebviewView
-	private _context: vscode.ExtensionContext
+	private readonly _context: vscode.ExtensionContext
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private _isBuildingTree = false // Prevent overlapping tree builds
 	private _treeBuildTimeout: NodeJS.Timeout | null = null // Timeout for tree building
+	private _treeBuildAbortController: AbortController | null = null // Abort controller for cancellation
 	// Always-excluded patterns that never show in the UI; keep minimal (.git only)
 	private readonly _excludedDirs = ['.git', '.hg', '.svn']
 	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
@@ -190,6 +197,15 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 							message.payload as { responseText: string; rowIndex: number },
 						)
 						break
+					case 'copyApplyErrors':
+						await this._handleCopyApplyErrors(
+							message.payload as { text: string },
+						)
+						break
+					case 'refreshAfterApply':
+						// Refresh tree và clean invalid selections
+						await this._handleRefreshAfterApply()
+						break
 					default:
 						console.warn('Received unknown message command:', message.command)
 				}
@@ -300,15 +316,15 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			if (!folders || folders.length === 0) return vscode.Uri.file(p)
 			const base = root
 				? (folders.find((f) => f.name === root)?.uri.fsPath ??
-					folders[0]!.uri.fsPath)
-				: folders[0]!.uri.fsPath
+					folders[0].uri.fsPath)
+				: folders[0].uri.fsPath
 			return vscode.Uri.file(path.join(base, p))
 		}
 	}
 
 	private _normalizeToEol(text: string, eol: string): string {
-		const lf = text.replace(/\r\n/g, '\n')
-		return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf
+		const lf = text.replaceAll('\r\n', '\n')
+		return eol === '\r\n' ? lf.replaceAll('\n', '\r\n') : lf
 	}
 
 	private _findNthOccurrence(
@@ -336,16 +352,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		const errorMessage = error instanceof Error ? error.message : String(error)
 		console.error(`${contextMessage}:`, error)
 		vscode.window.showErrorMessage(`${contextMessage}: ${errorMessage}`)
-
-		// Track unhandled errors
-		try {
-			telemetry.trackUnhandled('backend', error)
-		} catch (e) {
-			console.warn('[telemetry] failed to track error', e)
-		}
-
-		// Optionally send error back to webview if needed
-		// this._view?.webview.postMessage({ command: 'showError', message: `${contextMessage}: ${errorMessage}` });
 	}
 
 	/**
@@ -409,6 +415,12 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		if (!this._view) return
 
 		try {
+			// Cancel any existing tree build operation
+			if (this._treeBuildAbortController) {
+				this._treeBuildAbortController.abort()
+				this._treeBuildAbortController = null
+			}
+
 			// Clear any existing timeout
 			if (this._treeBuildTimeout) {
 				clearTimeout(this._treeBuildTimeout)
@@ -420,6 +432,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				this._treeBuildTimeout = setTimeout(() => {
 					this._isBuildingTree = false
 					this._treeBuildTimeout = null
+					if (this._treeBuildAbortController) {
+						this._treeBuildAbortController.abort()
+						this._treeBuildAbortController = null
+					}
 					console.warn('Tree building operation timed out after 30 seconds')
 					this._view?.webview.postMessage({
 						command: 'showError',
@@ -434,6 +450,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			this._isBuildingTree = true
+
+			// Create new abort controller for this operation
+			this._treeBuildAbortController = new AbortController()
+			const signal = this._treeBuildAbortController.signal
 
 			// Set a timeout for this operation
 			const timeoutPromise = new Promise<never>((_, reject) => {
@@ -466,17 +486,31 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				timeoutPromise,
 			])
 
+			// Check if operation was aborted
+			if (signal.aborted) {
+				console.debug('[FileExplorer] Tree build was cancelled')
+				return
+			}
+
 			this._fullTreeCache = workspaceFiles // Cache the full tree
 			this._view.webview.postMessage({
 				command: 'updateFileTree',
 				payload: workspaceFiles,
 			})
 		} catch (error) {
+			// Check if error is due to abort
+			if (error instanceof Error && error.name === 'AbortError') {
+				console.debug('[FileExplorer] Tree build was cancelled')
+				return
+			}
+
 			this._handleError(error, 'Error getting workspace files')
 			// Optionally send specific error state to webview
 			this._view.webview.postMessage({
 				command: 'showError',
-				message: `Error getting workspace files: ${error instanceof Error ? error.message : String(error)}`,
+				message: `Error getting workspace files: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
 			})
 		} finally {
 			// Clear the flag and timeout
@@ -484,6 +518,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			if (this._treeBuildTimeout) {
 				clearTimeout(this._treeBuildTimeout)
 				this._treeBuildTimeout = null
+			}
+			if (this._treeBuildAbortController) {
+				this._treeBuildAbortController = null
 			}
 		}
 	}
@@ -524,8 +561,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		includeXml: boolean,
 	): Promise<void> {
 		try {
-			// const rootPath = this._getWorkspaceRootPath() // This will be removed or re-evaluated
-
 			const selectedUrisArray = Array.isArray(payload?.selectedUris)
 				? payload.selectedUris
 				: []
@@ -561,8 +596,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			// Generate components using imported functions
-			// TODO: Update generateFileMap and generateFileContents to handle selectedUriStrings and multi-root logic
-			// For now, this will likely break or produce incorrect results until those functions are updated.
+			// Note: generateFileMap and generateFileContents now handle multi-root workspaces via URI strings
 			const fileMap = generateFileMap(
 				this._fullTreeCache, // Use cached tree, which is now multi-root
 				selectedUriStrings, // Pass Set of URI strings
@@ -616,155 +650,159 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		const startTime = Date.now()
 
 		try {
-			// Parse the XML response
 			const parseResult = parseXmlResponse(payload.responseText)
 
-			// If there are parsing errors, show them to the user
 			if (parseResult.errors.length > 0) {
-				const duration = Date.now() - startTime
-
-				// Track apply failed due to parsing errors
-				try {
-					telemetry.captureApplyFlow('apply_failed', requestId, {
-						duration_ms: duration,
-						error_code: 'ParseError',
-						files_touched_count: 0,
-					})
-				} catch (e) {
-					console.warn('[telemetry] failed to capture apply_failed', e)
-				}
-
-				// Send errors back to webview
-				this._view?.webview.postMessage({
-					command: 'applyChangesResult',
-					success: false,
-					errors: parseResult.errors,
-				})
-
-				// Also show the first error in a notification
-				vscode.window.showErrorMessage(
-					`Error parsing XML: ${parseResult.errors[0]}`,
-				)
+				this._handleApplyParseError(parseResult.errors, requestId, startTime)
 				return
 			}
 
-			// If there are no file actions, warn the user
 			if (parseResult.fileActions.length === 0) {
-				const duration = Date.now() - startTime
-
-				// Track apply failed due to no actions
-				try {
-					telemetry.captureApplyFlow('apply_failed', requestId, {
-						duration_ms: duration,
-						error_code: 'NoActions',
-						files_touched_count: 0,
-					})
-				} catch (e) {
-					console.warn('[telemetry] failed to capture apply_failed', e)
-				}
-
-				vscode.window.showWarningMessage(
-					'No file actions found in the response.',
-				)
-				this._view?.webview.postMessage({
-					command: 'applyChangesResult',
-					success: false,
-					errors: ['No file actions found in the response.'],
-				})
+				this._handleApplyNoActions(requestId, startTime)
 				return
 			}
 
-			// Track apply started
-			try {
-				// Count diff hunks (estimate based on modify actions with changes)
-				const diffHunkCount = parseResult.fileActions.reduce(
-					(count, action) => {
-						if (action.action === 'modify' && action.changes) {
-							return count + action.changes.length
-						}
-						return count
-					},
-					0,
-				)
-
-				telemetry.captureApplyFlow('apply_started', requestId, {
-					planned_files_count: parseResult.fileActions.length,
-					diff_hunk_count: diffHunkCount,
-				})
-			} catch (e) {
-				console.warn('[telemetry] failed to capture apply_started', e)
-			}
-
-			// Show the plan if available
-			if (parseResult.plan) {
-				vscode.window.showInformationMessage(`Plan: ${parseResult.plan}`)
-			}
-
-			// Process each file action
-			const results = await applyFileActions(
-				parseResult.fileActions,
-				// rootPath, // Removed rootPath argument
-				this._view,
-			)
-
-			const duration = Date.now() - startTime
-			const successCount = results.filter((r) => r.success).length
-			const totalCount = results.length
-
-			// Track apply completed
-			try {
-				telemetry.captureApplyFlow('apply_completed', requestId, {
-					duration_ms: duration,
-					files_touched_count: successCount,
-					diff_hunk_count: parseResult.fileActions.reduce((count, action) => {
-						if (action.action === 'modify' && action.changes) {
-							return count + action.changes.length
-						}
-						return count
-					}, 0),
-				})
-			} catch (e) {
-				console.warn('[telemetry] failed to capture apply_completed', e)
-			}
-
-			// Send results to webview
-			this._view?.webview.postMessage({
-				command: 'applyChangesResult',
-				success: true,
-				results,
-			})
-
-			// Show summary notification
-			if (successCount === totalCount) {
-				vscode.window.showInformationMessage(
-					`Successfully applied all ${totalCount} file operations.`,
-				)
-			} else {
-				vscode.window.showWarningMessage(
-					`Applied ${successCount} out of ${totalCount} file operations. See the Apply tab for details.`,
-				)
-			}
+			await this._executeApplyActions(parseResult, requestId, startTime)
 		} catch (error) {
-			const duration = Date.now() - startTime
-
-			// Track apply failed due to execution error
-			try {
-				telemetry.captureApplyFlow('apply_failed', requestId, {
-					duration_ms: duration,
-					error_code: error instanceof Error ? error.name : 'Error',
-					files_touched_count: 0,
-				})
-			} catch (e) {
-				console.warn('[telemetry] failed to capture apply_failed', e)
-			}
-
-			this._handleError(error, 'Error applying changes')
-			this._view?.webview.postMessage({
-				command: 'applyChangesResult',
-				success: false,
-				errors: [error instanceof Error ? error.message : String(error)],
-			})
+			this._handleApplyExecutionError(error, requestId, startTime)
 		}
+	}
+
+	private _handleApplyParseError(
+		errors: string[],
+		requestId: string,
+		startTime: number,
+	): void {
+		const duration = Date.now() - startTime
+
+		try {
+			telemetry.captureApplyFlow('apply_failed', requestId, {
+				duration_ms: duration,
+				error_code: 'ParseError',
+				files_touched_count: 0,
+			})
+		} catch (e) {
+			console.warn('[telemetry] failed to capture apply_failed', e)
+		}
+
+		this._view?.webview.postMessage({
+			command: 'applyChangesResult',
+			success: false,
+			errors,
+		})
+
+		vscode.window.showErrorMessage(`Error parsing XML: ${errors[0]}`)
+	}
+
+	private _handleApplyNoActions(requestId: string, startTime: number): void {
+		const duration = Date.now() - startTime
+
+		try {
+			telemetry.captureApplyFlow('apply_failed', requestId, {
+				duration_ms: duration,
+				error_code: 'NoActions',
+				files_touched_count: 0,
+			})
+		} catch (e) {
+			console.warn('[telemetry] failed to capture apply_failed', e)
+		}
+
+		vscode.window.showWarningMessage('No file actions found in the response.')
+		this._view?.webview.postMessage({
+			command: 'applyChangesResult',
+			success: false,
+			errors: ['No file actions found in the response.'],
+		})
+	}
+
+	private async _executeApplyActions(
+		parseResult: { fileActions: FileAction[]; plan?: string },
+		requestId: string,
+		startTime: number,
+	): Promise<void> {
+		const diffHunkCount = this._countDiffHunks(parseResult.fileActions)
+
+		try {
+			telemetry.captureApplyFlow('apply_started', requestId, {
+				planned_files_count: parseResult.fileActions.length,
+				diff_hunk_count: diffHunkCount,
+			})
+		} catch (e) {
+			console.warn('[telemetry] failed to capture apply_started', e)
+		}
+
+		if (parseResult.plan) {
+			vscode.window.showInformationMessage(`Plan: ${parseResult.plan}`)
+		}
+
+		const results = await applyFileActions(parseResult.fileActions, this._view)
+		const duration = Date.now() - startTime
+		const successCount = results.filter((r) => r.success).length
+		const totalCount = results.length
+
+		try {
+			telemetry.captureApplyFlow('apply_completed', requestId, {
+				duration_ms: duration,
+				files_touched_count: successCount,
+				diff_hunk_count: diffHunkCount,
+			})
+		} catch (e) {
+			console.warn('[telemetry] failed to capture apply_completed', e)
+		}
+
+		this._view?.webview.postMessage({
+			command: 'applyChangesResult',
+			success: true,
+			results,
+		})
+
+		this._showApplySummary(successCount, totalCount)
+	}
+
+	private _countDiffHunks(fileActions: FileAction[]): number {
+		return fileActions.reduce((count, action) => {
+			if (action.action === 'modify' && action.changes) {
+				return count + action.changes.length
+			}
+			return count
+		}, 0)
+	}
+
+	private _showApplySummary(successCount: number, totalCount: number): void {
+		if (successCount === totalCount) {
+			vscode.window.showInformationMessage(
+				`Successfully applied all ${totalCount} file operations.`,
+			)
+		} else {
+			vscode.window.showWarningMessage(
+				`Applied ${successCount} out of ${totalCount} file operations. See the Apply tab for details.`,
+			)
+		}
+	}
+
+	private _handleApplyExecutionError(
+		error: unknown,
+		requestId: string,
+		startTime: number,
+	): void {
+		const duration = Date.now() - startTime
+
+		try {
+			telemetry.captureApplyFlow('apply_failed', requestId, {
+				duration_ms: duration,
+				error_code: error instanceof Error ? error.name : 'Error',
+				files_touched_count: 0,
+			})
+		} catch (e) {
+			console.warn('[telemetry] failed to capture apply_failed', e)
+		}
+
+		this._handleError(error, 'Error applying changes')
+		this._view?.webview.postMessage({
+			command: 'applyChangesResult',
+			success: false,
+			errors: [error instanceof Error ? error.message : String(error)],
+		})
 	}
 
 	/**
@@ -841,7 +879,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				)
 			} else {
 				vscode.window.showErrorMessage(
-					`Failed to apply ${targetAction.action} to ${targetAction.path}: ${result?.message || 'Unknown error'}`,
+					`Failed to apply ${targetAction.action} to ${targetAction.path}: ${
+						result?.message || 'Unknown error'
+					}`,
 				)
 			}
 		} catch (error) {
@@ -854,9 +894,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	/**
-	 * Handles previewing a single row (file action) by opening a diff view.
-	 */
 	private async _handlePreviewRowChange(payload: {
 		responseText: string
 		rowIndex: number
@@ -868,143 +905,27 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 		try {
 			const parseResult = parseXmlResponse(payload.responseText)
+
 			if (parseResult.errors.length > 0) {
-				this._view?.webview.postMessage({
-					command: 'previewRowChangeResult',
-					success: false,
-					errors: parseResult.errors,
-				})
-				vscode.window.showErrorMessage(
-					`Error parsing XML: ${parseResult.errors[0]}`,
-				)
+				this._sendPreviewRowError(parseResult.errors[0])
 				return
 			}
 
 			if (
-				payload.rowIndex < 0 ||
-				payload.rowIndex >= parseResult.fileActions.length
+				!this._isValidRowIndex(payload.rowIndex, parseResult.fileActions.length)
 			) {
-				this._view?.webview.postMessage({
-					command: 'previewRowChangeResult',
-					success: false,
-					errors: [`Invalid row index: ${payload.rowIndex}`],
-				})
+				this._sendPreviewRowError(`Invalid row index: ${payload.rowIndex}`)
 				return
 			}
 
 			const targetAction = parseResult.fileActions[payload.rowIndex]
 
 			if (targetAction.action === 'rename') {
-				vscode.window.showWarningMessage(
-					'Preview is not available for rename operations.',
-				)
-				this._view?.webview.postMessage({
-					command: 'previewRowChangeResult',
-					success: true,
-				})
+				this._handleRenamePreview()
 				return
 			}
 
-			// Resolve original URI if exists
-			let originalUri: vscode.Uri | null = null
-			try {
-				originalUri = this._resolvePathToUriSafe(
-					targetAction.path,
-					targetAction.root,
-				)
-				await vscode.workspace.fs.stat(originalUri)
-			} catch {
-				originalUri = null
-			}
-
-			// Determine proposed text based on action
-			let proposedText = ''
-			const language = getLanguageIdFromPath(targetAction.path)
-
-			if (
-				targetAction.action === 'create' ||
-				targetAction.action === 'rewrite'
-			) {
-				proposedText = targetAction.changes?.[0]?.content ?? ''
-			} else if (targetAction.action === 'modify') {
-				if (!originalUri) {
-					throw new Error('Target file does not exist for modify action')
-				}
-				const document = await vscode.workspace.openTextDocument(originalUri)
-				const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
-				let fullText = document.getText()
-				for (const change of targetAction.changes ?? []) {
-					if (!change.search)
-						throw new Error('Missing <search> for modify change')
-					const normalizedSearch = this._normalizeToEol(change.search, eol)
-					let searchPos = fullText.indexOf(normalizedSearch)
-					if (searchPos === -1) {
-						throw new Error(
-							`Search text not found: "${normalizedSearch.slice(0, 30)}..."`,
-						)
-					}
-					const nextPos = fullText.indexOf(normalizedSearch, searchPos + 1)
-					if (nextPos !== -1) {
-						const occ = (change as { occurrence?: 'first' | 'last' | number })
-							.occurrence
-						if (occ === 'last') {
-							searchPos = fullText.lastIndexOf(normalizedSearch)
-						} else if (typeof occ === 'number' && occ > 0) {
-							const nth = this._findNthOccurrence(
-								fullText,
-								normalizedSearch,
-								occ,
-							)
-							if (nth === -1)
-								throw new Error(`occurrence=${occ} not found for search`)
-							searchPos = nth
-						} // default to first
-					}
-					const before = fullText.slice(0, searchPos)
-					const after = fullText.slice(searchPos + normalizedSearch.length)
-					fullText = `${before}${change.content}${after}`
-				}
-				proposedText = fullText
-			} else if (targetAction.action === 'delete') {
-				proposedText = ''
-			}
-
-			// Build left/right documents for diff
-			let leftUri: vscode.Uri
-			let rightDoc = await vscode.workspace.openTextDocument({
-				language,
-				content: proposedText,
-			})
-
-			if (targetAction.action === 'create' || !originalUri) {
-				// No original file: left side is empty
-				const emptyLeft = await vscode.workspace.openTextDocument({
-					language,
-					content: '',
-				})
-				leftUri = emptyLeft.uri
-			} else if (targetAction.action === 'delete') {
-				// Deleting: right side empty, left is original
-				leftUri = originalUri!
-				rightDoc = await vscode.workspace.openTextDocument({
-					language,
-					content: '',
-				})
-			} else {
-				leftUri = originalUri!
-			}
-
-			await vscode.commands.executeCommand(
-				'vscode.diff',
-				leftUri,
-				rightDoc.uri,
-				`Preview: ${targetAction.action} ${targetAction.path}`,
-			)
-
-			this._view?.webview.postMessage({
-				command: 'previewRowChangeResult',
-				success: true,
-			})
+			await this._showPreviewDiff(targetAction)
 		} catch (error) {
 			this._handleError(error, 'Error previewing row change')
 			this._view?.webview.postMessage({
@@ -1013,6 +934,197 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				errors: [error instanceof Error ? error.message : String(error)],
 			})
 		}
+	}
+
+	private _sendPreviewRowError(errorMessage: string): void {
+		this._view?.webview.postMessage({
+			command: 'previewRowChangeResult',
+			success: false,
+			errors: [errorMessage],
+		})
+		vscode.window.showErrorMessage(`Error: ${errorMessage}`)
+	}
+
+	private _isValidRowIndex(index: number, length: number): boolean {
+		return index >= 0 && index < length
+	}
+
+	private _handleRenamePreview(): void {
+		vscode.window.showWarningMessage(
+			'Preview is not available for rename operations.',
+		)
+		this._view?.webview.postMessage({
+			command: 'previewRowChangeResult',
+			success: true,
+		})
+	}
+
+	private async _showPreviewDiff(targetAction: FileAction): Promise<void> {
+		const originalUri = await this._getOriginalUri(targetAction)
+		const language = getLanguageIdFromPath(targetAction.path)
+		const proposedText = await this._computeProposedText(
+			targetAction,
+			originalUri,
+		)
+
+		const { leftUri, rightDoc } = await this._buildDiffDocuments(
+			targetAction,
+			originalUri,
+			language,
+			proposedText,
+		)
+
+		await vscode.commands.executeCommand(
+			'vscode.diff',
+			leftUri,
+			rightDoc.uri,
+			`Preview: ${targetAction.action} ${targetAction.path}`,
+		)
+
+		this._view?.webview.postMessage({
+			command: 'previewRowChangeResult',
+			success: true,
+		})
+	}
+
+	private async _getOriginalUri(
+		targetAction: FileAction,
+	): Promise<vscode.Uri | null> {
+		try {
+			const uri = this._resolvePathToUriSafe(
+				targetAction.path,
+				targetAction.root,
+			)
+			await vscode.workspace.fs.stat(uri)
+			return uri
+		} catch {
+			return null
+		}
+	}
+
+	private async _computeProposedText(
+		targetAction: FileAction,
+		originalUri: vscode.Uri | null,
+	): Promise<string> {
+		if (targetAction.action === 'create' || targetAction.action === 'rewrite') {
+			return targetAction.changes?.[0]?.content ?? ''
+		}
+
+		if (targetAction.action === 'delete') {
+			return ''
+		}
+
+		if (targetAction.action === 'modify') {
+			return await this._applyModifyChanges(targetAction, originalUri)
+		}
+
+		return ''
+	}
+
+	private async _applyModifyChanges(
+		targetAction: FileAction,
+		originalUri: vscode.Uri | null,
+	): Promise<string> {
+		if (!originalUri) {
+			throw new Error('Target file does not exist for modify action')
+		}
+
+		const document = await vscode.workspace.openTextDocument(originalUri)
+		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+		let fullText = document.getText()
+
+		for (const change of targetAction.changes ?? []) {
+			fullText = this._applyModifyChange(change, fullText, eol)
+		}
+
+		return fullText
+	}
+
+	private _applyModifyChange(
+		change: FileActionChange,
+		fullText: string,
+		eol: string,
+	): string {
+		if (!change.search) {
+			throw new Error('Missing <search> for modify change')
+		}
+
+		const normalizedSearch = this._normalizeToEol(change.search, eol)
+		let searchPos = fullText.indexOf(normalizedSearch)
+
+		if (searchPos === -1) {
+			throw new Error(
+				`Search text not found: "${normalizedSearch.slice(0, 30)}..."`,
+			)
+		}
+
+		searchPos = this._resolveSearchPosition(
+			fullText,
+			normalizedSearch,
+			searchPos,
+			change,
+		)
+
+		const before = fullText.slice(0, searchPos)
+		const after = fullText.slice(searchPos + normalizedSearch.length)
+		return `${before}${change.content}${after}`
+	}
+
+	private _resolveSearchPosition(
+		fullText: string,
+		normalizedSearch: string,
+		initialPos: number,
+		change: FileActionChange,
+	): number {
+		const nextPos = fullText.indexOf(normalizedSearch, initialPos + 1)
+		if (nextPos === -1) {
+			return initialPos
+		}
+
+		const occ = change.occurrence
+		if (occ === 'last') {
+			return fullText.lastIndexOf(normalizedSearch)
+		}
+
+		if (typeof occ === 'number' && occ > 0) {
+			const nth = this._findNthOccurrence(fullText, normalizedSearch, occ)
+			if (nth === -1) {
+				throw new Error(`occurrence=${occ} not found for search`)
+			}
+			return nth
+		}
+
+		return initialPos
+	}
+
+	private async _buildDiffDocuments(
+		targetAction: FileAction,
+		originalUri: vscode.Uri | null,
+		language: string,
+		proposedText: string,
+	): Promise<{ leftUri: vscode.Uri; rightDoc: vscode.TextDocument }> {
+		const rightDoc = await vscode.workspace.openTextDocument({
+			language,
+			content: proposedText,
+		})
+
+		if (targetAction.action === 'create' || !originalUri) {
+			const emptyLeft = await vscode.workspace.openTextDocument({
+				language,
+				content: '',
+			})
+			return { leftUri: emptyLeft.uri, rightDoc }
+		}
+
+		if (targetAction.action === 'delete') {
+			const emptyRight = await vscode.workspace.openTextDocument({
+				language,
+				content: '',
+			})
+			return { leftUri: originalUri, rightDoc: emptyRight }
+		}
+
+		return { leftUri: originalUri, rightDoc }
 	}
 
 	/**
@@ -1025,6 +1137,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 		const requestId = telemetry.generateRequestId()
 		const startTime = Date.now()
+
+		// Extract client-provided request ID for tracking
+		const clientRequestId = (payload as { requestId?: string })?.requestId
 
 		try {
 			const urisToCount = Array.isArray(payload?.selectedUris)
@@ -1075,10 +1190,14 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				console.warn('[telemetry] failed to capture token_count_completed', e)
 			}
 
-			// Send the results back to the webview
+			// Send the results back to the webview with request ID for tracking
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts, skippedFiles },
+				payload: {
+					tokenCounts,
+					skippedFiles,
+					requestId: clientRequestId, // Include client request ID
+				},
 			})
 
 			// Log skipped files for debugging
@@ -1099,10 +1218,14 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			this._handleError(error, 'Error calculating token counts')
-			// Send empty counts back on error
+			// Send empty counts back on error with request ID
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts: {}, skippedFiles: [] },
+				payload: {
+					tokenCounts: {},
+					skippedFiles: [],
+					requestId: clientRequestId,
+				},
 			})
 		}
 	}
@@ -1167,6 +1290,57 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				requestId: payload.requestId,
 				tokenCount: Math.ceil(payload.text.length / 4), // Rough fallback estimate
 			})
+		}
+	}
+
+	private async _handleCopyApplyErrors(payload: {
+		text?: string
+	}): Promise<void> {
+		const text = payload?.text
+		if (!text || text.trim().length === 0) {
+			return
+		}
+
+		try {
+			await vscode.env.clipboard.writeText(text)
+			vscode.window.showInformationMessage('Apply errors copied to clipboard.')
+		} catch (error) {
+			this._handleError(error, 'Failed to copy apply errors')
+		}
+	}
+
+	/**
+	 * Handle refresh after apply - clears cache and rebuilds tree
+	 */
+	private async _handleRefreshAfterApply(): Promise<void> {
+		if (!this._view) return
+
+		try {
+			// 1. Clear token cache
+			clearCache()
+
+			// 2. Rebuild tree
+			const settings = this._loadSettings()
+			const excludedFoldersArray = settings.excludedFolders
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0 && !line.startsWith('#'))
+
+			const allExcludedDirs = [...this._excludedDirs, ...excludedFoldersArray]
+
+			const workspaceFiles = await getWorkspaceFileTree(allExcludedDirs, {
+				useGitignore: settings.readGitignore,
+			})
+
+			this._fullTreeCache = workspaceFiles
+
+			// 3. Send new tree to webview
+			this._view.webview.postMessage({
+				command: 'updateFileTreeAfterApply',
+				payload: workspaceFiles,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error refreshing after apply')
 		}
 	}
 }
