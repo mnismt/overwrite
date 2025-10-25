@@ -6,7 +6,12 @@ import { lintXmlText, preprocessXmlText } from './preprocess'
 import PreviewTable from './preview-table'
 import ResponseTextarea from './response-textarea'
 import ResultsDisplay from './results-display'
-import type { ApplyChangeResponse, ApplyResult, PreviewData, RowApplyResult } from './types'
+import type {
+	ApplyChangeResponse,
+	ApplyResult,
+	PreviewData,
+	RowApplyResult,
+} from './types'
 
 interface ApplyTabProps {
 	onApply: (responseText: string) => void
@@ -119,11 +124,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 						action: row.action,
 						success: result?.success || false,
 						message: result?.message || 'No result',
-						isCascadeFailure: detectCascadeFailure(
-							result,
-							applyResults,
-							idx,
-						),
+						isCascadeFailure: detectCascadeFailure(result, applyResults, idx),
 					}
 				})
 				setRowResults(rowLevelResults)
@@ -221,11 +222,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		const currentPath = result.path
 		for (let i = 0; i < currentIndex; i++) {
 			const prevResult = allResults[i]
-			if (
-				prevResult &&
-				prevResult.path === currentPath &&
-				prevResult.success
-			) {
+			if (prevResult && prevResult.path === currentPath && prevResult.success) {
 				return true // Previous change to same file likely caused this failure
 			}
 		}

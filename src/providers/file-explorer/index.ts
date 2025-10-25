@@ -1064,7 +1064,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _buildDiffDocuments(
-		targetAction: any,
+		targetAction: Record<string, unknown>,
 		originalUri: vscode.Uri | null,
 		language: string,
 		proposedText: string,

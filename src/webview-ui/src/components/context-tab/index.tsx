@@ -5,7 +5,7 @@ import CopyActions from './copy-actions'
 import FileExplorer from './file-explorer/index'
 import TokenStats from './token-stats'
 import UserInstructions from './user-instructions'
-import { countTokens } from './utils'
+import { cancelPendingTokenRequests, countTokens } from './utils'
 
 interface ContextTabProps {
 	selectedCount: number
@@ -46,6 +46,8 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const [skippedFiles, setSkippedFiles] = useState<
 		Array<{ uri: string; reason: string; message?: string }>
 	>([])
+	// Track User Instructions height để điều chỉnh padding của tree area
+	const [instructionsHeight, setInstructionsHeight] = useState(100)
 	// const [includeXml, setIncludeXml] = useState(false)
 
 	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
@@ -61,11 +63,18 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			clearTimeout(debounceRef.current)
 		}
 
-		// Calculate file total immediately
-		const fileTotal = Object.values(actualTokenCounts).reduce(
-			(sum, count) => sum + count,
-			0,
-		)
+		// Calculate file total immediately with error handling
+		let fileTotal = 0
+		try {
+			fileTotal = Object.values(actualTokenCounts).reduce(
+				(sum, count) =>
+					sum + (typeof count === 'number' && !Number.isNaN(count) ? count : 0),
+				0,
+			)
+		} catch (error) {
+			console.error('[ContextTab] Error calculating file tokens:', error)
+			fileTotal = 0
+		}
 
 		// Update file totals immediately
 		setTokenStats((prev) => ({
@@ -78,15 +87,20 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 		// Debounce user instructions token counting
 		const timer = setTimeout(async () => {
-			const instructionsTokens = await countTokens(userInstructions)
+			try {
+				const instructionsTokens = await countTokens(userInstructions)
 
-			setTokenStats((prev) => ({
-				...prev,
-				userInstructionsTokens: instructionsTokens,
-				totalTokens: fileTotal + instructionsTokens,
-				totalWithXmlTokens:
-					fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
-			}))
+				setTokenStats((prev) => ({
+					...prev,
+					userInstructionsTokens: instructionsTokens,
+					totalTokens: fileTotal + instructionsTokens,
+					totalWithXmlTokens:
+						fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
+				}))
+			} catch (error) {
+				console.error('[ContextTab] Error counting instruction tokens:', error)
+				// Keep previous instruction tokens on error
+			}
 		}, 500)
 
 		debounceRef.current = timer
@@ -100,53 +114,115 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, [actualTokenCounts, userInstructions])
 
 	// Debounced request for token counts on selection changes
+	// Use ref to track pending request and cancel if selection changes
+	const tokenRequestRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const latestSelectionRef = useRef(selectedUris)
+
+	const normalizeSelection = useCallback((uris: string[]) => {
+		return [...uris]
+			.sort((a, b) => a.localeCompare(b))
+			.join('||')
+	}, [])
+
 	useEffect(() => {
-		const vscode = getVsCodeApi()
+		latestSelectionRef.current = selectedUris
+	}, [selectedUris])
+
+	useEffect(() => {
+			const vscode = getVsCodeApi()
 		const urisArray = Array.from(selectedUris)
+		const targetSelectionKey = normalizeSelection(urisArray)
+
+		// Clear previous request
+		if (tokenRequestRef.current !== null) {
+			clearTimeout(tokenRequestRef.current)
+			tokenRequestRef.current = null
+		}
+
 		if (urisArray.length === 0) {
 			setActualTokenCounts({})
 			setSkippedFiles([])
 			return
 		}
-		const handle = setTimeout(() => {
-			vscode.postMessage({
-				command: 'getTokenCounts',
-				payload: { selectedUris: urisArray },
-			})
-		}, 200)
-		return () => clearTimeout(handle)
-	}, [selectedUris])
+
+		// Debounce the request
+		tokenRequestRef.current = globalThis.setTimeout(() => {
+			// Double-check we're still requesting for the latest selection
+			const currentUris = Array.from(latestSelectionRef.current)
+			if (normalizeSelection(currentUris) === targetSelectionKey) {
+				vscode.postMessage({
+					command: 'getTokenCounts',
+					payload: { selectedUris: currentUris },
+				})
+			}
+			tokenRequestRef.current = null
+		}, 300) // Increased debounce to 300ms for better batching
+
+		return () => {
+			if (tokenRequestRef.current !== null) {
+				clearTimeout(tokenRequestRef.current)
+				tokenRequestRef.current = null
+			}
+		}
+		}, [selectedUris, normalizeSelection])
 
 	// Effect to listen for token count updates from the extension
+	// Use ref to avoid stale closure issues
+	const tokenCountsRef = useRef(actualTokenCounts)
+	const skippedFilesRef = useRef(skippedFiles)
+
+	useEffect(() => {
+		tokenCountsRef.current = actualTokenCounts
+		skippedFilesRef.current = skippedFiles
+	}, [actualTokenCounts, skippedFiles])
+
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data
 			if (message.command === 'updateTokenCounts') {
 				const incoming: Record<string, number> =
 					message.payload.tokenCounts || {}
-				// Shallow diff and only update if changed
+				const incomingSkipped = message.payload.skippedFiles || []
+
+				// Use ref to get latest state without dependency
+				const currentCounts = tokenCountsRef.current
+
+				// Deep comparison to avoid unnecessary updates
 				let changed = false
-				const next: Record<string, number> = { ...actualTokenCounts }
+				const next: Record<string, number> = {}
+
+				// Add/update all incoming keys
 				for (const [k, v] of Object.entries(incoming)) {
-					if (next[k] !== v) {
-						next[k] = v
+					next[k] = v
+					if (currentCounts[k] !== v) {
 						changed = true
 					}
 				}
-				// Remove keys that no longer exist
-				for (const k of Object.keys(next)) {
+
+				// Check for removed keys
+				for (const k of Object.keys(currentCounts)) {
 					if (!(k in incoming)) {
-						delete next[k]
 						changed = true
 					}
 				}
-				if (changed) setActualTokenCounts(next)
-				setSkippedFiles(message.payload.skippedFiles || [])
+
+				// Only update if something changed
+				if (changed) {
+					setActualTokenCounts(next)
+				}
+
+				// Update skipped files if changed
+				const skippedChanged =
+					JSON.stringify(incomingSkipped) !==
+					JSON.stringify(skippedFilesRef.current)
+				if (skippedChanged) {
+					setSkippedFiles(incomingSkipped)
+				}
 			}
 		}
 		window.addEventListener('message', handleMessage)
 		return () => window.removeEventListener('message', handleMessage)
-	}, [actualTokenCounts])
+	}, []) // Empty deps - use refs for latest state
 
 	const handleRefreshClick = useCallback(() => {
 		// Reset skipped files and token counts when refreshing to clear any deleted files
@@ -156,6 +232,27 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		onRefresh()
 	}, [onRefresh])
 
+	const getSkipReasonLabel = (reason: string, message?: string): string => {
+		let label: string
+
+		if (reason === 'binary') {
+			label = 'Binary file'
+		} else if (reason === 'too-large') {
+			label = 'Too large'
+		} else {
+			label = 'Error'
+		}
+
+		return message ? `${label} (${message})` : label
+	}
+
+	// Cleanup effect: cancel pending token requests on unmount
+	useEffect(() => {
+		return () => {
+			cancelPendingTokenRequests()
+		}
+	}, [])
+
 	return (
 		<div className="flex flex-col h-full overflow-hidden gap-y-2 py-2 pb-20">
 			{/* Sticky header area (tabs are outside this component; keep this non-scrolling) */}
@@ -164,6 +261,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				<UserInstructions
 					userInstructions={userInstructions}
 					onUserInstructionsChange={setUserInstructions}
+					onHeightChange={setInstructionsHeight}
 				/>
 
 				{/* Explorer Top Bar */}
@@ -196,6 +294,9 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			<div
 				data-testid="context-tree-scroll"
 				className="flex-1 min-h-0 overflow-auto pb-24 transition-all duration-300 ease-out"
+				style={{
+					paddingTop: `${Math.max(0, instructionsHeight - 100)}px`,
+				}}
 			>
 				{/* File Explorer */}
 				<div
@@ -218,20 +319,13 @@ const ContextTab: React.FC<ContextTabProps> = ({
 							⚠️ Skipped Files ({skippedFiles.length})
 						</summary>
 						<div className="mt-1">
-							{skippedFiles.map((file, index) => (
-								<div key={index} className="mb-0.5">
+							{skippedFiles.map((file) => (
+								<div key={file.uri} className="mb-0.5">
 									<span className="font-mono">{file.uri.split('/').pop()}</span>
 									{' - '}
 									<span className="italic">
-										{file.reason === 'binary'
-											? 'Binary file'
-											: file.reason === 'too-large'
-												? 'Too large'
-												: 'Error'}
+										{getSkipReasonLabel(file.reason, file.message)}
 									</span>
-									{file.message && (
-										<span className="text-muted"> ({file.message})</span>
-									)}
 								</div>
 							))}
 						</div>

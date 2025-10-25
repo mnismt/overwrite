@@ -1,6 +1,9 @@
 import type { VscodeTreeItem } from '../../types'
 import { getVsCodeApi } from '../../utils/vscode'
 
+// Track pending token count requests to cancel outdated ones
+const pendingTokenRequests = new Map<string, AbortController>()
+
 // Count tokens in a string using the extension's encoder for consistency
 export function countTokens(text: string): Promise<number> {
 	if (!text) return Promise.resolve(0)
@@ -10,7 +13,13 @@ export function countTokens(text: string): Promise<number> {
 		const vscode = getVsCodeApi()
 
 		// Create a unique request ID for this token count request
-		const requestId = Math.random().toString(36).substring(2, 15)
+		const requestId = `token_${Date.now()}_${Math.random()
+			.toString(36)
+			.substring(2, 9)}`
+
+		// Create abort controller for this request
+		const controller = new AbortController()
+		pendingTokenRequests.set(requestId, controller)
 
 		// Listen for the response
 		const handleMessage = (event: MessageEvent) => {
@@ -19,11 +28,23 @@ export function countTokens(text: string): Promise<number> {
 				message.command === 'tokenCountResponse' &&
 				message.requestId === requestId
 			) {
+				// Check if request was aborted
+				if (controller.signal.aborted) {
+					return
+				}
+
 				window.removeEventListener('message', handleMessage)
-				console.log('tokenCountResponse', message)
+				pendingTokenRequests.delete(requestId)
 				resolve(message.tokenCount || Math.ceil(text.length / 4))
 			}
 		}
+
+		// Handle abort
+		controller.signal.addEventListener('abort', () => {
+			window.removeEventListener('message', handleMessage)
+			pendingTokenRequests.delete(requestId)
+			resolve(Math.ceil(text.length / 4)) // Use fallback on abort
+		})
 
 		window.addEventListener('message', handleMessage)
 
@@ -35,11 +56,22 @@ export function countTokens(text: string): Promise<number> {
 
 		// Fallback timeout after 5 seconds
 		setTimeout(() => {
-			window.removeEventListener('message', handleMessage)
-			console.warn('Token count request timed out, using fallback estimate')
-			resolve(Math.ceil(text.length / 4))
+			if (!controller.signal.aborted) {
+				window.removeEventListener('message', handleMessage)
+				pendingTokenRequests.delete(requestId)
+				console.warn('Token count request timed out, using fallback estimate')
+				resolve(Math.ceil(text.length / 4))
+			}
 		}, 5000)
 	})
+}
+
+// Cancel all pending token count requests (useful on component unmount)
+export function cancelPendingTokenRequests(): void {
+	for (const [requestId, controller] of pendingTokenRequests.entries()) {
+		controller.abort()
+		pendingTokenRequests.delete(requestId)
+	}
 }
 
 // Format token count in 'k' units for display

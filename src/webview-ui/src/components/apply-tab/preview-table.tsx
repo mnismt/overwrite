@@ -86,7 +86,10 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 							{rowResults
 								.filter((r) => !r.success)
 								.map((r) => (
-									<div key={`${r.rowIndex}-${r.path}`} className="mb-2 pl-2 border-l-2 border-error">
+									<div
+										key={`${r.rowIndex}-${r.path}`}
+										className="mb-2 pl-2 border-l-2 border-error"
+									>
 										<div className="flex items-start gap-2">
 											<span className="font-mono text-xs">
 												Row {r.rowIndex + 1}:
@@ -159,9 +162,11 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 								const isCascade = rowResult?.isCascadeFailure ?? false
 								let backgroundColor: string | undefined
 								if (isFailed) {
-									backgroundColor = 'var(--vscode-inputValidation-errorBackground)'
+									backgroundColor =
+										'var(--vscode-inputValidation-errorBackground)'
 								} else if (isSuccess) {
-									backgroundColor = 'var(--vscode-inputValidation-infoBackground)'
+									backgroundColor =
+										'var(--vscode-inputValidation-infoBackground)'
 								}
 
 								return (
@@ -230,7 +235,10 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 												)}
 											</div>
 										</vscode-table-cell>
-										<vscode-table-cell className="align-top py-2 px-1" style={{}}>
+										<vscode-table-cell
+											className="align-top py-2 px-1"
+											style={{}}
+										>
 											<div className="flex flex-col gap-1">
 												<div className="text-xs font-mono">
 													{row.changes.added > 0 && (
