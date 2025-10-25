@@ -20,6 +20,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 	rowResults = null,
 }) => {
 	const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+	const [aiCopyState, setAiCopyState] = useState<'idle' | 'copied'>('idle')
 
 	const buildCascadeFailureSection = (
 		result: RowApplyResult,
@@ -110,6 +111,160 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 		'Generate new OPX with corrected operations.',
 	]
 
+	const buildChangeBlockDetails = (block: { search?: string; content: string; description: string }): string[] => {
+		const details: string[] = [`Change block: ${block.description}`]
+
+		if (block.search) {
+			details.push(
+				'Search pattern (NOT FOUND):',
+				'```',
+				block.search,
+				'```',
+			)
+		}
+
+		details.push(
+			'Intended replacement:',
+			'```',
+			block.content,
+			'```',
+		)
+
+		return details
+	}
+
+	const buildPreviousOperations = (previousOps: RowApplyResult[]): string[] => {
+		if (previousOps.length === 0) return []
+
+		return [
+			'- Previous successful operations:',
+			...previousOps.map((op) => `  - Row ${op.rowIndex + 1}: ${op.action}`),
+		]
+	}
+
+	const buildErrorDetails = (
+		rowIndex: number,
+		result: RowApplyResult,
+		row: PreviewData['rows'][0] | undefined,
+		filePath: string,
+		allResults: RowApplyResult[],
+	): string[] => {
+		const details: string[] = [
+			`#### Row ${rowIndex + 1}: ${result.action}`,
+			`- Error: ${result.message}`,
+		]
+
+		if (result.isCascadeFailure) {
+			const previousOps = allResults
+				.slice(0, rowIndex)
+				.filter((r) => r.path === filePath && r.success)
+
+			details.push(
+				'- **CASCADE FAILURE**: Previous row(s) modified this file',
+				...buildPreviousOperations(previousOps),
+			)
+		}
+
+		if (row?.changeBlocks) {
+			details.push(
+				'',
+				'**Attempted changes:**',
+				...row.changeBlocks.flatMap((block, i) =>
+					buildChangeBlockDetails({
+						...block,
+						description: `${i + 1}: ${block.description}`,
+					}).map((line, idx) => (idx === 0 ? `\n${line}` : line)),
+				),
+			)
+		}
+
+		details.push('', '---', '')
+		return details
+	}
+
+	const buildFileSection = (
+		filePath: string,
+		errors: Array<{ rowIndex: number; result: RowApplyResult }>,
+		allResults: RowApplyResult[],
+	): string[] => {
+		return [
+			`### File: ${filePath}`,
+			'',
+			'**Current file content:** (Request this from your IDE/filesystem)',
+			`\`\`\`typescript\n// Full content of ${filePath} needed here\n\`\`\``,
+			'',
+			'**Failed operations on this file:**',
+			'',
+			...errors.flatMap(({ rowIndex, result }) => {
+				const row = previewData?.rows[rowIndex]
+				return buildErrorDetails(rowIndex, result, row, filePath, allResults)
+			}),
+		]
+	}
+
+	const buildAiContext = useCallback((): string => {
+		if (!rowResults || !previewData) return ''
+
+		// Group errors by file path
+		const fileErrors = new Map<string, Array<{ rowIndex: number; result: RowApplyResult }>>()
+
+		for (const result of rowResults.filter((r) => !r.success)) {
+			if (!fileErrors.has(result.path)) {
+				fileErrors.set(result.path, [])
+			}
+			fileErrors.get(result.path)!.push({ rowIndex: result.rowIndex, result })
+		}
+
+		const sections: string[] = [
+			'# Full Context for AI Fix',
+			'',
+			'## Current File States',
+			'',
+			...Array.from(fileErrors.entries()).flatMap(([filePath, errors]) =>
+				buildFileSection(filePath, errors, rowResults),
+			),
+			'',
+			'## Instructions',
+			'',
+			'### For AI in IDE (Claude/Copilot/etc):',
+			'1. Read the actual current content of each affected file',
+			'2. Analyze why search patterns failed',
+			'3. Generate direct file edits (no OPX needed)',
+			'4. Apply changes using IDE tools',
+			'',
+			'### For External AI (ChatGPT/etc):',
+			'1. Request user to paste current file contents',
+			'2. Analyze cascade failures and update search patterns',
+			'3. Generate corrected OPX with updated patterns',
+			'4. Ensure search patterns match CURRENT file state (after previous operations)',
+			'',
+			'### Key points:',
+			'- Search patterns must match the file AS IT IS NOW',
+			'- Account for changes made by previous successful operations',
+			'- Include enough context in search patterns to be unique',
+			'- Consider using occurrence="last" for ambiguous patterns',
+		]
+
+		return sections.join('\n')
+	}, [rowResults, previewData])
+
+	const handleCopyAiContext = useCallback(() => {
+		const context = buildAiContext()
+		if (!context) return
+
+		try {
+			const vscode = getVsCodeApi()
+			vscode.postMessage({
+				command: 'copyApplyErrors',
+				payload: { text: context },
+			})
+			setAiCopyState('copied')
+			setTimeout(() => setAiCopyState('idle'), 1500)
+		} catch (error) {
+			console.error('Failed to copy AI context', error)
+		}
+	}, [buildAiContext])
+
 	const handleCopyErrors = useCallback(() => {
 		if (!rowResults || !previewData) return
 
@@ -167,9 +322,15 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 						{hasFailures && (
 							<div className="flex items-center gap-2">
 								<vscode-button onClick={handleCopyErrors}>
-									Copy All Errors
+									Copy Errors (IDE AI)
+								</vscode-button>
+								<vscode-button onClick={handleCopyAiContext}>
+									Copy Errors (Chat AI)
 								</vscode-button>
 								{copyState === 'copied' && (
+									<span className="text-xs text-muted">Copied!</span>
+								)}
+								{aiCopyState === 'copied' && (
 									<span className="text-xs text-muted">Copied!</span>
 								)}
 							</div>

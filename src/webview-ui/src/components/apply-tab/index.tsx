@@ -29,6 +29,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	const [responseText, setResponseText] = useState('')
 	const [isApplying, setIsApplying] = useState(false)
 	const [isPreviewing, setIsPreviewing] = useState(false)
+	const operationLockRef = useRef(false) // Mutex to prevent concurrent operations
 	const [results, setResults] = useState<ApplyResult[] | null>(null)
 	const [errors, setErrors] = useState<string[] | null>(null)
 	const [previewData, setPreviewData] = useState<PreviewData | null>(null)
@@ -42,12 +43,19 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	}>({ type: null, timestamp: 0 })
 
 	const handleApply = useCallback(() => {
+		// Check mutex to prevent concurrent operations
+		if (operationLockRef.current) {
+			console.warn('[ApplyTab] Operation already in progress, ignoring request')
+			return
+		}
+
 		const currentText = responseText.trim()
 		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
 
+		operationLockRef.current = true
 		const timestamp = Date.now()
 		currentRequestRef.current = { type: 'apply', timestamp }
 
@@ -64,12 +72,19 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	}, [onApply, responseText])
 
 	const handlePreview = useCallback(() => {
+		// Check mutex to prevent concurrent operations
+		if (operationLockRef.current) {
+			console.warn('[ApplyTab] Operation already in progress, ignoring request')
+			return
+		}
+
 		const currentText = responseText.trim()
 		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
 
+		operationLockRef.current = true
 		const timestamp = Date.now()
 		currentRequestRef.current = { type: 'preview', timestamp }
 
@@ -126,10 +141,12 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		// Validate this is the current request to prevent race conditions
 		if (currentRequestRef.current.type !== 'apply') {
 			console.debug('[ApplyTab] Ignoring stale apply response')
+			operationLockRef.current = false // Release mutex even for stale requests
 			return
 		}
 
 		currentRequestRef.current = { type: null, timestamp: 0 }
+		operationLockRef.current = false // Release mutex
 		setIsApplying(false)
 
 		if (message.success) {
@@ -163,7 +180,7 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 			setErrors(errors)
 			setResults(null)
 			setRowResults(null)
-
+			
 			// If we have previewData from backend, use it to show what went wrong
 			if (message.previewData) {
 				setPreviewData(message.previewData)
@@ -175,10 +192,12 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		// Validate this is the current request to prevent race conditions
 		if (currentRequestRef.current.type !== 'preview') {
 			console.debug('[ApplyTab] Ignoring stale preview response')
+			operationLockRef.current = false // Release mutex even for stale requests
 			return
 		}
 
 		currentRequestRef.current = { type: null, timestamp: 0 }
+		operationLockRef.current = false // Release mutex
 		setIsPreviewing(false)
 
 		if (message.success) {
