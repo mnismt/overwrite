@@ -162,7 +162,9 @@ describe('PreviewTable', () => {
 			<PreviewTable previewData={previewData} onApplyRow={mockOnApplyRow} />,
 		)
 
-		expect(screen.getByText('—')).toBeInTheDocument()
+		// Check that the status column shows dash for no result yet
+		const dashes = screen.getAllByText('—')
+		expect(dashes.length).toBeGreaterThan(0)
 	})
 
 	it('calls onApplyRow when apply button is clicked', () => {

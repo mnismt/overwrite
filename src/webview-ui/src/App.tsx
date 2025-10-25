@@ -7,6 +7,23 @@ import ContextTab from './components/context-tab'
 import SettingsTab from './components/settings-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
+// Helper function to extract all URIs from tree
+function getAllUrisFromTree(items: VscodeTreeItem[]): Set<string> {
+	const uris = new Set<string>()
+
+	function walk(nodes: VscodeTreeItem[]) {
+		for (const node of nodes) {
+			uris.add(node.value)
+			if (node.subItems) {
+				walk(node.subItems)
+			}
+		}
+	}
+
+	walk(items)
+	return uris
+}
+
 interface VsCodeMessage {
 	command: string
 	payload?: unknown // Use unknown instead of any for better type safety
@@ -126,6 +143,23 @@ function App() {
 					}
 					setIsLoading(false)
 					break
+				case 'updateFileTreeAfterApply':
+					if (Array.isArray(message.payload)) {
+						const newTree = message.payload as VscodeTreeItem[]
+						setFileTreeData(newTree)
+
+						// Clean invalid selections
+						const validUris = getAllUrisFromTree(newTree)
+						const cleanedSelection = new Set(
+							Array.from(selectedUris).filter((uri) => validUris.has(uri)),
+						)
+
+						if (cleanedSelection.size !== selectedUris.size) {
+							setSelectedUris(cleanedSelection)
+						}
+					}
+					setIsLoading(false)
+					break
 				case 'showError':
 					// Display error message in a dismissible banner
 					{
@@ -191,7 +225,7 @@ function App() {
 
 		window.addEventListener('message', handleMessage)
 		return () => window.removeEventListener('message', handleMessage)
-	}, []) // Depends only on initial setup
+	}, [selectedUris]) // Add dependency
 
 	// --- Tab Content Handlers ---
 

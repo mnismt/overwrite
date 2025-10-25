@@ -1,6 +1,7 @@
 import path from 'node:path'
 import * as vscode from 'vscode'
 import { telemetry } from '../../services/telemetry'
+import { clearCache } from '../../services/token-counter'
 import { resolveXmlPathToUri } from '../../utils/path-resolver'
 import type { FileAction } from '../../utils/xml-parser'
 
@@ -11,6 +12,25 @@ interface FileActionResult {
 	message: string
 	newPath?: string
 }
+
+type FileActionChange = NonNullable<FileAction['changes']>[number]
+
+interface ModifyContext {
+	document: vscode.TextDocument
+	fullText: string
+	eol: string
+	fileUri: vscode.Uri
+	workspaceEdit: vscode.WorkspaceEdit
+}
+
+interface ModifyChangeResult {
+	success: boolean
+	message: string
+}
+
+type RangeLookupResult =
+	| { ok: true; range: vscode.Range }
+	| { ok: false; errorMessage: string }
 
 /**
  * Processes the file actions extracted from the XML.
@@ -67,6 +87,10 @@ export async function applyFileActions(
 			})
 		}
 	}
+
+	// Clear token cache sau khi apply xong
+	clearCache()
+
 	return results
 }
 
@@ -88,8 +112,8 @@ async function handleCreateAction(
 		const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
 		try {
 			await vscode.workspace.fs.createDirectory(dirUri)
-		} catch (e) {
-			// ignore; createDirectory is idempotent
+		} catch {
+			// createDirectory is idempotent - directory may already exist
 		}
 
 		// If the file already exists, treat create as a no-op for idempotency
@@ -140,7 +164,8 @@ async function handleModifyAction(
 	fileUri: vscode.Uri,
 	results: FileActionResult[],
 ): Promise<void> {
-	if (!fileAction.changes || fileAction.changes.length === 0) {
+	const { changes } = fileAction
+	if (!changes || changes.length === 0) {
 		results.push({
 			path: fileAction.path,
 			action: 'modify',
@@ -156,64 +181,17 @@ async function handleModifyAction(
 
 	try {
 		const document = await vscode.workspace.openTextDocument(fileUri)
-		const fullText = document.getText()
-		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
-
-		for (const change of fileAction.changes) {
-			try {
-				if (!change.search) {
-					changeResults.push('Error: Search block missing in a change')
-					continue
-				}
-
-				// Normalize search block line endings to document EOL
-				const normalizedSearch = normalizeToEol(change.search, eol)
-
-				let searchPos = fullText.indexOf(normalizedSearch)
-				if (searchPos === -1) {
-					changeResults.push(
-						`Error: Search text not found: "${normalizedSearch.slice(0, 20)}..."`,
-					)
-					continue
-				}
-
-				// Handle ambiguous occurrences
-				const nextPos = fullText.indexOf(normalizedSearch, searchPos + 1)
-				if (nextPos !== -1) {
-					const occ = change.occurrence
-					if (occ === 'first' || occ === undefined) {
-						// keep first
-					} else if (occ === 'last') {
-						searchPos = fullText.lastIndexOf(normalizedSearch)
-					} else if (typeof occ === 'number' && occ > 0) {
-						searchPos = findNthOccurrence(fullText, normalizedSearch, occ)
-						if (searchPos === -1) {
-							changeResults.push(
-								`Error: occurrence=${occ} not found for search block`,
-							)
-							continue
-						}
-					} else {
-						changeResults.push(
-							'Error: Ambiguous search text - found multiple matches; specify <occurrence>first|last|N</occurrence>',
-						)
-						continue
-					}
-				}
-
-				const startPos = document.positionAt(searchPos)
-				const endPos = document.positionAt(searchPos + normalizedSearch.length)
-				const range = new vscode.Range(startPos, endPos)
-				workspaceEdit.replace(fileUri, range, change.content)
-
-				successCount++
-				changeResults.push(`Success: Applied change: "${change.description}"`)
-			} catch (changeError) {
-				changeResults.push(
-					`Error with change: ${changeError instanceof Error ? changeError.message : String(changeError)}`,
-				)
-			}
+		const context: ModifyContext = {
+			document,
+			fullText: document.getText(),
+			eol: document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
+			fileUri,
+			workspaceEdit,
 		}
+
+		const modifyResult = applyModifyChanges(changes, context)
+		successCount = modifyResult.successCount
+		changeResults.push(...modifyResult.changeResults)
 
 		if (successCount > 0) {
 			await vscode.workspace.applyEdit(workspaceEdit)
@@ -225,14 +203,16 @@ async function handleModifyAction(
 				path: fileAction.path,
 				action: 'modify',
 				success: true,
-				message: `Applied ${successCount}/${fileAction.changes.length} modifications. ${changeResults.join('; ')}`,
+				message: `Applied ${successCount}/${changes.length} modifications. ${changeResults.join('; ')}`,
 			})
 		} else {
 			results.push({
 				path: fileAction.path,
 				action: 'modify',
 				success: false,
-				message: `Failed to apply any modifications. ${changeResults.join('; ')}`,
+				message: `Failed to apply any modifications. ${changeResults.join(
+					'; ',
+				)}`,
 			})
 		}
 	} catch (error) {
@@ -243,6 +223,139 @@ async function handleModifyAction(
 			message: error instanceof Error ? error.message : String(error),
 		})
 	}
+}
+
+function applyModifyChanges(
+	changes: NonNullable<FileAction['changes']>,
+	context: ModifyContext,
+): { successCount: number; changeResults: string[] } {
+	let successCount = 0
+	const changeResults: string[] = []
+
+	for (const change of changes) {
+		try {
+			const result = applyModifyChange(change, context)
+			if (result.success) {
+				successCount++
+			}
+			changeResults.push(result.message)
+		} catch (error) {
+			changeResults.push(
+				`Error with change: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			)
+		}
+	}
+
+	return { successCount, changeResults }
+}
+
+function applyModifyChange(
+	change: FileActionChange,
+	context: ModifyContext,
+): ModifyChangeResult {
+	if (!change.search) {
+		return {
+			success: false,
+			message: 'Error: Search block missing in a change',
+		}
+	}
+
+	const normalizedSearch = normalizeToEol(change.search, context.eol)
+	const rangeResult = findChangeRange(
+		context,
+		normalizedSearch,
+		change.occurrence,
+	)
+
+	if (!rangeResult.ok) {
+		return {
+			success: false,
+			message: rangeResult.errorMessage,
+		}
+	}
+
+	context.workspaceEdit.replace(
+		context.fileUri,
+		rangeResult.range,
+		change.content,
+	)
+	return {
+		success: true,
+		message: `Success: Applied change: "${change.description}"`,
+	}
+}
+
+function findChangeRange(
+	context: ModifyContext,
+	normalizedSearch: string,
+	occurrence: FileActionChange['occurrence'],
+): RangeLookupResult {
+	const { position, errorMessage } = resolveSearchPosition(
+		context.fullText,
+		normalizedSearch,
+		occurrence,
+	)
+
+	if (position === null || position === undefined) {
+		return errorMessage
+			? { ok: false, errorMessage }
+			: { ok: false, errorMessage: getSearchNotFoundMessage(normalizedSearch) }
+	}
+
+	const startPos = context.document.positionAt(position)
+	const endPos = context.document.positionAt(position + normalizedSearch.length)
+	return { ok: true, range: new vscode.Range(startPos, endPos) }
+}
+
+function resolveSearchPosition(
+	fullText: string,
+	normalizedSearch: string,
+	occurrence: FileActionChange['occurrence'],
+): { position: number | null; errorMessage?: string } {
+	const firstPos = fullText.indexOf(normalizedSearch)
+	if (firstPos === -1) {
+		return {
+			position: null,
+			errorMessage: getSearchNotFoundMessage(normalizedSearch),
+		}
+	}
+
+	const hasMultiple = fullText.includes(normalizedSearch, firstPos + 1)
+
+	if (!hasMultiple || occurrence === 'first' || occurrence === undefined) {
+		return { position: firstPos }
+	}
+
+	if (occurrence === 'last') {
+		return { position: fullText.lastIndexOf(normalizedSearch) }
+	}
+
+	if (
+		typeof occurrence === 'number' &&
+		Number.isFinite(occurrence) &&
+		occurrence > 0
+	) {
+		const nthPos = findNthOccurrence(fullText, normalizedSearch, occurrence)
+		if (nthPos === -1) {
+			return {
+				position: null,
+				errorMessage: `Error: occurrence=${occurrence} not found for search block`,
+			}
+		}
+		return { position: nthPos }
+	}
+
+	return {
+		position: null,
+		errorMessage:
+			'Error: Ambiguous search text - found multiple matches; specify <occurrence>first|last|N</occurrence>',
+	}
+}
+
+function getSearchNotFoundMessage(search: string): string {
+	return `Error: Search text not found: "${search.slice(0, 20)}..."`
 }
 
 /**
@@ -259,11 +372,7 @@ async function handleRewriteAction(
 		}
 		const content = fileAction.changes[0].content
 
-		try {
-			await vscode.workspace.fs.stat(fileUri)
-		} catch (error) {
-			throw new Error('File does not exist, cannot rewrite')
-		}
+		await ensureFileExists(fileUri, 'File does not exist, cannot rewrite')
 
 		const document = await vscode.workspace.openTextDocument(fileUri)
 		const fullRange = new vscode.Range(
@@ -307,11 +416,7 @@ async function handleDeleteAction(
 	results: FileActionResult[],
 ): Promise<void> {
 	try {
-		try {
-			await vscode.workspace.fs.stat(fileUri)
-		} catch (error) {
-			throw new Error('File does not exist, cannot delete')
-		}
+		await ensureFileExists(fileUri, 'File does not exist, cannot delete')
 
 		const edit = new vscode.WorkspaceEdit()
 		edit.deleteFile(fileUri, { recursive: true, ignoreIfNotExists: false })
@@ -348,13 +453,10 @@ async function handleRenameAction(
 		// Resolve new path relative to same workspace root if provided
 		const newUri = resolveXmlPathToUri(fileAction.newPath, fileAction.root)
 
-		try {
-			await vscode.workspace.fs.stat(fileUri)
-		} catch (error) {
-			throw new Error(
-				`Original file '${fileAction.path}' does not exist, cannot rename.`,
-			)
-		}
+		await ensureFileExists(
+			fileUri,
+			`Original file '${fileAction.path}' does not exist, cannot rename.`,
+		)
 
 		// Ensure destination directory exists
 		try {
@@ -389,10 +491,23 @@ async function handleRenameAction(
 	}
 }
 
+async function ensureFileExists(
+	fileUri: vscode.Uri,
+	errorMessage: string,
+): Promise<void> {
+	try {
+		await vscode.workspace.fs.stat(fileUri)
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error)
+		const suffix = reason ? ` (${reason})` : ''
+		throw new Error(`${errorMessage}${suffix}`)
+	}
+}
+
 function normalizeToEol(text: string, eol: string): string {
 	// Normalize any CRLF to LF first, then convert to desired EOL
-	const lf = text.replace(/\r\n/g, '\n')
-	return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf
+	const lf = text.split('\r\n').join('\n')
+	return eol === '\r\n' ? lf.split('\n').join('\r\n') : lf
 }
 
 function findNthOccurrence(

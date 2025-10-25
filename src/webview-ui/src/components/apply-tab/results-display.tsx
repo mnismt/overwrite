@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { getVsCodeApi } from '../../utils/vscode'
 import type { ApplyResult } from './types'
 
 interface ResultsDisplayProps {
@@ -6,6 +8,47 @@ interface ResultsDisplayProps {
 }
 
 const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, errors }) => {
+	const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>(
+		'idle',
+	)
+
+	const aggregatedErrors = useMemo(() => {
+		const messages: string[] = []
+		if (errors?.length) {
+			messages.push(...errors)
+		}
+		if (results?.length) {
+			for (const result of results) {
+				if (!result.success) {
+					const line = `${result.path} (${result.action}): ${result.message}`
+					messages.push(line)
+				}
+			}
+		}
+		return messages
+	}, [errors, results])
+
+	const handleCopyErrors = useCallback(() => {
+		if (!aggregatedErrors.length) return
+		try {
+			const vscode = getVsCodeApi()
+			vscode.postMessage({
+				command: 'copyApplyErrors',
+				payload: { text: aggregatedErrors.join('\n') },
+			})
+			setCopyState('copied')
+		} catch (error) {
+			console.error('Failed to copy errors', error)
+			setCopyState('error')
+		}
+	}, [aggregatedErrors])
+
+	useEffect(() => {
+		if (copyState === 'idle') return
+		const handle = window.setTimeout(() => setCopyState('idle'), 1500)
+		return () => window.clearTimeout(handle)
+	}, [copyState])
+
 	if (!results && !errors) {
 		return null
 	}
@@ -13,7 +56,22 @@ const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ results, errors }) => {
 	return (
 		<div style={{ marginTop: '20px' }}>
 			<vscode-divider style={{ margin: '10px 0' }}></vscode-divider>
-			<h3>Results:</h3>
+			<div className="flex items-center gap-3">
+				<h3>Results:</h3>
+				{aggregatedErrors.length > 0 && (
+					<div className="flex items-center gap-2">
+						<vscode-button onClick={handleCopyErrors}>
+							Copy Errors
+						</vscode-button>
+						{copyState === 'copied' && (
+							<span className="text-xs text-muted">Copied</span>
+						)}
+						{copyState === 'error' && (
+							<span className="text-xs text-error">Copy failed</span>
+						)}
+					</div>
+				)}
+			</div>
 
 			{errors && errors.length > 0 && (
 				<div style={{ marginBottom: '10px' }}>
