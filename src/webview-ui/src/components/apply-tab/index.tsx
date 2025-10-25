@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getVsCodeApi } from '../../utils/vscode'
 import ApplyActions from './apply-actions'
 import { lintXmlText, preprocessXmlText } from './preprocess'
@@ -35,11 +35,21 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	const [lints, setLints] = useState<string[]>([])
 	const [rowResults, setRowResults] = useState<RowApplyResult[] | null>(null)
 
+	// Track current request to prevent race conditions
+	const currentRequestRef = useRef<{
+		type: 'apply' | 'preview' | 'applyRow' | 'previewRow' | null
+		timestamp: number
+	}>({ type: null, timestamp: 0 })
+
 	const handleApply = useCallback(() => {
-		if (!responseText.trim()) {
+		const currentText = responseText.trim()
+		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
+
+		const timestamp = Date.now()
+		currentRequestRef.current = { type: 'apply', timestamp }
 
 		setIsApplying(true)
 		setResults(null)
@@ -47,24 +57,28 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 		setRowResults(null)
 
 		// Preprocess the text before sending
-		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		const { text: cleaned, changes, issues } = preprocessXmlText(currentText)
 		setLints([...new Set([...changes, ...issues])])
 		onApply(cleaned)
 	}, [onApply, responseText])
 
 	const handlePreview = useCallback(() => {
-		if (!responseText.trim()) {
+		const currentText = responseText.trim()
+		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
+
+		const timestamp = Date.now()
+		currentRequestRef.current = { type: 'preview', timestamp }
+
 		setIsPreviewing(true)
 		setErrors(null)
 		setPreviewData(null)
 		setRowResults(null)
-		setRowResults(null)
 
 		// Preprocess before previewing as well
-		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		const { text: cleaned, changes, issues } = preprocessXmlText(currentText)
 		setLints([...new Set([...changes, ...issues])])
 		onPreview(cleaned)
 	}, [onPreview, responseText])
@@ -108,7 +122,15 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	)
 
 	const handleApplyChangesMessage = (message: ApplyChangeResponse) => {
+		// Validate this is the current request to prevent race conditions
+		if (currentRequestRef.current.type !== 'apply') {
+			console.debug('[ApplyTab] Ignoring stale apply response')
+			return
+		}
+
+		currentRequestRef.current = { type: null, timestamp: 0 }
 		setIsApplying(false)
+
 		if (message.success) {
 			const applyResults = message.results || []
 			setResults(applyResults)
@@ -143,7 +165,15 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	}
 
 	const handlePreviewChangesMessage = (message: ApplyChangeResponse) => {
+		// Validate this is the current request to prevent race conditions
+		if (currentRequestRef.current.type !== 'preview') {
+			console.debug('[ApplyTab] Ignoring stale preview response')
+			return
+		}
+
+		currentRequestRef.current = { type: null, timestamp: 0 }
 		setIsPreviewing(false)
+
 		if (message.success) {
 			setPreviewData(message.previewData || null)
 			setErrors(null)
