@@ -1,5 +1,21 @@
 // Message payload types used between the webview and the provider
 
+// FileAction types from xml-parser
+export interface FileActionChange {
+	search?: string
+	content: string
+	description: string
+	occurrence?: 'first' | 'last' | number
+}
+
+export interface FileAction {
+	action: 'create' | 'rewrite' | 'modify' | 'delete' | 'rename'
+	path: string
+	root?: string
+	newPath?: string
+	changes?: FileActionChange[]
+}
+
 export interface OpenFilePayload {
 	fileUri: string // Changed from filePath to fileUri (string representation of vscode.Uri)
 }

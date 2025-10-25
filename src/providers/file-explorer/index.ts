@@ -20,6 +20,8 @@ import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
+	FileAction,
+	FileActionChange,
 	GetFileTreePayload,
 	GetTokenCountsPayload,
 	OpenFilePayload,
@@ -684,7 +686,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _executeApplyActions(
-		parseResult: { fileActions: any[]; plan?: string },
+		parseResult: { fileActions: FileAction[]; plan?: string },
 		requestId: string,
 		startTime: number,
 	): Promise<void> {
@@ -727,7 +729,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		this._showApplySummary(successCount, totalCount)
 	}
 
-	private _countDiffHunks(fileActions: any[]): number {
+	private _countDiffHunks(fileActions: FileAction[]): number {
 		return fileActions.reduce((count, action) => {
 			if (action.action === 'modify' && action.changes) {
 				return count + action.changes.length
@@ -927,7 +929,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		})
 	}
 
-	private async _showPreviewDiff(targetAction: any): Promise<void> {
+	private async _showPreviewDiff(targetAction: FileAction): Promise<void> {
 		const originalUri = await this._getOriginalUri(targetAction)
 		const language = getLanguageIdFromPath(targetAction.path)
 		const proposedText = await this._computeProposedText(
@@ -955,7 +957,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		})
 	}
 
-	private async _getOriginalUri(targetAction: any): Promise<vscode.Uri | null> {
+	private async _getOriginalUri(
+		targetAction: FileAction,
+	): Promise<vscode.Uri | null> {
 		try {
 			const uri = this._resolvePathToUriSafe(
 				targetAction.path,
@@ -969,7 +973,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _computeProposedText(
-		targetAction: any,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 	): Promise<string> {
 		if (targetAction.action === 'create' || targetAction.action === 'rewrite') {
@@ -988,7 +992,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _applyModifyChanges(
-		targetAction: any,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 	): Promise<string> {
 		if (!originalUri) {
@@ -1007,7 +1011,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private _applyModifyChange(
-		change: any,
+		change: FileActionChange,
 		fullText: string,
 		eol: string,
 	): string {
@@ -1040,7 +1044,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		fullText: string,
 		normalizedSearch: string,
 		initialPos: number,
-		change: any,
+		change: FileActionChange,
 	): number {
 		const nextPos = fullText.indexOf(normalizedSearch, initialPos + 1)
 		if (nextPos === -1) {
@@ -1064,7 +1068,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _buildDiffDocuments(
-		targetAction: Record<string, unknown>,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 		language: string,
 		proposedText: string,
