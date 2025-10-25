@@ -46,9 +46,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const [skippedFiles, setSkippedFiles] = useState<
 		Array<{ uri: string; reason: string; message?: string }>
 	>([])
-	// Track User Instructions height để điều chỉnh padding của tree area
-	const [instructionsHeight, setInstructionsHeight] = useState(100)
-	// const [includeXml, setIncludeXml] = useState(false)
 
 	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -119,9 +116,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	const latestSelectionRef = useRef(selectedUris)
 
 	const normalizeSelection = useCallback((uris: string[]) => {
-		return [...uris]
-			.sort((a, b) => a.localeCompare(b))
-			.join('||')
+		return [...uris].sort((a, b) => a.localeCompare(b)).join('||')
 	}, [])
 
 	useEffect(() => {
@@ -129,7 +124,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	}, [selectedUris])
 
 	useEffect(() => {
-			const vscode = getVsCodeApi()
+		const vscode = getVsCodeApi()
 		const urisArray = Array.from(selectedUris)
 		const targetSelectionKey = normalizeSelection(urisArray)
 
@@ -164,7 +159,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				tokenRequestRef.current = null
 			}
 		}
-		}, [selectedUris, normalizeSelection])
+	}, [selectedUris, normalizeSelection])
 
 	// Effect to listen for token count updates from the extension
 	// Use ref to avoid stale closure issues
@@ -261,7 +256,6 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				<UserInstructions
 					userInstructions={userInstructions}
 					onUserInstructionsChange={setUserInstructions}
-					onHeightChange={setInstructionsHeight}
 				/>
 
 				{/* Explorer Top Bar */}
@@ -293,10 +287,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			{/* Scrollable tree area only */}
 			<div
 				data-testid="context-tree-scroll"
-				className="flex-1 min-h-0 overflow-auto pb-24 transition-all duration-300 ease-out"
-				style={{
-					paddingTop: `${Math.max(0, instructionsHeight - 100)}px`,
-				}}
+				className="flex-1 min-h-0 overflow-auto pb-24"
 			>
 				{/* File Explorer */}
 				<div
