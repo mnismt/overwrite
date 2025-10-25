@@ -21,20 +21,126 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 }) => {
 	const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
 
+	const buildCascadeFailureSection = (
+		result: RowApplyResult,
+		rowResults: RowApplyResult[],
+	): string[] => {
+		const lines: string[] = [
+			'⚠️ CASCADE FAILURE: Previous operations on this file caused this failure',
+		]
+
+		const previousOps = rowResults
+			.slice(0, result.rowIndex)
+			.filter((r) => r.path === result.path && r.success)
+
+		if (previousOps.length > 0) {
+			lines.push('\nPrevious operations on this file:')
+			for (const op of previousOps) {
+				const prevRow = previewData?.rows[op.rowIndex]
+				lines.push(`  - Row ${op.rowIndex + 1}: ${op.action} (succeeded)`)
+				if (prevRow?.changeBlocks) {
+					lines.push(`    Changes made: ${prevRow.changeBlocks.length} block(s)`)
+				}
+			}
+		}
+
+		return lines
+	}
+
+	const buildChangeBlockSection = (row: PreviewData['rows'][0]): string[] => {
+		const lines: string[] = []
+
+		if (!row.changeBlocks?.length) {
+			return lines
+		}
+
+		lines.push(
+			'\nAttempted changes:',
+		)
+
+		for (let i = 0; i < row.changeBlocks.length; i++) {
+			const block = row.changeBlocks[i]
+			lines.push(`\n### Change Block ${i + 1}: ${block.description}`)
+
+			if (block.search) {
+				lines.push(
+					'\nSearch pattern (not found):',
+					'```',
+					block.search,
+					'```',
+				)
+			}
+
+			lines.push(
+				'\nIntended replacement:',
+				'```',
+				block.content,
+				'```',
+			)
+		}
+
+		return lines
+	}
+
+	const buildErrorRow = (
+		result: RowApplyResult,
+		rowResults: RowApplyResult[],
+	): string[] => {
+		const row = previewData?.rows[result.rowIndex]
+		if (!row) return []
+
+		const lines: string[] = [
+			`## Row ${result.rowIndex + 1}: ${result.action} ${result.path}`,
+			'Status: FAILED',
+			`Error: ${result.message}`,
+		]
+
+		if (result.isCascadeFailure) {
+			lines.push(...buildCascadeFailureSection(result, rowResults))
+		}
+
+		lines.push(...buildChangeBlockSection(row), '\n---\n')
+
+		return lines
+	}
+
+	const buildFixInstructions = (): string[] => [
+		'# AI Fix Instructions',
+		'',
+		'Please analyze the errors above and generate corrected OPX that will:',
+		'1. Fix search patterns that failed to match',
+		'2. Account for any cascading changes from previous operations',
+		'3. Ensure all change blocks can be applied without conflicts',
+		'',
+		'For cascade failures:',
+		'- Update search patterns to match the file state AFTER previous operations',
+		'- Consider using occurrence="last" if multiple matches exist',
+		'- Make search patterns more specific by including more surrounding context',
+		'',
+		'Generate new OPX with corrected operations.',
+	]
+
 	const handleCopyErrors = useCallback(() => {
-		if (!rowResults) return
+		if (!rowResults || !previewData) return
 
 		const failedRows = rowResults.filter((r) => !r.success)
 		if (failedRows.length === 0) return
 
-		const errorText = failedRows
-			.map((r) => {
-				const cascadeNote = r.isCascadeFailure
-					? ' [CASCADE: Previous row changed this file]'
-					: ''
-				return `Row ${r.rowIndex + 1} - ${r.action} ${r.path}${cascadeNote}\nError: ${r.message}\n`
-			})
-			.join('\n')
+		const sections: string[] = [
+			'# Apply Errors Summary',
+			`Total failures: ${failedRows.length}/${rowResults.length}`,
+			'',
+			'# Detailed Errors with Context',
+			'',
+		]
+
+		for (const result of failedRows) {
+			sections.push(...buildErrorRow(result, rowResults))
+		}
+
+		sections.push(...buildFixInstructions())
+
+		const errorText = sections.join('\n')
 
 		try {
 			const vscode = getVsCodeApi()
@@ -47,7 +153,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 		} catch (error) {
 			console.error('Failed to copy errors', error)
 		}
-	}, [rowResults])
+	}, [rowResults, previewData])
 
 	if (!previewData) {
 		return null

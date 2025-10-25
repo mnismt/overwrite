@@ -245,8 +245,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			}
 
 			const skippedChanged =
-				JSON.stringify(skippedFiles) !==
-				JSON.stringify(skippedFilesRef.current)
+				JSON.stringify(skippedFiles) !== JSON.stringify(skippedFilesRef.current)
 			if (skippedChanged && isMountedRef.current) {
 				setSkippedFiles(skippedFiles)
 			}
@@ -271,8 +270,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 				tokenRequestIdRef.current = null
 			}
 
-			const incoming: Record<string, number> =
-				message.payload.tokenCounts || {}
+			const incoming: Record<string, number> = message.payload.tokenCounts || {}
 			const incomingSkipped = message.payload.skippedFiles || []
 
 			processTokenCountsUpdate(incoming, incomingSkipped)

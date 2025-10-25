@@ -182,9 +182,7 @@ describe('ApplyTab', () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
 
 		// Trigger apply action first to set currentRequestRef
-		const responseTextarea = screen.getByTestId(
-			'mock-response-textarea',
-		)
+		const responseTextarea = screen.getByTestId('mock-response-textarea')
 		fireEvent.change(responseTextarea, { target: { value: '<opx>test</opx>' } })
 
 		const applyButton = screen.getByTestId('apply-button')
