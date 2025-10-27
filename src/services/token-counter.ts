@@ -35,8 +35,80 @@ const MAX_PARALLEL = 8 // don't read more than N files at once
 /**
  * Memoises {mtime, size, tokens}. Simple Map == O(1) look-ups,
  * cleared on *extension* deactivate / workspace close.
+ * Includes automatic cleanup to prevent memory leaks.
  */
-const cache = new Map<string, { mtime: number; size: number; tokens: number }>()
+const MAX_CACHE_SIZE = 1000 // Maximum number of entries
+const MAX_CACHE_AGE_MS = 30 * 60 * 1000 // 30 minutes
+
+interface CacheEntry {
+	mtime: number
+	size: number
+	tokens: number
+	lastAccessed: number
+}
+
+const cache = new Map<string, CacheEntry>()
+
+/**
+ * Cleanup old cache entries to prevent memory leaks
+ */
+function cleanupCache(): void {
+	const now = Date.now()
+	const entriesToRemove: string[] = []
+
+	// Remove entries older than MAX_CACHE_AGE_MS
+	for (const [key, entry] of cache.entries()) {
+		if (now - entry.lastAccessed > MAX_CACHE_AGE_MS) {
+			entriesToRemove.push(key)
+		}
+	}
+
+	// Remove oldest entries if cache is too large
+	if (cache.size > MAX_CACHE_SIZE) {
+		const sortedEntries = Array.from(cache.entries()).sort(
+			(a, b) => a[1].lastAccessed - b[1].lastAccessed,
+		)
+		const toRemove = sortedEntries.slice(0, cache.size - MAX_CACHE_SIZE)
+		entriesToRemove.push(...toRemove.map(([key]) => key))
+	}
+
+	for (const key of entriesToRemove) {
+		cache.delete(key)
+	}
+
+	if (entriesToRemove.length > 0) {
+		console.debug(
+			`[TokenCounter] Cleaned up ${entriesToRemove.length} cache entries`,
+		)
+	}
+}
+
+// Run cleanup periodically
+let cleanupInterval: NodeJS.Timeout | null = null
+
+function startCleanupInterval(): void {
+	if (cleanupInterval === null) {
+		cleanupInterval = setInterval(cleanupCache, 5 * 60 * 1000) // Every 5 minutes
+	}
+}
+
+function stopCleanupInterval(): void {
+	if (cleanupInterval !== null) {
+		clearInterval(cleanupInterval)
+		cleanupInterval = null
+	}
+}
+
+// Auto-start on module load
+startCleanupInterval()
+
+/**
+ * Shutdown the token counter (cleanup resources)
+ */
+export function shutdown(): void {
+	stopCleanupInterval()
+	clearCache()
+}
 
 /**
  * Interface for skipped file results
@@ -60,6 +132,8 @@ export async function countTokens(uri: vscode.Uri): Promise<number> {
 		const key = uri.fsPath
 		const entry = cache.get(key)
 		if (entry && entry.mtime === mtime && entry.size === size) {
+			// Update last accessed timestamp
+			entry.lastAccessed = Date.now()
 			return entry.tokens
 		}
 
@@ -117,13 +191,14 @@ export async function countTokens(uri: vscode.Uri): Promise<number> {
 
 			stream.on('end', () => {
 				if (!hasError) {
-					cache.set(key, { mtime, size, tokens })
+					cache.set(key, { mtime, size, tokens, lastAccessed: Date.now() })
 					resolve(tokens)
 				}
 			})
 		})
 	} catch (error) {
 		// File doesn't exist or can't be accessed
+		console.debug('[TokenCounter] Error counting tokens:', error)
 		return 0
 	}
 }
@@ -151,6 +226,8 @@ export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 		const key = uri.fsPath
 		const entry = cache.get(key)
 		if (entry && entry.mtime === mtime && entry.size === size) {
+			// Update last accessed timestamp
+			entry.lastAccessed = Date.now()
 			return { tokens: entry.tokens }
 		}
 
@@ -223,7 +300,7 @@ export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 
 				stream.on('end', () => {
 					if (!hasError) {
-						cache.set(key, { mtime, size, tokens })
+						cache.set(key, { mtime, size, tokens, lastAccessed: Date.now() })
 						resolve({ tokens })
 					}
 				})
@@ -289,6 +366,8 @@ export async function countManyWithInfo(uris: vscode.Uri[]): Promise<{
  */
 export function clearCache(): void {
 	cache.clear()
+	// Note: We don't clear the cleanup interval here as it's a module-level singleton
+	// The interval will continue running for the lifetime of the extension
 }
 
 /**
@@ -296,7 +375,13 @@ export function clearCache(): void {
  */
 export function getCacheStats(): {
 	size: number
-	entries: Array<{ path: string; mtime: number; size: number; tokens: number }>
+	entries: Array<{
+		path: string
+		mtime: number
+		size: number
+		tokens: number
+		lastAccessed: number
+	}>
 } {
 	const entries = Array.from(cache.entries()).map(([path, data]) => ({
 		path,

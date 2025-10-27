@@ -10,6 +10,7 @@ interface PreviewTableProps {
 	onPreviewRow?: (rowIndex: number) => void
 	isApplying?: boolean
 	rowResults?: RowApplyResult[] | null
+	responseText?: string
 }
 
 const PreviewTable: React.FC<PreviewTableProps> = ({
@@ -18,36 +19,352 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 	onPreviewRow,
 	isApplying = false,
 	rowResults = null,
+	responseText = '',
 }) => {
 	const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+	const [aiCopyState, setAiCopyState] = useState<'idle' | 'copied'>('idle')
 
-	const handleCopyErrors = useCallback(() => {
-		if (!rowResults) return
+	const buildFixInstructions = (includeOPX: boolean): string[] => {
+		const base = [
+			'# AI Fix Instructions',
+			'',
+			'Please analyze the errors above and understand the current state of each file.',
+			'',
+			'Key points to fix:',
+			'1. Search patterns that failed to match - they need to match the CURRENT file content',
+			'2. Cascade failures - previous operations changed the file, update your patterns accordingly',
+			'3. File structure - ensure you understand the full context of each file',
+			'',
+			'For cascade failures:',
+			'- Update search patterns to match the file state AFTER previous operations',
+			'- Consider using occurrence="last" if multiple matches exist',
+			'- Make search patterns more specific by including more surrounding context',
+			'',
+		]
 
-		const failedRows = rowResults.filter((r) => !r.success)
-		if (failedRows.length === 0) return
+		if (includeOPX) {
+			base.push(
+				'Generate new OPX with corrected operations based on the current file states.',
+			)
+		} else {
+			base.push(
+				'Provide the corrected code changes that should be applied to fix these issues.',
+			)
+		}
 
-		const errorText = failedRows
-			.map((r) => {
-				const cascadeNote = r.isCascadeFailure
-					? ' [CASCADE: Previous row changed this file]'
-					: ''
-				return `Row ${r.rowIndex + 1} - ${r.action} ${r.path}${cascadeNote}\nError: ${r.message}\n`
-			})
-			.join('\n')
+		return base
+	}
+
+	const buildChangeBlockDetails = (block: {
+		search?: string
+		content: string
+		description: string
+	}): string[] => {
+		const details: string[] = [`Change block: ${block.description}`]
+
+		if (block.search) {
+			details.push(
+				'Search pattern (NOT FOUND):',
+				'```',
+				block.search,
+				'```',
+				'Intended replacement:',
+				'```',
+				block.content,
+				'```',
+			)
+		} else {
+			details.push('Intended replacement:', '```', block.content, '```')
+		}
+
+		return details
+	}
+
+	const buildPreviousOperations = (previousOps: RowApplyResult[]): string[] => {
+		if (previousOps.length === 0) return []
+
+		return [
+			'- Previous successful operations:',
+			...previousOps.map((op) => `  - Row ${op.rowIndex + 1}: ${op.action}`),
+		]
+	}
+
+	const getRowStatus = (
+		result: RowApplyResult | undefined,
+	): '✅' | '❌' | '⏸️' => {
+		if (result?.success) return '✅'
+		if (result) return '❌'
+		return '⏸️'
+	}
+
+	const buildSuccessfulOperationsSection = (
+		successRows: RowApplyResult[],
+		data: PreviewData,
+	): string[] => {
+		if (successRows.length === 0) return []
+
+		const section: string[] = [
+			'## ✅ Successfully Applied Operations',
+			'',
+			'**These operations completed successfully. The files listed below have ALREADY been modified.**',
+			'**When fixing failed operations, account for these changes that are now in the codebase.**',
+			'',
+		]
+
+		for (const result of successRows) {
+			const row = data.rows[result.rowIndex]
+			if (!row) continue
+
+			section.push(
+				`### Row ${result.rowIndex + 1}: ${result.action} \`${result.path}\``,
+				'- Status: ✅ SUCCESS',
+				`- Operation: ${result.action}`,
+				`- Description: ${row.description}`,
+			)
+
+			if (row.changeBlocks?.length) {
+				section.push('- Applied changes:')
+				for (const [idx, block] of row.changeBlocks.entries()) {
+					section.push(`  ${idx + 1}. ${block.description}`)
+				}
+			}
+
+			section.push('')
+		}
+
+		section.push('---', '', '')
+		return section
+	}
+
+	const buildXmlReferenceSection = (
+		rowResults: RowApplyResult[],
+		data: PreviewData,
+	): string[] => {
+		const section: string[] = [
+			'',
+			'---',
+			'',
+			'## 📋 Original XML (For Reference)',
+			'',
+			'Below is the complete original OPX that was attempted:',
+			'',
+			'```xml',
+		]
+
+		for (let idx = 0; idx < data.rows.length; idx++) {
+			const row = data.rows[idx]
+			const result = rowResults.find((r) => r.rowIndex === idx)
+			const status = getRowStatus(result)
+
+			section.push(
+				`<!-- ${status} Row ${idx + 1}: ${row.action} ${row.path} -->`,
+			)
+
+			if (row.changeBlocks?.length) {
+				for (const block of row.changeBlocks) {
+					if (block.search) {
+						section.push('<find>', '<<<', block.search, '>>>', '</find>')
+					}
+					section.push('<put>', '<<<', block.content, '>>>', '</put>')
+				}
+			}
+			section.push(`<!-- End of Row ${idx + 1} -->`, '')
+		}
+
+		section.push('```', '')
+		return section
+	}
+
+	const buildErrorDetails = (
+		rowIndex: number,
+		result: RowApplyResult,
+		row: PreviewData['rows'][0] | undefined,
+		filePath: string,
+		allResults: RowApplyResult[],
+	): string[] => {
+		const details: string[] = [
+			`#### Row ${rowIndex + 1}: ${result.action}`,
+			`- Error: ${result.message}`,
+		]
+
+		if (result.isCascadeFailure) {
+			const previousOps = allResults
+				.slice(0, rowIndex)
+				.filter((r) => r.path === filePath && r.success)
+
+			details.push(
+				'- **CASCADE FAILURE**: Previous row(s) modified this file',
+				...buildPreviousOperations(previousOps),
+			)
+		}
+
+		if (row?.changeBlocks) {
+			details.push(
+				'',
+				'**Attempted changes:**',
+				...row.changeBlocks.flatMap((block, i) =>
+					buildChangeBlockDetails({
+						...block,
+						description: `${i + 1}: ${block.description}`,
+					}).map((line, idx) => (idx === 0 ? `\n${line}` : line)),
+				),
+			)
+		}
+
+		details.push('', '---', '')
+		return details
+	}
+
+	const buildFileSection = (
+		filePath: string,
+		errors: Array<{ rowIndex: number; result: RowApplyResult }>,
+		allResults: RowApplyResult[],
+	): string[] => {
+		return [
+			`### File: ${filePath}`,
+			'',
+			'**Current file content:** (Request this from your IDE/filesystem)',
+			`\`\`\`typescript\n// Full content of ${filePath} needed here\n\`\`\``,
+			'',
+			'**Failed operations on this file:**',
+			'',
+			...errors.flatMap(({ rowIndex, result }) => {
+				const row = previewData?.rows[rowIndex]
+				return buildErrorDetails(rowIndex, result, row, filePath, allResults)
+			}),
+		]
+	}
+
+	const buildHeaderSummary = (
+		successRows: RowApplyResult[],
+		failedRows: RowApplyResult[],
+		allRows: RowApplyResult[],
+	): string[] => [
+		'# Complete Apply Context for AI',
+		'',
+		'## Apply Results Summary',
+		`- ✅ Successful operations: ${successRows.length}`,
+		`- ❌ Failed operations: ${failedRows.length}`,
+		`- 📊 Total operations: ${allRows.length}`,
+		'',
+		'---',
+		'',
+	]
+
+	const buildFailedOperationsSection = (
+		fileErrors: Map<
+			string,
+			Array<{ rowIndex: number; result: RowApplyResult }>
+		>,
+		rowResults: RowApplyResult[],
+	): string[] => {
+		const section: string[] = [
+			'## ❌ Failed Operations (NEEDS FIXING)',
+			'',
+			'**The following operations failed and need to be corrected:**',
+			'',
+		]
+
+		section.push(
+			...Array.from(fileErrors.entries()).flatMap(([filePath, errors]) =>
+				buildFileSection(filePath, errors, rowResults),
+			),
+		)
+
+		return section
+	}
+
+	const buildFullContext = useCallback(
+		(includeOPX: boolean): string => {
+			if (!rowResults || !previewData) return ''
+
+			const failedRows = rowResults.filter((r) => !r.success)
+			const successRows = rowResults.filter((r) => r.success)
+
+			const fileErrors = new Map<
+				string,
+				Array<{ rowIndex: number; result: RowApplyResult }>
+			>()
+
+			for (const result of failedRows) {
+				if (!fileErrors.has(result.path)) {
+					fileErrors.set(result.path, [])
+				}
+				fileErrors.get(result.path)!.push({ rowIndex: result.rowIndex, result })
+			}
+
+			const sections: string[] = [
+				...buildHeaderSummary(successRows, failedRows, rowResults),
+				...buildSuccessfulOperationsSection(successRows, previewData),
+				...buildFailedOperationsSection(fileErrors, rowResults),
+			]
+
+			if (includeOPX) {
+				sections.push(...buildXmlReferenceSection(rowResults, previewData))
+
+				if (responseText) {
+					sections.push(
+						'',
+						'---',
+						'',
+						'## 📄 Complete Original XML Input (For Chat AI Context)',
+						'',
+						'Here is the complete OPX/XML that was submitted:',
+						'',
+						'```xml',
+						responseText,
+						'```',
+						'',
+					)
+				}
+			}
+
+			sections.push(...buildFixInstructions(includeOPX))
+
+			return sections.join('\n')
+		},
+		[previewData, rowResults, responseText],
+	)
+
+	// Copy for Chat AI - includes full context + OPX
+	const handleCopyAiContext = useCallback(() => {
+		const context = buildFullContext(true)
+		if (!context) return
 
 		try {
 			const vscode = getVsCodeApi()
 			vscode.postMessage({
 				command: 'copyApplyErrors',
-				payload: { text: errorText },
+				payload: { text: context },
+			})
+			setAiCopyState('copied')
+			setTimeout(() => setAiCopyState('idle'), 1500)
+		} catch (error) {
+			console.error('Failed to copy AI context', error)
+		}
+	}, [buildFullContext])
+
+	// Copy for IDE AI - includes full context WITHOUT OPX
+	const handleCopyErrors = useCallback(() => {
+		if (!rowResults || !previewData) return
+
+		const failedRows = rowResults.filter((r) => !r.success)
+		if (failedRows.length === 0) return
+
+		const context = buildFullContext(false)
+
+		try {
+			const vscode = getVsCodeApi()
+			vscode.postMessage({
+				command: 'copyApplyErrors',
+				payload: { text: context },
 			})
 			setCopyState('copied')
 			setTimeout(() => setCopyState('idle'), 1500)
 		} catch (error) {
 			console.error('Failed to copy errors', error)
 		}
-	}, [rowResults])
+	}, [rowResults, previewData, buildFullContext])
 
 	if (!previewData) {
 		return null
@@ -58,9 +375,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 
 	return (
 		<div className="mt-4">
-			<vscode-divider className="my-4"></vscode-divider>
-
-			{/* Row-level results summary */}
+			{/* Row-level results summary - only show when there are actual results */}
 			{rowResults && rowResults.length > 0 && (
 				<div className="mb-4">
 					<div className="flex items-center justify-between mb-2">
@@ -71,9 +386,15 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 						{hasFailures && (
 							<div className="flex items-center gap-2">
 								<vscode-button onClick={handleCopyErrors}>
-									Copy All Errors
+									Copy Errors (IDE AI)
+								</vscode-button>
+								<vscode-button onClick={handleCopyAiContext}>
+									Copy Errors (Chat AI)
 								</vscode-button>
 								{copyState === 'copied' && (
+									<span className="text-xs text-muted">Copied!</span>
+								)}
+								{aiCopyState === 'copied' && (
 									<span className="text-xs text-muted">Copied!</span>
 								)}
 							</div>
@@ -116,7 +437,7 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 				</div>
 			)}
 
-			{/* Fixed errors section */}
+			{/* Preview/parsing errors section */}
 			{errors && errors.length > 0 && (
 				<div className="mb-4 p-3 bg-warn-bg border border-warn-border rounded">
 					<h4 className="text-error font-medium mb-2">Preview Errors:</h4>
@@ -130,10 +451,10 @@ const PreviewTable: React.FC<PreviewTableProps> = ({
 				</div>
 			)}
 
-			{/* Table area */}
+			{/* Preview table with status for each operation */}
 			{rows && rows.length > 0 && (
 				<div>
-					<vscode-table columns={['5%', '28%', '37%', '20%', '10%']}>
+					<vscode-table columns={['10%', '28%', '32%', '20%', '10%']}>
 						<vscode-table-header>
 							<vscode-table-row>
 								<vscode-table-header-cell className="px-1 text-center">

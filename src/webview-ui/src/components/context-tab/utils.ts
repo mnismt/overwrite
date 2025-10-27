@@ -21,6 +21,8 @@ export function countTokens(text: string): Promise<number> {
 		const controller = new AbortController()
 		pendingTokenRequests.set(requestId, controller)
 
+		let timeoutId: ReturnType<typeof setTimeout> | null = null
+
 		// Listen for the response
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data
@@ -33,6 +35,12 @@ export function countTokens(text: string): Promise<number> {
 					return
 				}
 
+				// Clear timeout
+				if (timeoutId !== null) {
+					clearTimeout(timeoutId)
+					timeoutId = null
+				}
+
 				window.removeEventListener('message', handleMessage)
 				pendingTokenRequests.delete(requestId)
 				resolve(message.tokenCount || Math.ceil(text.length / 4))
@@ -41,6 +49,10 @@ export function countTokens(text: string): Promise<number> {
 
 		// Handle abort
 		controller.signal.addEventListener('abort', () => {
+			if (timeoutId !== null) {
+				clearTimeout(timeoutId)
+				timeoutId = null
+			}
 			window.removeEventListener('message', handleMessage)
 			pendingTokenRequests.delete(requestId)
 			resolve(Math.ceil(text.length / 4)) // Use fallback on abort
@@ -55,13 +67,14 @@ export function countTokens(text: string): Promise<number> {
 		})
 
 		// Fallback timeout after 5 seconds
-		setTimeout(() => {
+		timeoutId = setTimeout(() => {
 			if (!controller.signal.aborted) {
 				window.removeEventListener('message', handleMessage)
 				pendingTokenRequests.delete(requestId)
 				console.warn('Token count request timed out, using fallback estimate')
 				resolve(Math.ceil(text.length / 4))
 			}
+			timeoutId = null
 		}, 5000)
 	})
 }

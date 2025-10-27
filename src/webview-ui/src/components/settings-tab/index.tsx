@@ -23,7 +23,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 	}>(() => ({ excludedFolders, readGitignore }))
 	const [isDirty, setIsDirty] = useState(false)
 	const [showSaved, setShowSaved] = useState(false)
-	const savedTimerRef = useRef<number | null>(null)
+	const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// Sync incoming prop to draft and reset dirty when saved externally
 	useEffect(() => {
@@ -51,12 +51,25 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 		setIsDirty(false)
 		// show a brief toast/label
 		setShowSaved(true)
-		if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
-		savedTimerRef.current = window.setTimeout(() => {
+		if (savedTimerRef.current !== null) {
+			globalThis.clearTimeout(savedTimerRef.current)
+			savedTimerRef.current = null
+		}
+		savedTimerRef.current = globalThis.setTimeout(() => {
 			setShowSaved(false)
 			savedTimerRef.current = null
 		}, 1500)
 	}
+
+	// Cleanup timer on unmount
+	useEffect(() => {
+		return () => {
+			if (savedTimerRef.current !== null) {
+				globalThis.clearTimeout(savedTimerRef.current)
+				savedTimerRef.current = null
+			}
+		}
+	}, [])
 
 	// No explicit onClick fallback to avoid double-submit; rely on form submit
 
@@ -90,7 +103,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 							// Ensure we requestSubmit on the nearest form for reliability.
 							const form = (e.currentTarget as unknown as HTMLElement).closest(
 								'form',
-							) as HTMLFormElement | null
+							)
 							form?.requestSubmit()
 						}}
 					>

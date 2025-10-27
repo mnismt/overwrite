@@ -49,15 +49,25 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const isMountedRef = useRef(true)
 
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
 
+	// Effect to track mount status
+	useEffect(() => {
+		isMountedRef.current = true
+		return () => {
+			isMountedRef.current = false
+		}
+	}, [])
+
 	// Effect to calculate total tokens based on actual file counts and instructions
 	useEffect(() => {
 		// Clear any existing timer
-		if (debounceRef.current) {
+		if (debounceRef.current !== null) {
 			clearTimeout(debounceRef.current)
+			debounceRef.current = null
 		}
 
 		// Calculate file total immediately with error handling
@@ -73,27 +83,33 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			fileTotal = 0
 		}
 
-		// Update file totals immediately
-		setTokenStats((prev) => ({
-			...prev,
-			fileTokensEstimate: fileTotal,
-			totalTokens: fileTotal + prev.userInstructionsTokens,
-			totalWithXmlTokens:
-				fileTotal + prev.userInstructionsTokens + XML_INSTRUCTIONS_TOKENS,
-		}))
+		// Update file totals immediately only if mounted
+		if (isMountedRef.current) {
+			setTokenStats((prev) => ({
+				...prev,
+				fileTokensEstimate: fileTotal,
+				totalTokens: fileTotal + prev.userInstructionsTokens,
+				totalWithXmlTokens:
+					fileTotal + prev.userInstructionsTokens + XML_INSTRUCTIONS_TOKENS,
+			}))
+		}
 
 		// Debounce user instructions token counting
 		const timer = setTimeout(async () => {
+			if (!isMountedRef.current) return
+
 			try {
 				const instructionsTokens = await countTokens(userInstructions)
 
-				setTokenStats((prev) => ({
-					...prev,
-					userInstructionsTokens: instructionsTokens,
-					totalTokens: fileTotal + instructionsTokens,
-					totalWithXmlTokens:
-						fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
-				}))
+				if (isMountedRef.current) {
+					setTokenStats((prev) => ({
+						...prev,
+						userInstructionsTokens: instructionsTokens,
+						totalTokens: fileTotal + instructionsTokens,
+						totalWithXmlTokens:
+							fileTotal + instructionsTokens + XML_INSTRUCTIONS_TOKENS,
+					}))
+				}
 			} catch (error) {
 				console.error('[ContextTab] Error counting instruction tokens:', error)
 				// Keep previous instruction tokens on error
@@ -104,17 +120,19 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 		// Cleanup function
 		return () => {
-			if (debounceRef.current) {
+			if (debounceRef.current !== null) {
 				clearTimeout(debounceRef.current)
+				debounceRef.current = null
 			}
 		}
 	}, [actualTokenCounts, userInstructions])
 
-	// Debounced request for token counts on selection changes
-	// Use ref to track pending request and cancel if selection changes
+	// Debounced request for token counts on selection changes with proper cancellation
 	const tokenRequestRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const tokenRequestIdRef = useRef<string | null>(null)
 	const latestSelectionRef = useRef(selectedUris)
 
+	// Stable reference to avoid recreating on every render
 	const normalizeSelection = useCallback((uris: string[]) => {
 		return [...uris].sort((a, b) => a.localeCompare(b)).join('||')
 	}, [])
@@ -128,11 +146,13 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		const urisArray = Array.from(selectedUris)
 		const targetSelectionKey = normalizeSelection(urisArray)
 
-		// Clear previous request
+		// Clear previous request and mark it as stale
 		if (tokenRequestRef.current !== null) {
 			clearTimeout(tokenRequestRef.current)
 			tokenRequestRef.current = null
 		}
+		// Mark previous request ID as stale
+		tokenRequestIdRef.current = null
 
 		if (urisArray.length === 0) {
 			setActualTokenCounts({})
@@ -145,19 +165,24 @@ const ContextTab: React.FC<ContextTabProps> = ({
 			// Double-check we're still requesting for the latest selection
 			const currentUris = Array.from(latestSelectionRef.current)
 			if (normalizeSelection(currentUris) === targetSelectionKey) {
+				// Generate unique request ID for tracking
+				const requestId = `token_counts_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+				tokenRequestIdRef.current = requestId
+
 				vscode.postMessage({
 					command: 'getTokenCounts',
-					payload: { selectedUris: currentUris },
+					payload: { selectedUris: currentUris, requestId },
 				})
 			}
 			tokenRequestRef.current = null
-		}, 300) // Increased debounce to 300ms for better batching
+		}, 300)
 
 		return () => {
 			if (tokenRequestRef.current !== null) {
 				clearTimeout(tokenRequestRef.current)
 				tokenRequestRef.current = null
 			}
+			// Don't clear tokenRequestIdRef here - let the message handler check staleness
 		}
 	}, [selectedUris, normalizeSelection])
 
@@ -171,58 +196,95 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		skippedFilesRef.current = skippedFiles
 	}, [actualTokenCounts, skippedFiles])
 
+	// Check if token count response is stale
+	const isStaleResponse = useCallback(
+		(responseRequestId: string | undefined): boolean => {
+			const currentRequestId = tokenRequestIdRef.current
+			if (
+				responseRequestId &&
+				currentRequestId &&
+				responseRequestId !== currentRequestId
+			) {
+				console.debug('[ContextTab] Ignoring stale token count response', {
+					responseRequestId,
+					currentRequestId,
+				})
+				return true
+			}
+			return false
+		},
+		[],
+	)
+
+	// Compare token counts for changes
+	const hasTokenCountsChanged = useCallback(
+		(incoming: Record<string, number>): boolean => {
+			const currentCounts = tokenCountsRef.current
+			const incomingKeys = Object.keys(incoming)
+			const currentKeys = Object.keys(currentCounts)
+
+			// Check if lengths differ
+			if (incomingKeys.length !== currentKeys.length) {
+				return true
+			}
+
+			// Check if any values changed
+			return incomingKeys.some((k) => currentCounts[k] !== incoming[k])
+		},
+		[],
+	)
+
+	// Process token counts update
+	const processTokenCountsUpdate = useCallback(
+		(
+			tokenCounts: Record<string, number>,
+			skippedFiles: Array<{ uri: string; reason: string; message?: string }>,
+		) => {
+			if (hasTokenCountsChanged(tokenCounts) && isMountedRef.current) {
+				setActualTokenCounts(tokenCounts)
+			}
+
+			const skippedChanged =
+				JSON.stringify(skippedFiles) !== JSON.stringify(skippedFilesRef.current)
+			if (skippedChanged && isMountedRef.current) {
+				setSkippedFiles(skippedFiles)
+			}
+		},
+		[hasTokenCountsChanged],
+	)
+
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data
-			if (message.command === 'updateTokenCounts') {
-				const incoming: Record<string, number> =
-					message.payload.tokenCounts || {}
-				const incomingSkipped = message.payload.skippedFiles || []
-
-				// Use ref to get latest state without dependency
-				const currentCounts = tokenCountsRef.current
-
-				// Deep comparison to avoid unnecessary updates
-				let changed = false
-				const next: Record<string, number> = {}
-
-				// Add/update all incoming keys
-				for (const [k, v] of Object.entries(incoming)) {
-					next[k] = v
-					if (currentCounts[k] !== v) {
-						changed = true
-					}
-				}
-
-				// Check for removed keys
-				for (const k of Object.keys(currentCounts)) {
-					if (!(k in incoming)) {
-						changed = true
-					}
-				}
-
-				// Only update if something changed
-				if (changed) {
-					setActualTokenCounts(next)
-				}
-
-				// Update skipped files if changed
-				const skippedChanged =
-					JSON.stringify(incomingSkipped) !==
-					JSON.stringify(skippedFilesRef.current)
-				if (skippedChanged) {
-					setSkippedFiles(incomingSkipped)
-				}
+			if (message.command !== 'updateTokenCounts') {
+				return
 			}
+
+			const responseRequestId = message.payload?.requestId
+			if (isStaleResponse(responseRequestId)) {
+				return
+			}
+
+			// Clear request ID after processing
+			if (responseRequestId === tokenRequestIdRef.current) {
+				tokenRequestIdRef.current = null
+			}
+
+			const incoming: Record<string, number> = message.payload.tokenCounts || {}
+			const incomingSkipped = message.payload.skippedFiles || []
+
+			processTokenCountsUpdate(incoming, incomingSkipped)
 		}
 		window.addEventListener('message', handleMessage)
 		return () => window.removeEventListener('message', handleMessage)
-	}, []) // Empty deps - use refs for latest state
+	}, [isStaleResponse, processTokenCountsUpdate])
 
 	const handleRefreshClick = useCallback(() => {
-		// Reset skipped files and token counts when refreshing to clear any deleted files
+		// Reset skipped files when refreshing to clear any deleted files
 		setSkippedFiles([])
-		setActualTokenCounts({})
+		// Don't reset actualTokenCounts here - let the effect handle cleaning up invalid entries
+		// after the new tree arrives. This prevents the UI from showing 0 tokens during refresh.
+
 		// Call the refresh function (use persisted excluded folders on backend)
 		onRefresh()
 	}, [onRefresh])
@@ -240,6 +302,39 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 		return message ? `${label} (${message})` : label
 	}
+
+	// Effect to clean up token counts for files that no longer exist after tree refresh
+	useEffect(() => {
+		if (fileTreeData.length === 0) return
+
+		// Build set of all valid URIs in the current tree
+		const validUris = new Set<string>()
+		const collectUris = (items: VscodeTreeItem[]) => {
+			for (const item of items) {
+				validUris.add(item.value)
+				if (item.subItems) {
+					collectUris(item.subItems)
+				}
+			}
+		}
+		collectUris(fileTreeData)
+
+		// Remove token counts for URIs that no longer exist in the tree
+		setActualTokenCounts((prev) => {
+			const cleaned: Record<string, number> = {}
+			let hasChanges = false
+
+			for (const [uri, count] of Object.entries(prev)) {
+				if (validUris.has(uri)) {
+					cleaned[uri] = count
+				} else {
+					hasChanges = true
+				}
+			}
+
+			return hasChanges ? cleaned : prev
+		})
+	}, [fileTreeData])
 
 	// Cleanup effect: cancel pending token requests on unmount
 	useEffect(() => {

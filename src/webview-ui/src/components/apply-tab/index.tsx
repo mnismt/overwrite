@@ -1,11 +1,10 @@
 import type React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getVsCodeApi } from '../../utils/vscode'
 import ApplyActions from './apply-actions'
 import { lintXmlText, preprocessXmlText } from './preprocess'
 import PreviewTable from './preview-table'
 import ResponseTextarea from './response-textarea'
-import ResultsDisplay from './results-display'
 import type {
 	ApplyChangeResponse,
 	ApplyResult,
@@ -29,42 +28,70 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	const [responseText, setResponseText] = useState('')
 	const [isApplying, setIsApplying] = useState(false)
 	const [isPreviewing, setIsPreviewing] = useState(false)
-	const [results, setResults] = useState<ApplyResult[] | null>(null)
-	const [errors, setErrors] = useState<string[] | null>(null)
+	const operationLockRef = useRef(false) // Mutex to prevent concurrent operations
 	const [previewData, setPreviewData] = useState<PreviewData | null>(null)
 	const [lints, setLints] = useState<string[]>([])
 	const [rowResults, setRowResults] = useState<RowApplyResult[] | null>(null)
+	const [errors, setErrors] = useState<string[] | null>(null)
+
+	// Track current request to prevent race conditions
+	const currentRequestRef = useRef<{
+		type: 'apply' | 'preview' | 'applyRow' | 'previewRow' | null
+		timestamp: number
+	}>({ type: null, timestamp: 0 })
 
 	const handleApply = useCallback(() => {
-		if (!responseText.trim()) {
+		// Check mutex to prevent concurrent operations
+		if (operationLockRef.current) {
+			console.warn('[ApplyTab] Operation already in progress, ignoring request')
+			return
+		}
+
+		const currentText = responseText.trim()
+		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
 
+		operationLockRef.current = true
+		const timestamp = Date.now()
+		currentRequestRef.current = { type: 'apply', timestamp }
+
 		setIsApplying(true)
-		setResults(null)
 		setErrors(null)
 		setRowResults(null)
+		// Don't clear previewData here - keep it for context in case of errors
 
 		// Preprocess the text before sending
-		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		const { text: cleaned, changes, issues } = preprocessXmlText(currentText)
 		setLints([...new Set([...changes, ...issues])])
 		onApply(cleaned)
 	}, [onApply, responseText])
 
 	const handlePreview = useCallback(() => {
-		if (!responseText.trim()) {
+		// Check mutex to prevent concurrent operations
+		if (operationLockRef.current) {
+			console.warn('[ApplyTab] Operation already in progress, ignoring request')
+			return
+		}
+
+		const currentText = responseText.trim()
+		if (!currentText) {
 			setErrors(['Please paste an XML response first.'])
 			return
 		}
+
+		operationLockRef.current = true
+		const timestamp = Date.now()
+		currentRequestRef.current = { type: 'preview', timestamp }
+
 		setIsPreviewing(true)
 		setErrors(null)
 		setPreviewData(null)
 		setRowResults(null)
-		setRowResults(null)
 
 		// Preprocess before previewing as well
-		const { text: cleaned, changes, issues } = preprocessXmlText(responseText)
+		const { text: cleaned, changes, issues } = preprocessXmlText(currentText)
 		setLints([...new Set([...changes, ...issues])])
 		onPreview(cleaned)
 	}, [onPreview, responseText])
@@ -108,10 +135,19 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	)
 
 	const handleApplyChangesMessage = (message: ApplyChangeResponse) => {
+		// Validate this is the current request to prevent race conditions
+		if (currentRequestRef.current.type !== 'apply') {
+			console.debug('[ApplyTab] Ignoring stale apply response')
+			operationLockRef.current = false // Release mutex even for stale requests
+			return
+		}
+
+		currentRequestRef.current = { type: null, timestamp: 0 }
+		operationLockRef.current = false // Release mutex
 		setIsApplying(false)
+
 		if (message.success) {
 			const applyResults = message.results || []
-			setResults(applyResults)
 			setErrors(null)
 
 			// Create row-level results from apply results
@@ -136,14 +172,29 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 				vscode.postMessage({ command: 'refreshAfterApply' })
 			}, 500)
 		} else {
-			setErrors(message.errors || ['Unknown error occurred'])
-			setResults(null)
+			const errors = message.errors || ['Unknown error occurred']
+			setErrors(errors)
 			setRowResults(null)
+
+			// If we have previewData from backend, use it to show what went wrong
+			if (message.previewData) {
+				setPreviewData(message.previewData)
+			}
 		}
 	}
 
 	const handlePreviewChangesMessage = (message: ApplyChangeResponse) => {
+		// Validate this is the current request to prevent race conditions
+		if (currentRequestRef.current.type !== 'preview') {
+			console.debug('[ApplyTab] Ignoring stale preview response')
+			operationLockRef.current = false // Release mutex even for stale requests
+			return
+		}
+
+		currentRequestRef.current = { type: null, timestamp: 0 }
+		operationLockRef.current = false // Release mutex
 		setIsPreviewing(false)
+
 		if (message.success) {
 			setPreviewData(message.previewData || null)
 			setErrors(null)
@@ -155,11 +206,8 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 	}
 
 	const handleApplyRowChangeMessage = (message: ApplyChangeResponse) => {
-		// Handle individual row apply result similar to full apply
-		if (message.success) {
-			setResults(message.results || [])
-			setErrors(null)
-		} else {
+		// Handle individual row apply result - errors are shown in PreviewTable
+		if (!message.success) {
 			setErrors(message.errors || ['Unknown error occurred'])
 		}
 	}
@@ -262,17 +310,30 @@ const ApplyTab: React.FC<ApplyTabProps> = ({
 
 			{/* Scrollable content area */}
 			<div className="flex-1 min-h-0 overflow-auto pb-12">
-				{/* Show preview table if we have preview data, otherwise show results */}
-				{previewData ? (
+				{/* Show standalone errors if no preview data */}
+				{errors && !previewData && (
+					<div className="p-3 bg-warn-bg border border-warn-border rounded">
+						<h4 className="text-error font-medium mb-2">Errors:</h4>
+						<ul className="text-error">
+							{errors.map((error) => (
+								<li key={error} className="mb-1">
+									{error}
+								</li>
+							))}
+						</ul>
+					</div>
+				)}
+
+				{/* Show preview table if available - it handles its own error display */}
+				{previewData && (
 					<PreviewTable
 						previewData={previewData}
 						onApplyRow={handleApplyRow}
 						onPreviewRow={handlePreviewRow}
 						isApplying={isApplying}
 						rowResults={rowResults}
+						responseText={responseText}
 					/>
-				) : (
-					<ResultsDisplay results={results} errors={errors} />
 				)}
 			</div>
 		</div>

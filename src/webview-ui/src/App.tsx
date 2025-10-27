@@ -4,6 +4,7 @@ import type { VscodeTreeItem } from './types' // Import tree item type from loca
 import './App.css'
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
+import { getAllDescendantPaths } from './components/context-tab/utils'
 import SettingsTab from './components/settings-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
@@ -22,6 +23,26 @@ function getAllUrisFromTree(items: VscodeTreeItem[]): Set<string> {
 
 	walk(items)
 	return uris
+}
+
+// Helper function to find an item in tree by URI
+function findItemInTree(
+	items: VscodeTreeItem[],
+	targetUri: string,
+): VscodeTreeItem | null {
+	for (const item of items) {
+		if (item.value === targetUri) return item
+		if (item.subItems) {
+			const found = findItemInTree(item.subItems, targetUri)
+			if (found) return found
+		}
+	}
+	return null
+}
+
+// Helper function to check if item is a file (no subItems)
+function isFileItem(item: VscodeTreeItem | null): boolean {
+	return item !== null && (!item.subItems || item.subItems.length === 0)
 }
 
 interface VsCodeMessage {
@@ -43,10 +64,60 @@ function App() {
 	const [fileTreeData, setFileTreeData] = useState<VscodeTreeItem[]>([])
 	// selectedPaths renamed to selectedUris, stores Set of URI strings
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
+	// Track folders that are fully selected (all descendants selected)
+	const [fullySelectedFolders, setFullySelectedFolders] = useState<Set<string>>(
+		new Set(),
+	)
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
-	const [, setErrorText] = useState<string | null>(null) // Graceful error banner
 	const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
 	const [readGitignore, setReadGitignore] = useState<boolean>(true)
+
+	// Handle file tree updates with auto-selection logic
+	const handleUpdateFileTreeMessage = useCallback(
+		(payload: unknown) => {
+			if (!Array.isArray(payload)) return
+
+			const newTree = payload as VscodeTreeItem[]
+			setFileTreeData(newTree)
+
+			// Clean invalid selections and auto-select new files in fully selected folders
+			const validUris = getAllUrisFromTree(newTree)
+			const updatedSelection = new Set(
+				Array.from(selectedUris).filter((uri) => validUris.has(uri)),
+			)
+
+			// Process fully selected folders
+			const processFolder = (item: VscodeTreeItem) => {
+				if (fullySelectedFolders.has(item.value)) {
+					const allDescendants = getAllDescendantPaths(item)
+					for (const uri of allDescendants) {
+						const foundItem = findItemInTree(newTree, uri)
+						if (isFileItem(foundItem)) {
+							updatedSelection.add(uri)
+						}
+					}
+				}
+
+				if (item.subItems) {
+					for (const sub of item.subItems) {
+						processFolder(sub)
+					}
+				}
+			}
+
+			for (const root of newTree) {
+				processFolder(root)
+			}
+
+			if (
+				updatedSelection.size !== selectedUris.size ||
+				Array.from(updatedSelection).some((uri) => !selectedUris.has(uri))
+			) {
+				setSelectedUris(updatedSelection)
+			}
+		},
+		[selectedUris, fullySelectedFolders],
+	)
 
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
@@ -115,12 +186,15 @@ function App() {
 			}
 		}
 
-		window.addEventListener('error', handleError)
-		window.addEventListener('unhandledrejection', handleUnhandledRejection)
+		globalThis.addEventListener('error', handleError)
+		globalThis.addEventListener('unhandledrejection', handleUnhandledRejection)
 
 		return () => {
-			window.removeEventListener('error', handleError)
-			window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+			globalThis.removeEventListener('error', handleError)
+			globalThis.removeEventListener(
+				'unhandledrejection',
+				handleUnhandledRejection,
+			)
 		}
 	}, [])
 
@@ -137,33 +211,15 @@ function App() {
 
 			switch (message.command) {
 				case 'updateFileTree':
-					// TODO: Add type check for payload
-					if (Array.isArray(message.payload)) {
-						setFileTreeData(message.payload as VscodeTreeItem[])
-					}
+				case 'updateFileTreeAfterApply': {
+					handleUpdateFileTreeMessage(message.payload)
 					setIsLoading(false)
 					break
-				case 'updateFileTreeAfterApply':
-					if (Array.isArray(message.payload)) {
-						const newTree = message.payload as VscodeTreeItem[]
-						setFileTreeData(newTree)
-
-						// Clean invalid selections
-						const validUris = getAllUrisFromTree(newTree)
-						const cleanedSelection = new Set(
-							Array.from(selectedUris).filter((uri) => validUris.has(uri)),
-						)
-
-						if (cleanedSelection.size !== selectedUris.size) {
-							setSelectedUris(cleanedSelection)
-						}
-					}
-					setIsLoading(false)
-					break
+				}
 				case 'showError':
 					// Display error message in a dismissible banner
 					{
-						const payload = message.payload as unknown
+						const payload = message.payload
 						let text = 'An unexpected error occurred.'
 						if (typeof payload === 'string') {
 							text = payload
@@ -175,7 +231,6 @@ function App() {
 						) {
 							text = String((payload as { message: string }).message)
 						}
-						setErrorText(text)
 						console.error('Error from extension:', text)
 					}
 					setIsLoading(false) // Stop loading on error too
@@ -259,9 +314,48 @@ function App() {
 
 	// Selection handler (assuming it will be needed in the combined ContextTab)
 	// Renamed paths to uris, expects a Set of URI strings
-	const handleSelect = useCallback((uris: Set<string>) => {
-		setSelectedUris(uris)
-	}, [])
+	const handleSelect = useCallback(
+		(uris: Set<string>) => {
+			setSelectedUris(uris)
+
+			// Update fully selected folders tracking
+			const fullySelected = new Set<string>()
+
+			const getFileDescendants = (item: VscodeTreeItem): string[] => {
+				const allDescendants = getAllDescendantPaths(item)
+				return allDescendants.filter((uri) => {
+					const foundItem = findItemInTree(fileTreeData, uri)
+					return isFileItem(foundItem)
+				})
+			}
+
+			const checkFolder = (item: VscodeTreeItem) => {
+				if (item.subItems && item.subItems.length > 0) {
+					const fileDescendants = getFileDescendants(item)
+
+					// If all file descendants are selected, mark folder as fully selected
+					if (
+						fileDescendants.length > 0 &&
+						fileDescendants.every((uri) => uris.has(uri))
+					) {
+						fullySelected.add(item.value)
+					}
+
+					// Recursively check subfolders
+					for (const sub of item.subItems) {
+						checkFolder(sub)
+					}
+				}
+			}
+
+			for (const root of fileTreeData) {
+				checkFolder(root)
+			}
+
+			setFullySelectedFolders(fullySelected)
+		},
+		[fileTreeData],
+	)
 
 	// Context Tab: Handle copying
 	const handleCopy = useCallback(

@@ -38,4 +38,13 @@ export async function deactivate() {
 	} catch (e) {
 		console.warn('[telemetry] shutdown failed', e)
 	}
+
+	try {
+		const { shutdown: shutdownTokenCounter } = await import(
+			'./services/token-counter.js'
+		)
+		shutdownTokenCounter()
+	} catch (e) {
+		console.warn('[token-counter] shutdown failed', e)
+	}
 }

@@ -112,7 +112,15 @@ async function handleCreateAction(
 		const dirUri = vscode.Uri.file(path.dirname(fileUri.fsPath))
 		try {
 			await vscode.workspace.fs.createDirectory(dirUri)
-		} catch {
+		} catch (dirError) {
+			// Check if it's a permission error
+			const msg =
+				dirError instanceof Error ? dirError.message : String(dirError)
+			if (msg.includes('EACCES') || msg.includes('permission')) {
+				throw new Error(
+					`Permission denied: Cannot create directory ${dirUri.fsPath}`,
+				)
+			}
 			// createDirectory is idempotent - directory may already exist
 		}
 
@@ -147,11 +155,25 @@ async function handleCreateAction(
 			message: applied ? 'File created successfully' : 'Failed to create file',
 		})
 	} catch (error) {
+		const errorMsg = error instanceof Error ? error.message : String(error)
+		let friendlyMessage = errorMsg
+
+		// Provide user-friendly error messages for common issues
+		if (errorMsg.includes('ENOSPC') || errorMsg.includes('no space')) {
+			friendlyMessage = 'Disk full: Not enough space to create file'
+		} else if (errorMsg.includes('EACCES') || errorMsg.includes('permission')) {
+			friendlyMessage = 'Permission denied: Cannot write to this location'
+		} else if (errorMsg.includes('EBUSY') || errorMsg.includes('locked')) {
+			friendlyMessage = 'File is locked by another process'
+		} else if (errorMsg.includes('EROFS') || errorMsg.includes('read-only')) {
+			friendlyMessage = 'Read-only file system: Cannot create file'
+		}
+
 		results.push({
 			path: fileAction.path,
 			action: 'create',
 			success: false,
-			message: error instanceof Error ? error.message : String(error),
+			message: friendlyMessage,
 		})
 	}
 }
@@ -203,7 +225,9 @@ async function handleModifyAction(
 				path: fileAction.path,
 				action: 'modify',
 				success: true,
-				message: `Applied ${successCount}/${changes.length} modifications. ${changeResults.join('; ')}`,
+				message: `Applied ${successCount}/${
+					changes.length
+				} modifications. ${changeResults.join('; ')}`,
 			})
 		} else {
 			results.push({

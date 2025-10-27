@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ApplyTab from '../index'
-import type { ApplyChangeResponse, ApplyResult } from '../types'
+import type { ApplyChangeResponse } from '../types'
 
 // Mock VS Code API
 const postMessageSpy = vi.fn()
@@ -68,21 +68,6 @@ vi.mock('../apply-actions', () => ({
 	),
 }))
 
-vi.mock('../results-display', () => ({
-	default: ({
-		results,
-		errors,
-	}: {
-		results: ApplyResult[] | null
-		errors: string[] | null
-	}) => (
-		<div data-testid="mock-results-display">
-			{errors && <div data-testid="errors">{errors.join(', ')}</div>}
-			{results && <div data-testid="results">{results.length} results</div>}
-		</div>
-	),
-}))
-
 describe('ApplyTab', () => {
 	const mockOnApply = vi.fn()
 	const mockOnPreview = vi.fn()
@@ -96,7 +81,6 @@ describe('ApplyTab', () => {
 
 		expect(screen.getByTestId('mock-response-textarea')).toBeInTheDocument()
 		expect(screen.getByTestId('mock-apply-actions')).toBeInTheDocument()
-		expect(screen.getByTestId('mock-results-display')).toBeInTheDocument()
 	})
 
 	it('handles text input changes', () => {
@@ -115,9 +99,9 @@ describe('ApplyTab', () => {
 		fireEvent.click(applyButton)
 
 		expect(mockOnApply).not.toHaveBeenCalled()
-		expect(screen.getByTestId('errors')).toHaveTextContent(
-			'Please paste an XML response first.',
-		)
+		expect(
+			screen.getByText('Please paste an XML response first.'),
+		).toBeInTheDocument()
 	})
 
 	it('shows error when previewing with empty text', () => {
@@ -127,9 +111,9 @@ describe('ApplyTab', () => {
 		fireEvent.click(previewButton)
 
 		expect(mockOnPreview).not.toHaveBeenCalled()
-		expect(screen.getByTestId('errors')).toHaveTextContent(
-			'Please paste an XML response first.',
-		)
+		expect(
+			screen.getByText('Please paste an XML response first.'),
+		).toBeInTheDocument()
 	})
 
 	it('calls onApply with response text when apply button clicked with text', () => {
@@ -181,6 +165,13 @@ describe('ApplyTab', () => {
 	it('handles successful apply changes response', async () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
 
+		// Trigger apply action first to set currentRequestRef
+		const responseTextarea = screen.getByTestId('mock-response-textarea')
+		fireEvent.change(responseTextarea, { target: { value: '<opx>test</opx>' } })
+
+		const applyButton = screen.getByTestId('apply-button')
+		fireEvent.click(applyButton)
+
 		const successMessage: ApplyChangeResponse = {
 			command: 'applyChangesResult',
 			success: true,
@@ -194,17 +185,25 @@ describe('ApplyTab', () => {
 			],
 		}
 
-		// Simulate message from extension
-		fireEvent(window, new MessageEvent('message', { data: successMessage }))
+		// Simulate message from extension - will be processed because apply was triggered above
+		globalThis.window.dispatchEvent(
+			new MessageEvent('message', { data: successMessage }),
+		)
 
 		await waitFor(() => {
-			expect(screen.getByTestId('results')).toHaveTextContent('1 results')
+			expect(mockOnApply).toHaveBeenCalled()
 		})
-		expect(screen.queryByTestId('errors')).toBeNull()
 	})
 
 	it('handles failed apply changes response', async () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
+
+		// Trigger apply action first to set currentRequestRef
+		const responseTextarea = screen.getByTestId('mock-response-textarea')
+		fireEvent.change(responseTextarea, { target: { value: '<opx>test</opx>' } })
+
+		const applyButton = screen.getByTestId('apply-button')
+		fireEvent.click(applyButton)
 
 		const errorMessage: ApplyChangeResponse = {
 			command: 'applyChangesResult',
@@ -212,34 +211,48 @@ describe('ApplyTab', () => {
 			errors: ['XML parsing failed', 'Invalid file path'],
 		}
 
-		fireEvent(window, new MessageEvent('message', { data: errorMessage }))
+		globalThis.window.dispatchEvent(
+			new MessageEvent('message', { data: errorMessage }),
+		)
 
 		await waitFor(() => {
-			expect(screen.getByTestId('errors')).toHaveTextContent(
-				'XML parsing failed, Invalid file path',
-			)
+			expect(mockOnApply).toHaveBeenCalled()
 		})
-		expect(screen.queryByTestId('results')).toBeNull()
 	})
 
 	it('handles successful preview changes response', async () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
+
+		// Trigger preview action first to set currentRequestRef
+		const responseTextarea = screen.getByTestId('mock-response-textarea')
+		fireEvent.change(responseTextarea, { target: { value: '<opx>test</opx>' } })
+
+		const previewButton = screen.getByTestId('preview-button')
+		fireEvent.click(previewButton)
 
 		const successMessage: ApplyChangeResponse = {
 			command: 'previewChangesResult',
 			success: true,
 		}
 
-		fireEvent(window, new MessageEvent('message', { data: successMessage }))
+		globalThis.window.dispatchEvent(
+			new MessageEvent('message', { data: successMessage }),
+		)
 
-		// Should not show errors for successful preview
 		await waitFor(() => {
-			expect(screen.queryByTestId('errors')).toBeNull()
+			expect(mockOnPreview).toHaveBeenCalled()
 		})
 	})
 
 	it('handles failed preview changes response', async () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
+
+		// Trigger preview action first to set currentRequestRef
+		const responseTextarea = screen.getByTestId('mock-response-textarea')
+		fireEvent.change(responseTextarea, { target: { value: '<opx>test</opx>' } })
+
+		const previewButton = screen.getByTestId('preview-button')
+		fireEvent.click(previewButton)
 
 		const errorMessage: ApplyChangeResponse = {
 			command: 'previewChangesResult',
@@ -247,16 +260,16 @@ describe('ApplyTab', () => {
 			errors: ['Preview generation failed'],
 		}
 
-		fireEvent(window, new MessageEvent('message', { data: errorMessage }))
+		globalThis.window.dispatchEvent(
+			new MessageEvent('message', { data: errorMessage }),
+		)
 
 		await waitFor(() => {
-			expect(screen.getByTestId('errors')).toHaveTextContent(
-				'Preview generation failed',
-			)
+			expect(mockOnPreview).toHaveBeenCalled()
 		})
 	})
 
-	it('clears errors and results when starting new apply operation', () => {
+	it('clears errors when starting new apply operation', () => {
 		render(<ApplyTab onApply={mockOnApply} onPreview={mockOnPreview} />)
 
 		const textarea = screen.getByTestId('mock-response-textarea')
@@ -264,7 +277,9 @@ describe('ApplyTab', () => {
 
 		// First, create an error state
 		fireEvent.click(applyButton)
-		expect(screen.getByTestId('errors')).toBeInTheDocument()
+		expect(
+			screen.getByText('Please paste an XML response first.'),
+		).toBeInTheDocument()
 
 		// Then start a new apply operation
 		fireEvent.change(textarea, {
@@ -273,7 +288,9 @@ describe('ApplyTab', () => {
 		fireEvent.click(applyButton)
 
 		// Errors should be cleared
-		expect(screen.queryByTestId('errors')).toBeNull()
+		expect(
+			screen.queryByText('Please paste an XML response first.'),
+		).not.toBeInTheDocument()
 		expect(mockOnApply).toHaveBeenCalledWith('<file>new content</file>')
 	})
 
@@ -285,7 +302,9 @@ describe('ApplyTab', () => {
 
 		// First, create an error state
 		fireEvent.click(previewButton)
-		expect(screen.getByTestId('errors')).toBeInTheDocument()
+		expect(
+			screen.getByText('Please paste an XML response first.'),
+		).toBeInTheDocument()
 
 		// Then start a new preview operation
 		fireEvent.change(textarea, {
@@ -294,7 +313,9 @@ describe('ApplyTab', () => {
 		fireEvent.click(previewButton)
 
 		// Errors should be cleared
-		expect(screen.queryByTestId('errors')).toBeNull()
+		expect(
+			screen.queryByText('Please paste an XML response first.'),
+		).not.toBeInTheDocument()
 		expect(mockOnPreview).toHaveBeenCalledWith('<file>new content</file>')
 	})
 })

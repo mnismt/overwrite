@@ -64,6 +64,7 @@ async function analyzeFileAction(
 			newPath: fileAction.newPath,
 			hasError,
 			errorMessage,
+			// Include full change blocks for error context reporting
 			changeBlocks: fileAction.changes?.map((c) => ({
 				description: c.description,
 				search: c.search,
@@ -90,66 +91,82 @@ async function analyzeFileAction(
 async function calculateChangeSummary(
 	fileAction: FileAction,
 ): Promise<ChangeSummary> {
+	switch (fileAction.action) {
+		case 'create':
+			return calculateCreateChanges(fileAction)
+		case 'rewrite':
+			return calculateRewriteChanges(fileAction)
+		case 'modify':
+			return calculateModifyChanges(fileAction)
+		case 'delete':
+			return calculateDeleteChanges(fileAction)
+		case 'rename':
+			return { added: 0, removed: 0 }
+		default:
+			return { added: 0, removed: 0 }
+	}
+}
+
+function calculateCreateChanges(fileAction: FileAction): ChangeSummary {
+	let added = 0
+	if (fileAction.changes && fileAction.changes.length > 0) {
+		for (const change of fileAction.changes) {
+			added += countLines(change.content)
+		}
+	}
+	return { added, removed: 0 }
+}
+
+async function calculateRewriteChanges(
+	fileAction: FileAction,
+): Promise<ChangeSummary> {
 	let added = 0
 	let removed = 0
 
-	switch (fileAction.action) {
-		case 'create': {
-			if (fileAction.changes && fileAction.changes.length > 0) {
-				for (const change of fileAction.changes) {
-					added += countLines(change.content)
-				}
-			}
-			break
+	if (fileAction.changes && fileAction.changes.length > 0) {
+		for (const change of fileAction.changes) {
+			added += countLines(change.content)
 		}
-		case 'rewrite': {
-			let existingLines = 0
-			try {
-				const targetUri = resolvePathToUri(fileAction.path, fileAction.root)
-				const doc = await vscode.workspace.openTextDocument(targetUri)
-				existingLines = doc.lineCount
-			} catch {
-				// File doesn't exist, treat as create
-			}
+	}
 
-			if (fileAction.changes && fileAction.changes.length > 0) {
-				for (const change of fileAction.changes) {
-					added += countLines(change.content)
-				}
-			}
-			removed = existingLines
-			break
-		}
-		case 'modify': {
-			if (fileAction.changes) {
-				for (const change of fileAction.changes) {
-					const searchLines = change.search ? countLines(change.search) : 1
-					const contentLines = countLines(change.content)
+	try {
+		const targetUri = resolvePathToUri(fileAction.path, fileAction.root)
+		const doc = await vscode.workspace.openTextDocument(targetUri)
+		removed = doc.lineCount
+	} catch {
+		// File doesn't exist, treat as create
+	}
 
-					removed += searchLines
-					added += contentLines
-				}
-			}
-			break
-		}
-		case 'delete': {
-			try {
-				const targetUri = resolvePathToUri(fileAction.path, fileAction.root)
-				const doc = await vscode.workspace.openTextDocument(targetUri)
-				removed = doc.lineCount
-			} catch {
-				// File doesn't exist, assume 50 lines for estimation
-				removed = 50
-			}
-			break
-		}
-		case 'rename': {
-			// No content changes for rename
-			break
+	return { added, removed }
+}
+
+function calculateModifyChanges(fileAction: FileAction): ChangeSummary {
+	let added = 0
+	let removed = 0
+
+	if (fileAction.changes) {
+		for (const change of fileAction.changes) {
+			const searchLines = change.search ? countLines(change.search) : 1
+			const contentLines = countLines(change.content)
+			removed += searchLines
+			added += contentLines
 		}
 	}
 
 	return { added, removed }
+}
+
+async function calculateDeleteChanges(
+	fileAction: FileAction,
+): Promise<ChangeSummary> {
+	try {
+		const targetUri = resolvePathToUri(fileAction.path, fileAction.root)
+		const doc = await vscode.workspace.openTextDocument(targetUri)
+		return { added: 0, removed: doc.lineCount }
+	} catch {
+		// File doesn't exist, assume 50 lines for estimation
+		return { added: 0, removed: 50 }
+	}
 }
 
 function generateDescription(fileAction: FileAction): string {
@@ -205,8 +222,8 @@ function resolvePathToUri(p: string, root?: string): vscode.Uri {
 		if (!folders || folders.length === 0) return vscode.Uri.file(p)
 		const base = root
 			? (folders.find((f) => f.name === root)?.uri.fsPath ??
-				folders[0]!.uri.fsPath)
-			: folders[0]!.uri.fsPath
+				folders[0].uri.fsPath)
+			: folders[0].uri.fsPath
 		return vscode.Uri.file(path.join(base, p))
 	}
 }

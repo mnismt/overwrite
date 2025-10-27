@@ -20,6 +20,8 @@ import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
+	FileAction,
+	FileActionChange,
 	GetFileTreePayload,
 	GetTokenCountsPayload,
 	OpenFilePayload,
@@ -35,6 +37,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
 	private _isBuildingTree = false // Prevent overlapping tree builds
 	private _treeBuildTimeout: NodeJS.Timeout | null = null // Timeout for tree building
+	private _treeBuildAbortController: AbortController | null = null // Abort controller for cancellation
 	// Always-excluded patterns that never show in the UI; keep minimal (.git only)
 	private readonly _excludedDirs = ['.git', '.hg', '.svn']
 	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
@@ -412,6 +415,12 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		if (!this._view) return
 
 		try {
+			// Cancel any existing tree build operation
+			if (this._treeBuildAbortController) {
+				this._treeBuildAbortController.abort()
+				this._treeBuildAbortController = null
+			}
+
 			// Clear any existing timeout
 			if (this._treeBuildTimeout) {
 				clearTimeout(this._treeBuildTimeout)
@@ -423,6 +432,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				this._treeBuildTimeout = setTimeout(() => {
 					this._isBuildingTree = false
 					this._treeBuildTimeout = null
+					if (this._treeBuildAbortController) {
+						this._treeBuildAbortController.abort()
+						this._treeBuildAbortController = null
+					}
 					console.warn('Tree building operation timed out after 30 seconds')
 					this._view?.webview.postMessage({
 						command: 'showError',
@@ -437,6 +450,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			this._isBuildingTree = true
+
+			// Create new abort controller for this operation
+			this._treeBuildAbortController = new AbortController()
+			const signal = this._treeBuildAbortController.signal
 
 			// Set a timeout for this operation
 			const timeoutPromise = new Promise<never>((_, reject) => {
@@ -469,12 +486,24 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				timeoutPromise,
 			])
 
+			// Check if operation was aborted
+			if (signal.aborted) {
+				console.debug('[FileExplorer] Tree build was cancelled')
+				return
+			}
+
 			this._fullTreeCache = workspaceFiles // Cache the full tree
 			this._view.webview.postMessage({
 				command: 'updateFileTree',
 				payload: workspaceFiles,
 			})
 		} catch (error) {
+			// Check if error is due to abort
+			if (error instanceof Error && error.name === 'AbortError') {
+				console.debug('[FileExplorer] Tree build was cancelled')
+				return
+			}
+
 			this._handleError(error, 'Error getting workspace files')
 			// Optionally send specific error state to webview
 			this._view.webview.postMessage({
@@ -489,6 +518,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			if (this._treeBuildTimeout) {
 				clearTimeout(this._treeBuildTimeout)
 				this._treeBuildTimeout = null
+			}
+			if (this._treeBuildAbortController) {
+				this._treeBuildAbortController = null
 			}
 		}
 	}
@@ -684,7 +716,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _executeApplyActions(
-		parseResult: { fileActions: any[]; plan?: string },
+		parseResult: { fileActions: FileAction[]; plan?: string },
 		requestId: string,
 		startTime: number,
 	): Promise<void> {
@@ -727,7 +759,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		this._showApplySummary(successCount, totalCount)
 	}
 
-	private _countDiffHunks(fileActions: any[]): number {
+	private _countDiffHunks(fileActions: FileAction[]): number {
 		return fileActions.reduce((count, action) => {
 			if (action.action === 'modify' && action.changes) {
 				return count + action.changes.length
@@ -927,7 +959,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		})
 	}
 
-	private async _showPreviewDiff(targetAction: any): Promise<void> {
+	private async _showPreviewDiff(targetAction: FileAction): Promise<void> {
 		const originalUri = await this._getOriginalUri(targetAction)
 		const language = getLanguageIdFromPath(targetAction.path)
 		const proposedText = await this._computeProposedText(
@@ -955,7 +987,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		})
 	}
 
-	private async _getOriginalUri(targetAction: any): Promise<vscode.Uri | null> {
+	private async _getOriginalUri(
+		targetAction: FileAction,
+	): Promise<vscode.Uri | null> {
 		try {
 			const uri = this._resolvePathToUriSafe(
 				targetAction.path,
@@ -969,7 +1003,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _computeProposedText(
-		targetAction: any,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 	): Promise<string> {
 		if (targetAction.action === 'create' || targetAction.action === 'rewrite') {
@@ -988,7 +1022,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _applyModifyChanges(
-		targetAction: any,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 	): Promise<string> {
 		if (!originalUri) {
@@ -1007,7 +1041,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private _applyModifyChange(
-		change: any,
+		change: FileActionChange,
 		fullText: string,
 		eol: string,
 	): string {
@@ -1040,7 +1074,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		fullText: string,
 		normalizedSearch: string,
 		initialPos: number,
-		change: any,
+		change: FileActionChange,
 	): number {
 		const nextPos = fullText.indexOf(normalizedSearch, initialPos + 1)
 		if (nextPos === -1) {
@@ -1064,7 +1098,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _buildDiffDocuments(
-		targetAction: Record<string, unknown>,
+		targetAction: FileAction,
 		originalUri: vscode.Uri | null,
 		language: string,
 		proposedText: string,
@@ -1103,6 +1137,9 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 		const requestId = telemetry.generateRequestId()
 		const startTime = Date.now()
+
+		// Extract client-provided request ID for tracking
+		const clientRequestId = (payload as { requestId?: string })?.requestId
 
 		try {
 			const urisToCount = Array.isArray(payload?.selectedUris)
@@ -1153,10 +1190,14 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				console.warn('[telemetry] failed to capture token_count_completed', e)
 			}
 
-			// Send the results back to the webview
+			// Send the results back to the webview with request ID for tracking
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts, skippedFiles },
+				payload: {
+					tokenCounts,
+					skippedFiles,
+					requestId: clientRequestId, // Include client request ID
+				},
 			})
 
 			// Log skipped files for debugging
@@ -1177,10 +1218,14 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			}
 
 			this._handleError(error, 'Error calculating token counts')
-			// Send empty counts back on error
+			// Send empty counts back on error with request ID
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts: {}, skippedFiles: [] },
+				payload: {
+					tokenCounts: {},
+					skippedFiles: [],
+					requestId: clientRequestId,
+				},
 			})
 		}
 	}
