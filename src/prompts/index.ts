@@ -1,8 +1,10 @@
 import * as path from 'node:path' // Still needed for path.relative for file map display logic
 import * as vscode from 'vscode' // For vscode.workspace.fs and vscode.Uri
 import type { VscodeTreeItem } from '../types'
-import { isBinaryFile } from '../utils/file-system'
+import { readTextFileForContext } from '../utils/file-system'
 import { XML_FORMATTING_INSTRUCTIONS } from './xml-instruction'
+
+const MAX_PARALLEL_CONTEXT_READS = 8
 
 // Helper function moved to module scope
 function hasSelectedDescendant(
@@ -195,6 +197,55 @@ function buildTreeString(
 	}
 }
 
+async function readSelectedFileContent(uriString: string): Promise<string> {
+	const fileUri = vscode.Uri.parse(uriString)
+	try {
+		const result = await readTextFileForContext(fileUri)
+		if (result.type === 'text') {
+			return `File: ${fileUri.fsPath}\n\`\`\`\n${result.content ?? ''}\n\`\`\`\n\n`
+		}
+		if (result.type === 'binary') {
+			console.log('Skipping binary file:', fileUri.fsPath)
+			return `File: ${fileUri.fsPath}\n*** Skipped: Binary file ***\n\n`
+		}
+
+		console.log('Not a file (possibly a directory):', fileUri.fsPath)
+		return ''
+	} catch (error: unknown) {
+		let errorMessage = 'Unknown error'
+		if (error instanceof Error) {
+			errorMessage = error.message
+		} else if (typeof error === 'string') {
+			errorMessage = error
+		}
+		console.warn(
+			`Could not read file ${fileUri.fsPath} for context: ${errorMessage}`,
+		)
+		return `File: ${fileUri.fsPath}\n*** Error reading file: ${errorMessage} ***\n\n`
+	}
+}
+
+async function mapWithConcurrency<T, R>(
+	items: T[],
+	limit: number,
+	mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+	const results = new Array<R>(items.length)
+	let nextIndex = 0
+	const workerCount = Math.min(limit, items.length)
+
+	await Promise.all(
+		Array.from({ length: workerCount }, async () => {
+			while (nextIndex < items.length) {
+				const currentIndex = nextIndex++
+				results[currentIndex] = await mapper(items[currentIndex]!)
+			}
+		}),
+	)
+
+	return results
+}
+
 /**
  * Generates the file contents string for selected files.
  * @param selectedUris - A set of selected URI strings.
@@ -203,49 +254,16 @@ function buildTreeString(
 export async function generateFileContents(
 	selectedUris: Set<string>,
 ): Promise<string> {
-	let contentsStr = ''
 	// Sort URI strings for consistent order. fsPath might be better for sorting if paths are complex.
 	const sortedUriStrings = Array.from(selectedUris).sort()
 
-	for (const uriString of sortedUriStrings) {
-		const fileUri = vscode.Uri.parse(uriString)
-		try {
-			// Ensure it's a file using vscode.workspace.fs.stat
-			const stat = await vscode.workspace.fs.stat(fileUri)
-			if (stat.type === vscode.FileType.File) {
-				// Check if the file is binary and skip it
-				const isBinary = await isBinaryFile(fileUri)
-				if (isBinary) {
-					console.log('Skipping binary file:', fileUri.fsPath)
-					contentsStr += `File: ${fileUri.fsPath}\n*** Skipped: Binary file ***\n\n`
-					continue
-				}
+	const chunks = await mapWithConcurrency(
+		sortedUriStrings,
+		MAX_PARALLEL_CONTEXT_READS,
+		readSelectedFileContent,
+	)
 
-				const contentBuffer = await vscode.workspace.fs.readFile(fileUri)
-				const content = Buffer.from(contentBuffer).toString('utf8')
-				// Use full fsPath in the header as per user's example
-				contentsStr += `File: ${fileUri.fsPath}\n\`\`\`\n${content}\n\`\`\`\n\n`
-			} else {
-				// This case should ideally not happen if only files are in selectedUris for contents
-				console.log('Not a file (possibly a directory):', fileUri.fsPath)
-			}
-		} catch (error: unknown) {
-			let errorMessage = 'Unknown error'
-			if (error instanceof Error) {
-				errorMessage = error.message
-			} else if (typeof error === 'string') {
-				errorMessage = error
-			}
-			console.warn(
-				`Could not read file ${fileUri.fsPath} for context: ${errorMessage}`,
-			)
-			// Add a note about the missing/unreadable file in the context
-			contentsStr += `File: ${fileUri.fsPath}\n*** Error reading file: ${errorMessage} ***\n\n`
-		}
-	}
-
-	// Trim the trailing newlines
-	return contentsStr.trim()
+	return chunks.join('').trim()
 }
 
 /**
