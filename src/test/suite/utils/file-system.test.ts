@@ -8,10 +8,12 @@ import {
 	MAX_LIST_FILES,
 	MAX_TREE_DEPTH,
 	MAX_TREE_NODES,
+	clearIgnoreContextCache,
 	getDirectoryChildren,
 	getWorkspaceRoots,
 	listFilesUnderUri,
 	loadIgnoreRulesForRoot,
+	readTextFileForContext,
 } from '../../../utils/file-system'
 
 // Mirrors the heavy-dir defaults the provider passes (see FileExplorerProvider).
@@ -99,6 +101,41 @@ describe('file-system: loadIgnoreRulesForRoot', () => {
 	})
 })
 
+describe('file-system: readTextFileForContext', () => {
+	before(async () => {
+		await fsp.rm(baseDir, { recursive: true, force: true })
+		await fsp.mkdir(baseDir, { recursive: true })
+		await writeFixture('plain.txt', 'hello')
+		await writeFixture('image.png', 'not actually png, but extension is binary')
+		await fsp.mkdir(path.join(baseDir, 'folder'), { recursive: true })
+	})
+	after(async () => {
+		await fsp.rm(baseDir, { recursive: true, force: true })
+	})
+
+	it('reads text files', async () => {
+		const result = await readTextFileForContext(
+			vscode.Uri.file(path.join(baseDir, 'plain.txt')),
+		)
+		assert.strictEqual(result.type, 'text')
+		assert.strictEqual(result.content, 'hello')
+	})
+
+	it('skips known binary extensions before reading content as text', async () => {
+		const result = await readTextFileForContext(
+			vscode.Uri.file(path.join(baseDir, 'image.png')),
+		)
+		assert.strictEqual(result.type, 'binary')
+	})
+
+	it('reports directories as not-file', async () => {
+		const result = await readTextFileForContext(
+			vscode.Uri.file(path.join(baseDir, 'folder')),
+		)
+		assert.strictEqual(result.type, 'not-file')
+	})
+})
+
 describe('file-system: abort handling (no workspace required)', () => {
 	it('getDirectoryChildren rejects when the signal is already aborted', async () => {
 		const controller = new AbortController()
@@ -129,6 +166,7 @@ describe('file-system: lazy tree APIs (workspace-scoped)', () => {
 	let restore: (() => void) | null = null
 
 	before(async function () {
+		clearIgnoreContextCache()
 		await fsp.rm(baseDir, { recursive: true, force: true })
 		await fsp.mkdir(baseDir, { recursive: true })
 		await writeFixture('src/app.ts', 'export const a = 1')
@@ -147,6 +185,7 @@ describe('file-system: lazy tree APIs (workspace-scoped)', () => {
 
 	after(async () => {
 		restore?.()
+		clearIgnoreContextCache()
 		await fsp.rm(baseDir, { recursive: true, force: true })
 	})
 
@@ -206,5 +245,19 @@ describe('file-system: lazy tree APIs (workspace-scoped)', () => {
 			!rel.some((r) => r.startsWith(`ignored${path.sep}`)),
 			'no gitignored files',
 		)
+	})
+
+	it('clearIgnoreContextCache lets callers pick up changed ignore rules', async () => {
+		await writeFixture('.gitignore', '')
+		clearIgnoreContextCache()
+
+		const parent = vscode.Uri.file(baseDir).toString()
+		const { roots: children } = await getDirectoryChildren(
+			parent,
+			DEFAULT_EXCLUDES,
+		)
+		const labels = children.map((c) => c.label)
+
+		assert.ok(labels.includes('ignored'), 'updated gitignore rules applied')
 	})
 })

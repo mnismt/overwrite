@@ -126,6 +126,11 @@ export interface FileTreeResult {
 	truncated: boolean
 }
 
+export interface TextFileReadResult {
+	type: 'text' | 'binary' | 'not-file'
+	content?: string
+}
+
 interface IgnoreContext {
 	ign: ignore.Ignore
 	userIgnore: ignore.Ignore
@@ -136,6 +141,16 @@ interface ScanBudget {
 	nodesVisited: number
 	truncated: boolean
 }
+
+const IGNORE_CONTEXT_CACHE_TTL_MS = 10_000
+const ignoreContextCache = new Map<
+	string,
+	{
+		expiresAt: number
+		context?: IgnoreContext
+		pending?: Promise<IgnoreContext>
+	}
+>()
 
 function throwIfAborted(signal?: AbortSignal): void {
 	if (signal?.aborted) {
@@ -222,6 +237,13 @@ export function looksBinary(chunk: Uint8Array): boolean {
 	return analyzeByteContent(chunk)
 }
 
+export function hasBinaryFileExtension(uri: vscode.Uri): boolean {
+	const fileName = uri.path.toLowerCase()
+	const lastDot = fileName.lastIndexOf('.')
+	if (lastDot === -1) return false
+	return BINARY_EXTENSIONS.has(fileName.substring(lastDot))
+}
+
 export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 	try {
 		const stats = await vscode.workspace.fs.stat(uri)
@@ -229,9 +251,7 @@ export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 			return false
 		}
 
-		const fileName = uri.path.toLowerCase()
-		const extension = fileName.substring(fileName.lastIndexOf('.'))
-		if (BINARY_EXTENSIONS.has(extension)) {
+		if (hasBinaryFileExtension(uri)) {
 			return true
 		}
 
@@ -240,6 +260,30 @@ export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 		return looksBinary(chunk)
 	} catch {
 		return false
+	}
+}
+
+export async function readTextFileForContext(
+	uri: vscode.Uri,
+): Promise<TextFileReadResult> {
+	const stat = await vscode.workspace.fs.stat(uri)
+	if (stat.type !== vscode.FileType.File) {
+		return { type: 'not-file' }
+	}
+
+	if (hasBinaryFileExtension(uri)) {
+		return { type: 'binary' }
+	}
+
+	const contentBuffer = await vscode.workspace.fs.readFile(uri)
+	const chunk = contentBuffer.slice(0, 8000)
+	if (looksBinary(chunk)) {
+		return { type: 'binary' }
+	}
+
+	return {
+		type: 'text',
+		content: Buffer.from(contentBuffer).toString('utf8'),
 	}
 }
 
@@ -353,6 +397,22 @@ function buildIgnoreContext(
 	return { ign, userIgnore, rootUri }
 }
 
+export function clearIgnoreContextCache(): void {
+	ignoreContextCache.clear()
+}
+
+function getIgnoreContextCacheKey(
+	rootUri: vscode.Uri,
+	excludedDirs: string[],
+	useGitignore: boolean,
+): string {
+	return JSON.stringify({
+		root: rootUri.toString(),
+		useGitignore,
+		excludedDirs,
+	})
+}
+
 function findWorkspaceFolderForUri(
 	uri: vscode.Uri,
 ): vscode.WorkspaceFolder | undefined {
@@ -378,8 +438,38 @@ async function createIgnoreContextForUri(
 		throw new Error('No workspace folder for URI')
 	}
 	const useGitignore = options?.useGitignore !== false
-	const lines = await loadIgnoreRulesForRoot(folder.uri.fsPath, useGitignore)
-	return buildIgnoreContext(folder.uri, excludedDirs, lines)
+	const cacheKey = getIgnoreContextCacheKey(
+		folder.uri,
+		excludedDirs,
+		useGitignore,
+	)
+	const cached = ignoreContextCache.get(cacheKey)
+	if (cached?.context && cached.expiresAt > Date.now()) {
+		return cached.context
+	}
+	if (cached?.pending) {
+		return cached.pending
+	}
+
+	const pending = loadIgnoreRulesForRoot(folder.uri.fsPath, useGitignore)
+		.then((lines) => buildIgnoreContext(folder.uri, excludedDirs, lines))
+		.then((context) => {
+			ignoreContextCache.set(cacheKey, {
+				expiresAt: Date.now() + IGNORE_CONTEXT_CACHE_TTL_MS,
+				context,
+			})
+			return context
+		})
+		.catch((error) => {
+			ignoreContextCache.delete(cacheKey)
+			throw error
+		})
+
+	ignoreContextCache.set(cacheKey, {
+		expiresAt: 0,
+		pending,
+	})
+	return pending
 }
 
 function shouldIgnorePath(
