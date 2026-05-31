@@ -48,12 +48,17 @@ export function formatTokenCount(count: number): string {
 	return `${(count / 1000).toFixed(1)}k`
 }
 
-// Helper function to recursively gather all descendant paths
+// Iteratively gather descendant paths (avoids deep recursion stack overflow)
 export const getAllDescendantPaths = (item: VscodeTreeItem): string[] => {
-	const paths = [item.value]
-	if (item.subItems) {
-		for (const sub of item.subItems) {
-			paths.push(...getAllDescendantPaths(sub))
+	const paths: string[] = []
+	const stack: VscodeTreeItem[] = [item]
+	while (stack.length > 0) {
+		const current = stack.pop()!
+		paths.push(current.value)
+		if (current.subItems) {
+			for (let i = current.subItems.length - 1; i >= 0; i--) {
+				stack.push(current.subItems[i]!)
+			}
 		}
 	}
 	return paths

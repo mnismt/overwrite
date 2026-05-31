@@ -7,7 +7,8 @@ interface TreeNodeProps {
 	item: VscodeTreeItem
 	depth: number
 	isFolder: boolean
-	isOpen?: boolean
+	isOpen: boolean
+	isLoadingChildren: boolean
 	totalDescendantFiles: number
 	selectedDescendantFiles: number
 	folderSelectionState: FolderSelectionState
@@ -24,7 +25,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 	item,
 	depth,
 	isFolder,
-	isOpen = depth === 0,
+	isOpen,
+	isLoadingChildren,
 	totalDescendantFiles,
 	selectedDescendantFiles,
 	folderSelectionState,
@@ -36,6 +38,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 	onDeselectAllInSubtree,
 	renderChildren,
 }) => {
+	const showChildren =
+		isFolder && isOpen && item.subItems !== undefined && !isLoadingChildren
+
 	return (
 		<vscode-tree-item
 			key={item.value}
@@ -49,6 +54,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 			<div className="flex items-center w-full">
 				<div className="flex items-center flex-1 min-w-0">
 					<span className="truncate">{item.label}</span>
+					{isLoadingChildren ? (
+						<span className="text-muted text-xs ml-2">Loading…</span>
+					) : null}
 				</div>
 				<div className="flex items-center gap-2">
 					<RowActions
@@ -69,7 +77,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 					fileTokenCount={fileTokenCount}
 				/>
 			</div>
-			{isFolder ? renderChildren(item.subItems || [], depth + 1) : null}
+			{showChildren ? renderChildren(item.subItems || [], depth + 1) : null}
 		</vscode-tree-item>
 	)
 }
@@ -79,13 +87,15 @@ function areEqual(prev: TreeNodeProps, next: TreeNodeProps): boolean {
 		prev.item.value === next.item.value &&
 		prev.isFolder === next.isFolder &&
 		prev.isOpen === next.isOpen &&
+		prev.isLoadingChildren === next.isLoadingChildren &&
 		prev.totalDescendantFiles === next.totalDescendantFiles &&
 		prev.selectedDescendantFiles === next.selectedDescendantFiles &&
 		prev.folderSelectionState === next.folderSelectionState &&
 		prev.folderTokenTotal === next.folderTokenTotal &&
 		prev.fileIsSelected === next.fileIsSelected &&
 		prev.fileTokenCount === next.fileTokenCount &&
-		prev.depth === next.depth
+		prev.depth === next.depth &&
+		prev.item.subItems === next.item.subItems
 	)
 }
 

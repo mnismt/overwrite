@@ -21,6 +21,9 @@ interface ContextTabProps {
 	onSelect: (uris: Set<string>) => void
 	onRefresh: (excludedFolders?: string) => void
 	isLoading: boolean
+	treeTruncated?: boolean
+	loadingFolderUris: Set<string>
+	onLoadChildren: (parentUri: string) => void
 }
 
 const ContextTab: React.FC<ContextTabProps> = ({
@@ -31,6 +34,9 @@ const ContextTab: React.FC<ContextTabProps> = ({
 	onSelect,
 	onRefresh,
 	isLoading,
+	treeTruncated,
+	loadingFolderUris,
+	onLoadChildren,
 }) => {
 	const [userInstructions, setUserInstructions] = useState('')
 	const [searchQuery, setSearchQuery] = useState('')
@@ -208,6 +214,9 @@ const ContextTab: React.FC<ContextTabProps> = ({
 						isLoading={isLoading}
 						searchQuery={searchQuery}
 						actualTokenCounts={actualTokenCounts}
+						treeTruncated={treeTruncated}
+						loadingFolderUris={loadingFolderUris}
+						onLoadChildren={onLoadChildren}
 					/>
 				</div>
 

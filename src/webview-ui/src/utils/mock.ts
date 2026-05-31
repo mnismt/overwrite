@@ -349,6 +349,65 @@ function buildMockFileTree(): VscodeTreeItem[] {
 	return tree
 }
 
+function isMockFolder(item: VscodeTreeItem): boolean {
+	return item.icons?.branch === 'folder'
+}
+
+function findItemByUri(
+	items: VscodeTreeItem[],
+	uri: string,
+): VscodeTreeItem | undefined {
+	for (const item of items) {
+		if (item.value === uri) return item
+		if (item.subItems) {
+			const found = findItemByUri(item.subItems, uri)
+			if (found) return found
+		}
+	}
+	return undefined
+}
+
+function buildMockShallowRoots(full: VscodeTreeItem[]): VscodeTreeItem[] {
+	return full.map((root) => ({
+		label: root.label,
+		value: root.value,
+		icons: root.icons,
+	}))
+}
+
+function toLazyChildren(
+	subItems: VscodeTreeItem[] | undefined,
+): VscodeTreeItem[] {
+	if (!subItems) return []
+	return subItems.map((item) => {
+		if (isMockFolder(item)) {
+			const { subItems: _nested, ...rest } = item
+			return rest
+		}
+		return { ...item }
+	})
+}
+
+function collectFileUrisUnder(root: VscodeTreeItem): string[] {
+	const uris: string[] = []
+	const walk = (items: VscodeTreeItem[] | undefined) => {
+		if (!items) return
+		for (const item of items) {
+			if (!isMockFolder(item)) {
+				uris.push(item.value)
+			} else {
+				walk(item.subItems)
+			}
+		}
+	}
+	if (isMockFolder(root)) {
+		walk(root.subItems)
+	} else {
+		uris.push(root.value)
+	}
+	return uris
+}
+
 function estimateTokensFromText(text: string): number {
 	return Math.ceil((text || '').length / 4)
 }
@@ -384,7 +443,44 @@ export function createMockVsCodeApi(): VsCodeApi {
 							readGitignore = (payload as { readGitignore?: boolean })
 								.readGitignore as boolean
 						}
-						sendToWebview({ command: 'updateFileTree', payload: fileTree })
+						sendToWebview({
+							command: 'updateFileTree',
+							payload: {
+								tree: buildMockShallowRoots(fileTree),
+								truncated: false,
+							},
+						})
+						break
+					}
+					case 'getDirectoryChildren': {
+						const parentUri =
+							isObject(payload) &&
+							typeof (payload as { parentUri?: string }).parentUri === 'string'
+								? (payload as { parentUri: string }).parentUri
+								: ''
+						const item = findItemByUri(fileTree, parentUri)
+						sendToWebview({
+							command: 'updateDirectoryChildren',
+							parentUri,
+							children: toLazyChildren(item?.subItems),
+							truncated: false,
+						})
+						break
+					}
+					case 'listFilesUnderUri': {
+						const p = payload as {
+							parentUri?: string
+							requestId?: string
+						}
+						const parentUri = p?.parentUri ?? ''
+						const requestId = p?.requestId ?? ''
+						const item = findItemByUri(fileTree, parentUri)
+						sendToWebview({
+							command: 'listFilesUnderUriResponse',
+							requestId,
+							uris: item ? collectFileUrisUnder(item) : [],
+							truncated: false,
+						})
 						break
 					}
 					case 'getSettings': {

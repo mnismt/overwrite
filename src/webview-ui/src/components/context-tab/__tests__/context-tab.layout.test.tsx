@@ -17,6 +17,8 @@ describe('ContextTab layout', () => {
 		onSelect: noop,
 		onRefresh: noop,
 		isLoading: false,
+		loadingFolderUris: new Set<string>(),
+		onLoadChildren: noop,
 	}
 
 	it('renders sticky footer with compact stats and dual copy buttons', () => {

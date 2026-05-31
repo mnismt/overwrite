@@ -20,6 +20,19 @@ export interface GetFileTreePayload {
 	readGitignore?: boolean // Whether to respect .gitignore when building the tree
 }
 
+export interface GetDirectoryChildrenPayload {
+	parentUri: string
+	excludedFolders?: string
+	readGitignore?: boolean
+}
+
+export interface ListFilesUnderUriPayload {
+	parentUri: string
+	requestId: string
+	excludedFolders?: string
+	readGitignore?: boolean
+}
+
 export interface SaveSettingsPayload {
 	excludedFolders: string
 	readGitignore: boolean
