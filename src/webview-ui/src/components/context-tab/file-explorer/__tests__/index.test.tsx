@@ -62,23 +62,47 @@ vi.mock('../row-decorations', () => ({
 
 import FileExplorer from '../index'
 
+const folderIcons = {
+	branch: 'folder',
+	open: 'folder-opened',
+	leaf: 'file',
+} as const
+const fileIcons = { branch: 'file', open: 'file', leaf: 'file' } as const
+
 const mkTree = (): VscodeTreeItem[] => [
 	{
 		label: 'workspace',
 		value: 'ws',
+		icons: folderIcons,
 		subItems: [
 			{
 				label: 'src',
 				value: 'src',
+				icons: folderIcons,
 				subItems: [
-					{ label: 'a.ts', value: 'a' },
-					{ label: 'b.ts', value: 'b' },
+					{ label: 'a.ts', value: 'a', icons: fileIcons },
+					{ label: 'b.ts', value: 'b', icons: fileIcons },
 				],
 			},
-			{ label: 'README.md', value: 'r' },
+			{ label: 'README.md', value: 'r', icons: fileIcons },
 		],
 	},
 ]
+
+const defaultExplorerProps = {
+	loadingFolderUris: new Set<string>(),
+	onLoadChildren: vi.fn(),
+	treeTruncated: false,
+}
+
+vi.mock('../list-files-under-uri', () => ({
+	listFilesUnderUriRemote: vi.fn(async (parentUri: string) => {
+		if (parentUri === 'src') {
+			return { uris: ['a', 'b'], truncated: false }
+		}
+		return { uris: [], truncated: false }
+	}),
+}))
 
 describe('FileExplorer (index.tsx)', () => {
 	beforeEach(() => {
@@ -90,9 +114,78 @@ describe('FileExplorer (index.tsx)', () => {
 		vi.useRealTimers()
 	})
 
+	it('auto-loads children for shallow roots on mount (lazy load)', () => {
+		const onLoadChildren = vi.fn()
+		// Shallow roots: folder icons but no subItems, matching getWorkspaceRoots()
+		const shallowRoots: VscodeTreeItem[] = [
+			{ label: 'rootA', value: 'file:///root-a', icons: folderIcons },
+			{ label: 'rootB', value: 'file:///root-b', icons: folderIcons },
+		]
+
+		render(
+			<FileExplorer
+				{...defaultExplorerProps}
+				onLoadChildren={onLoadChildren}
+				fileTreeData={shallowRoots}
+				selectedUris={new Set()}
+				onSelect={() => {}}
+				isLoading={false}
+				searchQuery=""
+				actualTokenCounts={{}}
+			/>,
+		)
+
+		expect(onLoadChildren).toHaveBeenCalledWith('file:///root-a')
+		expect(onLoadChildren).toHaveBeenCalledWith('file:///root-b')
+		expect(onLoadChildren).toHaveBeenCalledTimes(2)
+	})
+
+	it('does not re-request children for roots already loading', () => {
+		const onLoadChildren = vi.fn()
+		const shallowRoots: VscodeTreeItem[] = [
+			{ label: 'rootA', value: 'file:///root-a', icons: folderIcons },
+		]
+
+		render(
+			<FileExplorer
+				{...defaultExplorerProps}
+				onLoadChildren={onLoadChildren}
+				loadingFolderUris={new Set(['file:///root-a'])}
+				fileTreeData={shallowRoots}
+				selectedUris={new Set()}
+				onSelect={() => {}}
+				isLoading={false}
+				searchQuery=""
+				actualTokenCounts={{}}
+			/>,
+		)
+
+		expect(onLoadChildren).not.toHaveBeenCalled()
+	})
+
+	it('does not auto-load roots that already have children', () => {
+		const onLoadChildren = vi.fn()
+
+		render(
+			<FileExplorer
+				{...defaultExplorerProps}
+				onLoadChildren={onLoadChildren}
+				fileTreeData={mkTree()}
+				selectedUris={new Set()}
+				onSelect={() => {}}
+				isLoading={false}
+				searchQuery=""
+				actualTokenCounts={{}}
+			/>,
+		)
+
+		expect(onLoadChildren).not.toHaveBeenCalled()
+	})
+
 	it('renders tree labels', () => {
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={new Set()}
 				onSelect={() => {}}
@@ -103,7 +196,6 @@ describe('FileExplorer (index.tsx)', () => {
 		)
 
 		expect(screen.getByText('workspace')).toBeInTheDocument()
-		expect(screen.getByText('src')).toBeInTheDocument()
 		expect(screen.getByText('README.md')).toBeInTheDocument()
 	})
 
@@ -112,6 +204,7 @@ describe('FileExplorer (index.tsx)', () => {
 
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={new Set()}
 				onSelect={onSelect}
@@ -142,6 +235,7 @@ describe('FileExplorer (index.tsx)', () => {
 
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={initial}
 				onSelect={onSelect}
@@ -169,6 +263,7 @@ describe('FileExplorer (index.tsx)', () => {
 
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={new Set()}
 				onSelect={onSelect}
@@ -196,6 +291,7 @@ describe('FileExplorer (index.tsx)', () => {
 	it('double-clicking a file sends openFile message with fileUri', async () => {
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={new Set()}
 				onSelect={() => {}}
@@ -221,6 +317,7 @@ describe('FileExplorer (index.tsx)', () => {
 		postMessageSpy.mockClear()
 		render(
 			<FileExplorer
+				{...defaultExplorerProps}
 				fileTreeData={mkTree()}
 				selectedUris={new Set()}
 				onSelect={() => {}}

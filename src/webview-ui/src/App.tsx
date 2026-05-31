@@ -4,8 +4,39 @@ import type { VscodeTreeItem } from './types' // Import tree item type from loca
 import './App.css'
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
+import { mergeChildren } from './components/context-tab/file-explorer/tree-merge'
 import SettingsTab from './components/settings-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
+
+interface UpdateFileTreePayload {
+	tree: VscodeTreeItem[]
+	truncated?: boolean
+}
+
+interface UpdateDirectoryChildrenMessage {
+	command: 'updateDirectoryChildren'
+	parentUri: string
+	children: VscodeTreeItem[]
+	truncated?: boolean
+}
+
+function parseUpdateFileTreePayload(payload: unknown): {
+	tree: VscodeTreeItem[]
+	truncated: boolean
+} {
+	if (Array.isArray(payload)) {
+		return { tree: payload as VscodeTreeItem[], truncated: false }
+	}
+	if (
+		payload &&
+		typeof payload === 'object' &&
+		Array.isArray((payload as UpdateFileTreePayload).tree)
+	) {
+		const p = payload as UpdateFileTreePayload
+		return { tree: p.tree, truncated: Boolean(p.truncated) }
+	}
+	return { tree: [], truncated: false }
+}
 
 interface VsCodeMessage {
 	command: string
@@ -28,6 +59,10 @@ function App() {
 	const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set())
 	const [isLoading, setIsLoading] = useState<boolean>(true) // For loading indicator
 	const [, setErrorText] = useState<string | null>(null) // Graceful error banner
+	const [treeTruncated, setTreeTruncated] = useState(false)
+	const [loadingFolderUris, setLoadingFolderUris] = useState<Set<string>>(
+		() => new Set(),
+	)
 	const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
 	const [readGitignore, setReadGitignore] = useState<boolean>(true)
 
@@ -119,12 +154,32 @@ function App() {
 			const message = event.data
 
 			switch (message.command) {
-				case 'updateFileTree':
-					// TODO: Add type check for payload
-					if (Array.isArray(message.payload)) {
-						setFileTreeData(message.payload as VscodeTreeItem[])
-					}
+				case 'updateFileTree': {
+					const { tree, truncated } = parseUpdateFileTreePayload(
+						message.payload,
+					)
+					setFileTreeData(tree)
+					setTreeTruncated(truncated)
+					setLoadingFolderUris(new Set())
 					setIsLoading(false)
+					break
+				}
+				case 'updateDirectoryChildren': {
+					const msg = message as unknown as UpdateDirectoryChildrenMessage
+					if (msg.parentUri && Array.isArray(msg.children)) {
+						setFileTreeData((prev) =>
+							mergeChildren(prev, msg.parentUri, msg.children),
+						)
+						setLoadingFolderUris((prev) => {
+							const next = new Set(prev)
+							next.delete(msg.parentUri)
+							return next
+						})
+						if (msg.truncated) setTreeTruncated(true)
+					}
+					break
+				}
+				case 'listFilesUnderUriResponse':
 					break
 				case 'showError':
 					// Display error message in a dismissible banner
@@ -203,12 +258,21 @@ function App() {
 	const handleRefresh = useCallback(
 		(excludedFoldersArg?: string) => {
 			setIsLoading(true)
+			setTreeTruncated(false)
 			sendMessage('getFileTree', {
 				excludedFolders: excludedFoldersArg,
 				readGitignore,
 			})
 		},
 		[sendMessage, readGitignore],
+	)
+
+	const handleLoadChildren = useCallback(
+		(parentUri: string) => {
+			setLoadingFolderUris((prev) => new Set(prev).add(parentUri))
+			sendMessage('getDirectoryChildren', { parentUri })
+		},
+		[sendMessage],
 	)
 
 	// Save settings handler (excluded folders + readGitignore)
@@ -295,15 +359,16 @@ function App() {
 				</vscode-tab-header>
 				<vscode-tab-panel id="context-tab-panel">
 					<ContextTab
-						// Props for original Context functionality
-						selectedCount={selectedUris.size} // Use selectedUris
+						selectedCount={selectedUris.size}
 						onCopy={handleCopy}
-						// Props for Explorer functionality
 						fileTreeData={fileTreeData}
-						selectedUris={selectedUris} // Pass selectedUris
-						onSelect={handleSelect} // Pass the handler
+						selectedUris={selectedUris}
+						onSelect={handleSelect}
 						onRefresh={handleRefresh}
 						isLoading={isLoading}
+						treeTruncated={treeTruncated}
+						loadingFolderUris={loadingFolderUris}
+						onLoadChildren={handleLoadChildren}
 					/>
 				</vscode-tab-panel>
 

@@ -66,6 +66,7 @@ describe('TreeNode', () => {
 				depth={0}
 				isFolder
 				isOpen
+				isLoadingChildren={false}
 				totalDescendantFiles={1}
 				selectedDescendantFiles={0}
 				folderSelectionState="none"
@@ -88,6 +89,30 @@ describe('TreeNode', () => {
 		expect(onDeselectAll).toHaveBeenCalledTimes(1)
 	})
 
+	it('does not render children when folder is collapsed', () => {
+		render(
+			<TreeNode
+				item={folder}
+				depth={0}
+				isFolder
+				isOpen={false}
+				isLoadingChildren={false}
+				totalDescendantFiles={1}
+				selectedDescendantFiles={0}
+				folderSelectionState="none"
+				folderTokenTotal={0}
+				fileIsSelected={false}
+				fileTokenCount={0}
+				onToggleFile={() => {}}
+				onSelectAllInSubtree={() => {}}
+				onDeselectAllInSubtree={() => {}}
+				renderChildren={() => <span data-testid="child">child</span>}
+			/>,
+		)
+
+		expect(screen.queryByTestId('child')).not.toBeInTheDocument()
+	})
+
 	it('renders file label and exposes toggle to callback', () => {
 		const onToggleFile = vi.fn()
 
@@ -97,6 +122,7 @@ describe('TreeNode', () => {
 				depth={1}
 				isFolder={false}
 				isOpen
+				isLoadingChildren={false}
 				totalDescendantFiles={0}
 				selectedDescendantFiles={0}
 				folderSelectionState="none"

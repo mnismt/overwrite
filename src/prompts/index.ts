@@ -41,6 +41,87 @@ function filterSelectedTree(
 	return filterItems(items)
 }
 
+interface PathEntry {
+	fsPath: string
+	segments: string[]
+}
+
+/**
+ * Builds a file map from selected URIs without requiring a full workspace tree.
+ */
+export function generateFileMapFromSelections(
+	selectedUris: Set<string>,
+): string {
+	const folders = vscode.workspace.workspaceFolders ?? []
+	if (folders.length === 0 || selectedUris.size === 0) {
+		return ''
+	}
+
+	const entries: PathEntry[] = []
+
+	for (const uriString of selectedUris) {
+		const uri = vscode.Uri.parse(uriString)
+		let matchedRoot: vscode.WorkspaceFolder | undefined
+		let relative = ''
+
+		for (const folder of folders) {
+			const rootPath = folder.uri.fsPath
+			const filePath = uri.fsPath
+			if (filePath === rootPath) {
+				matchedRoot = folder
+				relative = ''
+				break
+			}
+			const prefix = `${rootPath}${path.sep}`
+			if (filePath.startsWith(prefix)) {
+				matchedRoot = folder
+				relative = filePath.slice(prefix.length)
+				break
+			}
+		}
+
+		if (!matchedRoot) continue
+
+		const segments = relative
+			? relative.split(path.sep).filter((s) => s.length > 0)
+			: []
+		entries.push({
+			fsPath: matchedRoot.uri.fsPath,
+			segments,
+		})
+	}
+
+	entries.sort((a, b) => {
+		const rootCmp = a.fsPath.localeCompare(b.fsPath)
+		if (rootCmp !== 0) return rootCmp
+		return a.segments.join('/').localeCompare(b.segments.join('/'))
+	})
+
+	const lines: string[] = []
+	let currentRoot = ''
+
+	for (const entry of entries) {
+		if (entry.fsPath !== currentRoot) {
+			if (currentRoot !== '') lines.push('')
+			lines.push(entry.fsPath)
+			currentRoot = entry.fsPath
+		}
+
+		let prefix = ''
+		for (let i = 0; i < entry.segments.length; i++) {
+			const isLast = i === entry.segments.length - 1
+			const connector = isLast ? '└── ' : '├── '
+			lines.push(prefix + connector + entry.segments[i]!)
+			prefix += isLast ? '    ' : '│   '
+		}
+	}
+
+	if (lines.length > 0 && lines[lines.length - 1] === '') {
+		lines.pop()
+	}
+	return lines.join('\n')
+}
+
 // --- Exported Functions ---
 
 /**

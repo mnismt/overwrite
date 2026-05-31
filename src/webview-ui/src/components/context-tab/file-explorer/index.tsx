@@ -11,10 +11,11 @@ import type { VscodeTreeItem } from '../../../types'
 import { getVsCodeApi } from '../../../utils/vscode'
 import { FileTreeSkeleton, LoadingOverlay } from '../../loading'
 import { filterTreeData, getAllDescendantPaths } from '../utils'
+import { listFilesUnderUriRemote } from './list-files-under-uri'
 import type { FolderSelectionState } from './row-decorations'
-import TreeNode from './tree-node'
-
 import { buildTreeIndex } from './tree-index'
+import { folderNeedsLoad, isFolderItem } from './tree-merge'
+import TreeNode from './tree-node'
 
 interface FileExplorerProps {
 	fileTreeData: VscodeTreeItem[]
@@ -23,6 +24,9 @@ interface FileExplorerProps {
 	isLoading: boolean
 	searchQuery: string
 	actualTokenCounts: Record<string, number>
+	treeTruncated?: boolean
+	loadingFolderUris: Set<string>
+	onLoadChildren: (parentUri: string) => void
 }
 
 type LoadingPhase = 'initial' | 'skeleton' | 'progressive' | 'complete'
@@ -34,20 +38,43 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	isLoading,
 	searchQuery,
 	actualTokenCounts,
+	treeTruncated = false,
+	loadingFolderUris,
+	onLoadChildren,
 }) => {
-	// Loading phase management
 	const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('initial')
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
+	const [expandedUris, setExpandedUris] = useState<Set<string>>(() => new Set())
 
-	// Defer heavy recalculations when selection/token counts change massively
 	const deferredSelectedUris = useDeferredValue(selectedUris)
 	const deferredTokenCounts = useDeferredValue(actualTokenCounts)
 
-	// Loading phase effects
+	useEffect(() => {
+		if (fileTreeData.length > 0 && expandedUris.size === 0) {
+			setExpandedUris(new Set(fileTreeData.map((r) => r.value)))
+		}
+	}, [fileTreeData, expandedUris.size])
+
+	// Roots arrive shallow (no subItems) from the lazy `getWorkspaceRoots` API and
+	// are seeded as expanded above, but expanding via state alone never fetches
+	// their children. Auto-load children for any root that is expanded yet unloaded
+	// so the initial render (and refresh, where root URIs persist in expandedUris)
+	// populates without the user having to collapse and re-expand each root.
+	useEffect(() => {
+		for (const root of fileTreeData) {
+			if (
+				expandedUris.has(root.value) &&
+				folderNeedsLoad(root) &&
+				!loadingFolderUris.has(root.value)
+			) {
+				onLoadChildren(root.value)
+			}
+		}
+	}, [fileTreeData, expandedUris, loadingFolderUris, onLoadChildren])
+
 	useEffect(() => {
 		if (isLoading) {
-			// If we have existing data, this is a refresh
 			if (fileTreeData.length > 0) {
 				setIsRefreshing(true)
 				setLoadingPhase('initial')
@@ -56,7 +83,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				setLoadingPhase('skeleton')
 			}
 		} else {
-			// Data has loaded
 			if (fileTreeData.length > 0) {
 				setLoadingPhase('progressive')
 				setTimeout(() => {
@@ -70,23 +96,54 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		}
 	}, [isLoading, fileTreeData.length])
 
-	// Filtered items based on search
 	const visibleItems = useMemo(() => {
 		return searchQuery
 			? filterTreeData(fileTreeData, searchQuery)
 			: fileTreeData
 	}, [fileTreeData, searchQuery])
 
-	// Build index for current visible tree
 	const index = useMemo(() => buildTreeIndex(visibleItems), [visibleItems])
 
-	// Stable refs to avoid function identity changes and stale closures
 	const selectedUrisRef = useRef(selectedUris)
 	const indexRef = useRef(index)
+	const fileTreeRef = useRef(fileTreeData)
 	selectedUrisRef.current = selectedUris
 	indexRef.current = index
+	fileTreeRef.current = fileTreeData
 
-	// Derived per-node metrics based on selection + tokens (single post-order pass)
+	const findItemByUri = useCallback(
+		(items: VscodeTreeItem[], uri: string): VscodeTreeItem | undefined => {
+			for (const item of items) {
+				if (item.value === uri) return item
+				if (item.subItems) {
+					const found = findItemByUri(item.subItems, uri)
+					if (found) return found
+				}
+			}
+			return undefined
+		},
+		[],
+	)
+
+	const toggleFolderExpanded = useCallback(
+		(uri: string) => {
+			setExpandedUris((prev) => {
+				const next = new Set(prev)
+				if (next.has(uri)) {
+					next.delete(uri)
+				} else {
+					next.add(uri)
+					const item = findItemByUri(fileTreeRef.current, uri)
+					if (item && folderNeedsLoad(item)) {
+						onLoadChildren(uri)
+					}
+				}
+				return next
+			})
+		},
+		[findItemByUri, onLoadChildren],
+	)
+
 	const { selectedCountMap, tokenTotalsMap } = useMemo(() => {
 		const selectedCountMap = new Map<string, number>()
 		const tokenTotalsMap = new Map<string, number>()
@@ -110,7 +167,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		return { selectedCountMap, tokenTotalsMap }
 	}, [index, deferredSelectedUris, deferredTokenCounts])
 
-	// Selection helpers
 	const toggleFile = useCallback(
 		(uri: string) => {
 			const next = new Set(selectedUrisRef.current)
@@ -123,13 +179,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
 	const selectAllInSubtree = useCallback(
 		(uri: string) => {
-			const node = indexRef.current.nodes.get(uri)
-			if (!node) return
-			// Yield to the browser, then perform heavy traversal in a task
-			setTimeout(() => {
-				const next = new Set(selectedUrisRef.current)
-				for (const u of getAllDescendantPaths(node.item)) next.add(u)
-				startTransition(() => onSelect(next))
+			setTimeout(async () => {
+				try {
+					const { uris } = await listFilesUnderUriRemote(uri)
+					const next = new Set(selectedUrisRef.current)
+					next.add(uri)
+					for (const u of uris) next.add(u)
+					startTransition(() => onSelect(next))
+				} catch (err) {
+					console.error('selectAllInSubtree failed:', err)
+					const node = indexRef.current.nodes.get(uri)
+					if (!node) return
+					const next = new Set(selectedUrisRef.current)
+					for (const u of getAllDescendantPaths(node.item)) next.add(u)
+					startTransition(() => onSelect(next))
+				}
 			}, 0)
 		},
 		[onSelect],
@@ -137,12 +201,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
 	const deselectAllInSubtree = useCallback(
 		(uri: string) => {
-			const node = indexRef.current.nodes.get(uri)
-			if (!node) return
-			setTimeout(() => {
-				const next = new Set(selectedUrisRef.current)
-				for (const u of getAllDescendantPaths(node.item)) next.delete(u)
-				startTransition(() => onSelect(next))
+			setTimeout(async () => {
+				try {
+					const { uris } = await listFilesUnderUriRemote(uri)
+					const next = new Set(selectedUrisRef.current)
+					next.delete(uri)
+					for (const u of uris) next.delete(u)
+					const node = indexRef.current.nodes.get(uri)
+					if (node) {
+						for (const u of getAllDescendantPaths(node.item)) next.delete(u)
+					}
+					startTransition(() => onSelect(next))
+				} catch {
+					const node = indexRef.current.nodes.get(uri)
+					if (!node) return
+					const next = new Set(selectedUrisRef.current)
+					for (const u of getAllDescendantPaths(node.item)) next.delete(u)
+					startTransition(() => onSelect(next))
+				}
 			}, 0)
 		},
 		[onSelect],
@@ -163,8 +239,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		items: VscodeTreeItem[],
 		depth = 0,
 	): React.ReactNode[] => {
-		return items.map((item, _itemIndex) => {
-			const isFolder = !!(item.subItems && item.subItems.length > 0)
+		return items.map((item) => {
+			const isFolder = isFolderItem(item)
 			const totalDescFiles = index.descendantFileCount.get(item.value) || 0
 			const selectedDescFiles = selectedCountMap.get(item.value) || 0
 			const folderState = isFolder
@@ -173,7 +249,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			const folderTokens = isFolder ? tokenTotalsMap.get(item.value) || 0 : 0
 			const fileSelected = !isFolder && deferredSelectedUris.has(item.value)
 			const fileTokens = !isFolder ? deferredTokenCounts[item.value] || 0 : 0
-			const isOpen = item.open ?? depth === 0
+			const isOpen = expandedUris.has(item.value)
 
 			return (
 				<TreeNode
@@ -182,6 +258,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					depth={depth}
 					isFolder={isFolder}
 					isOpen={isOpen}
+					isLoadingChildren={loadingFolderUris.has(item.value)}
 					totalDescendantFiles={totalDescFiles}
 					selectedDescendantFiles={selectedDescFiles}
 					folderSelectionState={folderState}
@@ -197,7 +274,27 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		})
 	}
 
-	// Handle actual double-clicks to open files in VS Code
+	const handleTreeClick = useCallback(
+		(e: React.MouseEvent) => {
+			const target = e.target as HTMLElement | null
+			if (!target) return
+			if (target.closest('button')) return
+
+			const itemEl = target.closest(
+				'vscode-tree-item[data-uri]',
+			) as HTMLElement | null
+			if (!itemEl) return
+			const uri = itemEl.getAttribute('data-uri')
+			if (!uri) return
+
+			const item = findItemByUri(fileTreeRef.current, uri)
+			if (!item || !isFolderItem(item)) return
+
+			toggleFolderExpanded(uri)
+		},
+		[findItemByUri, toggleFolderExpanded],
+	)
+
 	const handleTreeDoubleClick = useCallback((e: React.MouseEvent) => {
 		const target = e.target as HTMLElement | null
 		if (!target) return
@@ -205,14 +302,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		if (!itemEl) return
 		const uri = itemEl.getAttribute('data-uri')
 		if (!uri) return
-		// Only open if this is a file (not a folder)
 		const node = indexRef.current.nodes.get(uri)
 		if (!node || node.isFolder) return
 		const vscode = getVsCodeApi()
 		vscode.postMessage({ command: 'openFile', payload: { fileUri: uri } })
 	}, [])
 
-	// Determine what content to show based on loading phase
 	const renderContent = () => {
 		switch (loadingPhase) {
 			case 'initial':
@@ -231,7 +326,19 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					<div
 						className={`tree-container ${loadingPhase === 'complete' ? 'loaded' : 'loading'}`}
 					>
+						{treeTruncated ? (
+							<p className="text-warn-border bg-warn-bg text-xs px-2 py-1 mb-1 rounded border border-warn-border">
+								File tree was truncated due to size limits. Expand folders to
+								load more, or add exclusions in Settings.
+							</p>
+						) : null}
+						{searchQuery ? (
+							<p className="text-muted text-xs px-2 mb-1">
+								Search only includes expanded and loaded folders.
+							</p>
+						) : null}
 						<vscode-tree
+							onClick={handleTreeClick}
 							onDoubleClick={handleTreeDoubleClick}
 							expand-mode="singleClick"
 							indent-guides
@@ -254,7 +361,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 		<div className="flex-1 overflow-auto mb-2 relative">
 			{renderContent()}
 
-			{/* Refresh overlay - shows when refreshing existing data */}
 			<LoadingOverlay
 				isVisible={isRefreshing && loadingPhase === 'initial'}
 				message="Refreshing files..."

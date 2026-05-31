@@ -19,12 +19,14 @@ export function buildTreeIndex(items: VscodeTreeItem[]): TreeIndex {
 
 	const visit = (item: VscodeTreeItem): number => {
 		const uri = item.value
-		const isFolder = !!(item.subItems && item.subItems.length > 0)
+		const isFolder = item.icons?.branch === 'folder'
 		const children = item.subItems?.map((c) => c.value) ?? []
 		nodes.set(uri, { children, isFolder, item })
 		let fileCount = 0
 		if (isFolder) {
-			for (const child of item.subItems!) {
+			// subItems is undefined for lazily-loaded folders that haven't been
+			// expanded yet; treat as an empty (0-file) subtree until children load.
+			for (const child of item.subItems ?? []) {
 				fileCount += visit(child)
 			}
 		} else {

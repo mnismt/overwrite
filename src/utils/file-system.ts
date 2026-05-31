@@ -1,14 +1,20 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
-import * as path from 'node:path' // Still needed for path.relative and path.join for ignore patterns
+import * as path from 'node:path'
+import { promisify } from 'node:util'
 import ignore from 'ignore'
 import * as vscode from 'vscode'
 import type { VscodeTreeItem } from '../types'
 
+const execFileAsync = promisify(execFile)
+
+export const MAX_TREE_DEPTH = 12
+export const MAX_TREE_NODES = 25_000
+export const MAX_LIST_FILES = 10_000
+
 // Comprehensive list of binary file extensions
 const BINARY_EXTENSIONS = new Set([
-	// Images
 	'.jpg',
 	'.jpeg',
 	'.png',
@@ -21,7 +27,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.ico',
 	'.heic',
 	'.avif',
-	// Videos
 	'.mp4',
 	'.avi',
 	'.mov',
@@ -32,7 +37,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.m4v',
 	'.3gp',
 	'.ogv',
-	// Audio
 	'.mp3',
 	'.wav',
 	'.flac',
@@ -42,7 +46,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.m4a',
 	'.opus',
 	'.oga',
-	// Archives
 	'.zip',
 	'.rar',
 	'.7z',
@@ -54,7 +57,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.cab',
 	'.dmg',
 	'.iso',
-	// Executables
 	'.exe',
 	'.dll',
 	'.so',
@@ -64,7 +66,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.rpm',
 	'.msi',
 	'.pkg',
-	// Documents
 	'.pdf',
 	'.doc',
 	'.docx',
@@ -75,13 +76,11 @@ const BINARY_EXTENSIONS = new Set([
 	'.odt',
 	'.ods',
 	'.odp',
-	// Fonts
 	'.ttf',
 	'.otf',
 	'.woff',
 	'.woff2',
 	'.eot',
-	// Other binary formats
 	'.bin',
 	'.dat',
 	'.db',
@@ -93,7 +92,6 @@ const BINARY_EXTENSIONS = new Set([
 	'.obj',
 ])
 
-// Magic number signatures for common binary formats
 const MAGIC_NUMBERS = [
 	{ signature: [0xff, 0xd8, 0xff], format: 'JPEG' },
 	{ signature: [0x89, 0x50, 0x4e, 0x47], format: 'PNG' },
@@ -105,6 +103,74 @@ const MAGIC_NUMBERS = [
 	{ signature: [0x4d, 0x5a], format: 'PE/EXE' },
 	{ signature: [0xca, 0xfe, 0xba, 0xbe], format: 'Mach-O' },
 ]
+
+const FOLDER_ICONS = {
+	branch: 'folder',
+	leaf: 'file',
+	open: 'folder-opened',
+}
+
+const FILE_ICONS = {
+	branch: 'file',
+	leaf: 'file',
+	open: 'file',
+}
+
+export interface FileTreeOptions {
+	useGitignore?: boolean
+	signal?: AbortSignal
+}
+
+export interface FileTreeResult {
+	roots: VscodeTreeItem[]
+	truncated: boolean
+}
+
+interface IgnoreContext {
+	ign: ignore.Ignore
+	userIgnore: ignore.Ignore
+	rootUri: vscode.Uri
+}
+
+interface ScanBudget {
+	nodesVisited: number
+	truncated: boolean
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+	if (signal?.aborted) {
+		const err = new Error('Aborted')
+		err.name = 'AbortError'
+		throw err
+	}
+}
+
+function checkBudget(
+	budget: ScanBudget,
+	signal?: AbortSignal,
+	depth?: number,
+): boolean {
+	throwIfAborted(signal)
+	if (budget.truncated) return false
+	if (depth !== undefined && depth > MAX_TREE_DEPTH) {
+		budget.truncated = true
+		return false
+	}
+	if (budget.nodesVisited >= MAX_TREE_NODES) {
+		budget.truncated = true
+		return false
+	}
+	return true
+}
+
+function bumpBudget(budget: ScanBudget): boolean {
+	budget.nodesVisited++
+	if (budget.nodesVisited >= MAX_TREE_NODES) {
+		budget.truncated = true
+		return false
+	}
+	return true
+}
 
 function checkMagicNumbers(chunk: Uint8Array): boolean {
 	for (const { signature } of MAGIC_NUMBERS) {
@@ -129,26 +195,19 @@ function analyzeByteContent(chunk: Uint8Array): boolean {
 	let nullByteCount = 0
 
 	for (const byte of chunk) {
-		// Count null bytes
 		if (byte === 0) {
 			nullByteCount++
-		}
-		// Count non-printable characters (excluding common whitespace)
-		else if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+		} else if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
 			nonPrintableCount++
-		}
-		// Very high bytes that are uncommon in text
-		else if (byte > 126) {
+		} else if (byte > 126) {
 			nonPrintableCount++
 		}
 	}
 
-	// If more than 1% null bytes, likely binary
 	if (nullByteCount > chunk.length * 0.01) {
 		return true
 	}
 
-	// If more than 30% non-printable characters, likely binary
 	if (nonPrintableCount > chunk.length * 0.3) {
 		return true
 	}
@@ -157,18 +216,12 @@ function analyzeByteContent(chunk: Uint8Array): boolean {
 }
 
 export function looksBinary(chunk: Uint8Array): boolean {
-	// First check magic numbers (most reliable)
 	if (checkMagicNumbers(chunk)) {
 		return true
 	}
-
-	// Then analyze byte content
 	return analyzeByteContent(chunk)
 }
 
-/**
- * Checks if a file is binary using extension-based detection first, then content analysis
- */
 export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 	try {
 		const stats = await vscode.workspace.fs.stat(uri)
@@ -176,57 +229,36 @@ export async function isBinaryFile(uri: vscode.Uri): Promise<boolean> {
 			return false
 		}
 
-		// First, check if the file extension indicates a binary file (fastest method)
 		const fileName = uri.path.toLowerCase()
 		const extension = fileName.substring(fileName.lastIndexOf('.'))
 		if (BINARY_EXTENSIONS.has(extension)) {
 			return true
 		}
 
-		// If extension is unknown, read first 8KB to check for binary content
 		const content = await vscode.workspace.fs.readFile(uri)
 		const chunk = content.slice(0, 8000)
 		return looksBinary(chunk)
 	} catch {
-		// If we can't read the file, assume it's not binary
 		return false
 	}
 }
 
-// Define icons for files and folders (can be customized further)
-const FOLDER_ICONS = {
-	branch: 'folder', // Codicon for closed folder
-	leaf: 'file', // Codicon for file
-	open: 'folder-opened', // Codicon for opened folder
-}
-
-const FILE_ICONS = {
-	branch: 'file', // Placeholder, not typically used for files by tree components
-	leaf: 'file', // Codicon for file
-	open: 'file', // Placeholder, not typically used for files by tree components
-}
-
-// Expand common shell-style tokens in paths from git config (e.g., '~/.config/git/ignore').
 function resolveExcludesPath(input: string): string {
 	let p = input.trim()
 	if (p.startsWith('~')) {
 		p = path.join(os.homedir(), p.slice(1))
 	}
-	// Expand $HOME or $USERPROFILE
 	p = p.replace(/\$(HOME|USERPROFILE)/g, (_m, name) => {
 		const env = process.env[String(name)]
 		return env ? env : _m
 	})
-	// Expand Windows-style %VAR%
 	p = p.replace(/%([^%]+)%/g, (_m, name) => {
 		const env = process.env[name]
 		return env ? env : _m
 	})
-	// Remove surrounding quotes if present without tricky escaping
 	if (p.length >= 2) {
 		const first = p.charCodeAt(0)
 		const last = p.charCodeAt(p.length - 1)
-		// 34 = '"', 39 = '\''
 		if ((first === 34 && last === 34) || (first === 39 && last === 39)) {
 			p = p.slice(1, -1)
 		}
@@ -234,81 +266,245 @@ function resolveExcludesPath(input: string): string {
 	return path.resolve(p)
 }
 
-/**
- * Recursively reads a directory using vscode.workspace.fs and builds a tree structure.
- * @param currentUri The URI of the directory to read.
- * @param rootUri The URI of the workspace root for this directory (for .gitignore path relativity).
- * @param excludedDirs An array of additional directory patterns to exclude (like .gitignore patterns).
- * @param ign The ignore object from the 'ignore' package for .gitignore rules.
- * @param userIgnore The ignore object from the 'ignore' package for user-defined excluded patterns.
- * @returns A promise that resolves to an array of VscodeTreeItem objects.
- */
-async function readDirectoryRecursiveForRoot(
-	currentUri: vscode.Uri,
+/** Loads gitignore-related rules for a workspace root (async). */
+export async function loadIgnoreRulesForRoot(
+	rootFsPath: string,
+	useGitignore: boolean,
+): Promise<string[]> {
+	const allIgnoreLines: string[] = []
+
+	if (!useGitignore) {
+		return allIgnoreLines
+	}
+
+	const gitignorePath = path.join(rootFsPath, '.gitignore')
+	try {
+		const bytes = await vscode.workspace.fs.readFile(
+			vscode.Uri.file(gitignorePath),
+		)
+		const content = Buffer.from(bytes).toString('utf8')
+		allIgnoreLines.push(...content.split(/\r?\n/))
+	} catch {
+		// No .gitignore at repo root
+	}
+
+	const repoExcludePath = path.join(rootFsPath, '.git', 'info', 'exclude')
+	try {
+		const content = await fs.promises.readFile(repoExcludePath, 'utf8')
+		allIgnoreLines.push(...content.split(/\r?\n/))
+	} catch {
+		// Not present
+	}
+
+	try {
+		const { stdout } = await execFileAsync(
+			'git',
+			['config', '--get', 'core.excludesFile'],
+			{
+				cwd: rootFsPath,
+				encoding: 'utf8',
+				maxBuffer: 1024 * 1024,
+			},
+		)
+		const excludesPath = stdout.trim()
+		if (excludesPath) {
+			const resolved = resolveExcludesPath(excludesPath)
+			try {
+				await fs.promises.access(resolved)
+				const content = await fs.promises.readFile(resolved, 'utf8')
+				allIgnoreLines.push(...content.split(/\r?\n/))
+			} catch {
+				// unreadable
+			}
+		}
+	} catch {
+		const candidates = [
+			path.join(os.homedir(), '.config', 'git', 'ignore'),
+			path.join(os.homedir(), '.gitignore_global'),
+			path.join(os.homedir(), '.gitignore'),
+		]
+		for (const p of candidates) {
+			try {
+				await fs.promises.access(p)
+				const content = await fs.promises.readFile(p, 'utf8')
+				allIgnoreLines.push(...content.split(/\r?\n/))
+				break
+			} catch {
+				// try next
+			}
+		}
+	}
+
+	return allIgnoreLines
+}
+
+function buildIgnoreContext(
 	rootUri: vscode.Uri,
 	excludedDirs: string[],
-	ign: ignore.Ignore,
-	userIgnore: ignore.Ignore,
+	allIgnoreLines: string[],
+): IgnoreContext {
+	let ign = ignore()
+	if (allIgnoreLines.length > 0) {
+		ign = ignore().add(allIgnoreLines)
+	}
+	ign.add(['.git', '.hg', '.svn'])
+
+	const userIgnore = ignore().add(excludedDirs)
+	return { ign, userIgnore, rootUri }
+}
+
+function findWorkspaceFolderForUri(
+	uri: vscode.Uri,
+): vscode.WorkspaceFolder | undefined {
+	const folders = vscode.workspace.workspaceFolders
+	if (!folders) return undefined
+	for (const folder of folders) {
+		const root = folder.uri.fsPath
+		const target = uri.fsPath
+		if (target === root || target.startsWith(`${root}${path.sep}`)) {
+			return folder
+		}
+	}
+	return folders[0]
+}
+
+async function createIgnoreContextForUri(
+	uri: vscode.Uri,
+	excludedDirs: string[],
+	options?: FileTreeOptions,
+): Promise<IgnoreContext> {
+	const folder = findWorkspaceFolderForUri(uri)
+	if (!folder) {
+		throw new Error('No workspace folder for URI')
+	}
+	const useGitignore = options?.useGitignore !== false
+	const lines = await loadIgnoreRulesForRoot(folder.uri.fsPath, useGitignore)
+	return buildIgnoreContext(folder.uri, excludedDirs, lines)
+}
+
+function shouldIgnorePath(
+	relativePathForIgnore: string,
+	ctx: IgnoreContext,
+): boolean {
+	return (
+		ctx.ign.ignores(relativePathForIgnore) ||
+		ctx.userIgnore.ignores(relativePathForIgnore)
+	)
+}
+
+function sortEntries(
+	entries: [string, vscode.FileType][],
+): [string, vscode.FileType][] {
+	return entries.sort((a, b) => {
+		if (
+			a[1] === vscode.FileType.Directory &&
+			b[1] !== vscode.FileType.Directory
+		)
+			return -1
+		if (
+			a[1] !== vscode.FileType.Directory &&
+			b[1] === vscode.FileType.Directory
+		)
+			return 1
+		return a[0].localeCompare(b[0])
+	})
+}
+
+/**
+ * Shallow workspace roots (one node per workspace folder, no children loaded).
+ */
+export async function getWorkspaceRoots(
+	_excludedDirs: string[],
+	_options?: FileTreeOptions,
+): Promise<FileTreeResult> {
+	const workspaceFolders = vscode.workspace.workspaceFolders
+	if (!workspaceFolders || workspaceFolders.length === 0) {
+		vscode.window.showInformationMessage('No workspace folder open.')
+		return { roots: [], truncated: false }
+	}
+
+	const roots: VscodeTreeItem[] = []
+	for (const folder of workspaceFolders) {
+		roots.push({
+			label: folder.name,
+			value: folder.uri.toString(),
+			icons: FOLDER_ICONS,
+		})
+	}
+	return { roots, truncated: false }
+}
+
+/**
+ * Reads one directory level for lazy tree expansion.
+ */
+export async function getDirectoryChildren(
+	parentUriString: string,
+	excludedDirs: string[],
+	options?: FileTreeOptions,
+): Promise<FileTreeResult> {
+	const signal = options?.signal
+	throwIfAborted(signal)
+
+	const parentUri = vscode.Uri.parse(parentUriString)
+	const ctx = await createIgnoreContextForUri(parentUri, excludedDirs, options)
+	const budget: ScanBudget = { nodesVisited: 0, truncated: false }
+
+	const children = await readDirectoryOneLevel(
+		parentUri,
+		ctx,
+		budget,
+		signal,
+		true,
+	)
+	return { roots: children, truncated: budget.truncated }
+}
+
+async function readDirectoryOneLevel(
+	currentUri: vscode.Uri,
+	ctx: IgnoreContext,
+	budget: ScanBudget,
+	signal?: AbortSignal,
+	lazyFolders = false,
 ): Promise<VscodeTreeItem[]> {
 	const items: VscodeTreeItem[] = []
 
+	if (!checkBudget(budget, signal)) {
+		return items
+	}
+
 	try {
-		const entries = await vscode.workspace.fs.readDirectory(currentUri)
+		const entries = sortEntries(
+			await vscode.workspace.fs.readDirectory(currentUri),
+		)
 
-		// Sort entries: directories first, then alphabetically by name
-		const sortedEntries = entries.sort((a, b) => {
-			if (
-				a[1] === vscode.FileType.Directory &&
-				b[1] !== vscode.FileType.Directory
-			)
-				return -1
-			if (
-				a[1] !== vscode.FileType.Directory &&
-				b[1] === vscode.FileType.Directory
-			)
-				return 1
-			return a[0].localeCompare(b[0])
-		})
+		for (const [name, type] of entries) {
+			if (!checkBudget(budget, signal)) break
 
-		for (const [name, type] of sortedEntries) {
 			const entryUri = vscode.Uri.joinPath(currentUri, name)
 			const relativePathForIgnore = path.relative(
-				rootUri.fsPath,
+				ctx.rootUri.fsPath,
 				entryUri.fsPath,
 			)
 
-			// Check .gitignore
-			if (ign.ignores(relativePathForIgnore)) {
+			if (shouldIgnorePath(relativePathForIgnore, ctx)) {
 				continue
 			}
 
-			// Check user-defined excluded patterns
-			if (userIgnore.ignores(relativePathForIgnore)) {
-				continue
-			}
+			if (!bumpBudget(budget)) break
 
 			const item: VscodeTreeItem = {
 				label: name,
-				value: entryUri.toString(), // Use full URI string as the value
-				// icons: type === vscode.FileType.Directory ? FOLDER_ICONS : { leaf: 'file' }, // Simplified, vscode-tree might handle this
+				value: entryUri.toString(),
 			}
 
 			if (type === vscode.FileType.Directory) {
-				item.icons = FOLDER_ICONS // Apply folder icons
-				const subItems = await readDirectoryRecursiveForRoot(
-					entryUri,
-					rootUri,
-					excludedDirs,
-					ign,
-					userIgnore,
-				)
-				if (subItems.length > 0) {
-					item.subItems = subItems
+				item.icons = FOLDER_ICONS
+				if (!lazyFolders) {
+					// subItems filled by recursive reader
 				}
 			} else if (type === vscode.FileType.File) {
-				item.icons = FILE_ICONS // Apply file icon
+				item.icons = FILE_ICONS
 			}
-			// Symlinks and Unknown types are currently ignored but could be handled
 
 			items.push(item)
 		}
@@ -317,135 +513,203 @@ async function readDirectoryRecursiveForRoot(
 		console.error(
 			`Error reading directory ${currentUri.fsPath}: ${errorMessage}`,
 		)
-		// Optionally, inform the user if a specific directory is unreadable
-		// vscode.window.showWarningMessage(`Could not read directory: ${currentUri.fsPath}`);
+	}
+
+	return items
+}
+
+async function readDirectoryRecursiveForRoot(
+	currentUri: vscode.Uri,
+	rootUri: vscode.Uri,
+	ctx: IgnoreContext,
+	budget: ScanBudget,
+	depth: number,
+	signal?: AbortSignal,
+): Promise<VscodeTreeItem[]> {
+	const items: VscodeTreeItem[] = []
+
+	if (!checkBudget(budget, signal, depth)) {
+		return items
+	}
+
+	try {
+		const entries = sortEntries(
+			await vscode.workspace.fs.readDirectory(currentUri),
+		)
+
+		for (const [name, type] of entries) {
+			if (!checkBudget(budget, signal, depth)) break
+
+			const entryUri = vscode.Uri.joinPath(currentUri, name)
+			const relativePathForIgnore = path.relative(
+				rootUri.fsPath,
+				entryUri.fsPath,
+			)
+
+			if (shouldIgnorePath(relativePathForIgnore, ctx)) {
+				continue
+			}
+
+			if (!bumpBudget(budget)) break
+
+			const item: VscodeTreeItem = {
+				label: name,
+				value: entryUri.toString(),
+			}
+
+			if (type === vscode.FileType.Directory) {
+				item.icons = FOLDER_ICONS
+				const subItems = await readDirectoryRecursiveForRoot(
+					entryUri,
+					rootUri,
+					ctx,
+					budget,
+					depth + 1,
+					signal,
+				)
+				if (subItems.length > 0) {
+					item.subItems = subItems
+				}
+			} else if (type === vscode.FileType.File) {
+				item.icons = FILE_ICONS
+			}
+
+			items.push(item)
+		}
+	} catch (error: unknown) {
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		console.error(
+			`Error reading directory ${currentUri.fsPath}: ${errorMessage}`,
+		)
 	}
 
 	return items
 }
 
 /**
- * Gets the file tree structure for all workspace folders, respecting .gitignore for each.
- * @param excludedDirs An array of additional directory names to exclude globally.
- * @returns A promise that resolves to an array of VscodeTreeItem objects, where each top-level item is a workspace root.
+ * Full recursive tree (capped). Used by tests and legacy paths.
  */
 export async function getWorkspaceFileTree(
 	excludedDirs: string[],
-	options?: { useGitignore?: boolean },
-): Promise<VscodeTreeItem[]> {
+	options?: FileTreeOptions,
+): Promise<FileTreeResult> {
 	const workspaceFolders = vscode.workspace.workspaceFolders
 	if (!workspaceFolders || workspaceFolders.length === 0) {
 		vscode.window.showInformationMessage('No workspace folder open.')
-		return []
+		return { roots: [], truncated: false }
 	}
 
-	const allRootItems: VscodeTreeItem[] = []
-
+	const signal = options?.signal
 	const useGitignore = options?.useGitignore !== false
+	const allRootItems: VscodeTreeItem[] = []
+	const budget: ScanBudget = { nodesVisited: 0, truncated: false }
 
 	for (const folder of workspaceFolders) {
+		throwIfAborted(signal)
+		if (!checkBudget(budget, signal)) break
+
 		const rootUri = folder.uri
-		const rootFsPath = rootUri.fsPath
-
-		// Build a comprehensive ignore rule set similar to Git's behavior:
-		// - project .gitignore
-		// - .git/info/exclude
-		// - user's global excludes file (core.excludesFile), if available
-		// The logic is best-effort and silently skips files that aren't present.
-		const allIgnoreLines: string[] = []
-
-		if (useGitignore) {
-			// 1) Project .gitignore (root)
-			const gitignorePath = path.join(rootFsPath, '.gitignore')
-			try {
-				const bytes = await vscode.workspace.fs.readFile(
-					vscode.Uri.file(gitignorePath),
-				)
-				const content = Buffer.from(bytes).toString('utf8')
-				allIgnoreLines.push(...content.split(/\r?\n/))
-			} catch {
-				// No .gitignore at repo root; ignore quietly
-			}
-
-			// 2) Repo-specific excludes: .git/info/exclude
-			const repoExcludePath = path.join(rootFsPath, '.git', 'info', 'exclude')
-			try {
-				const content = fs.readFileSync(repoExcludePath, 'utf8')
-				allIgnoreLines.push(...content.split(/\r?\n/))
-			} catch {
-				// Not present or unreadable; ignore quietly
-			}
-
-			// 3) Global excludes file as configured in Git (core.excludesFile)
-			// Attempt to query Git for the actual path; if not available, try common defaults.
-			try {
-				const excludesPath = execFileSync(
-					'git',
-					['config', '--get', 'core.excludesFile'],
-					{
-						cwd: rootFsPath,
-						encoding: 'utf8',
-						stdio: ['ignore', 'pipe', 'ignore'],
-					},
-				).trim()
-				if (excludesPath) {
-					const resolved = resolveExcludesPath(excludesPath)
-					if (resolved && fs.existsSync(resolved)) {
-						const content = fs.readFileSync(resolved, 'utf8')
-						allIgnoreLines.push(...content.split(/\r?\n/))
-					}
-				}
-			} catch {
-				// Git not available or no core.excludesFile set; try common fallbacks
-				const candidates = [
-					path.join(os.homedir(), '.config', 'git', 'ignore'),
-					path.join(os.homedir(), '.gitignore_global'),
-					path.join(os.homedir(), '.gitignore'),
-				]
-				for (const p of candidates) {
-					try {
-						if (fs.existsSync(p)) {
-							const content = fs.readFileSync(p, 'utf8')
-							allIgnoreLines.push(...content.split(/\r?\n/))
-							break
-						}
-					} catch {
-						// keep trying others
-					}
-				}
-			}
-		}
-
-		let ign = ignore()
-		if (allIgnoreLines.length > 0) {
-			ign = ignore().add(allIgnoreLines)
-		}
-
-		// Optional: add a few extremely common fallbacks to reduce noise/perf impact
-		// only when not already covered (safe, minimal defaults)
-		ign.add(['.git', '.hg', '.svn'])
-
-		// Create ignore object for user-defined excluded patterns
-		const userIgnore = ignore().add(excludedDirs)
+		const allIgnoreLines = await loadIgnoreRulesForRoot(
+			rootUri.fsPath,
+			useGitignore,
+		)
+		const ctx = buildIgnoreContext(rootUri, excludedDirs, allIgnoreLines)
 
 		const subItems = await readDirectoryRecursiveForRoot(
 			rootUri,
-			rootUri, // rootUri itself is the base for relative ignore paths
-			excludedDirs,
-			ign,
-			userIgnore,
+			rootUri,
+			ctx,
+			budget,
+			0,
+			signal,
 		)
 
-		const rootItem: VscodeTreeItem = {
-			label: folder.name, // Use workspace folder name as label
-			value: rootUri.toString(), // Use root URI string as value
-			icons: FOLDER_ICONS, // Root is a folder
-			subItems: subItems,
-			// Optionally, mark as open by default
-			// open: true,
-		}
-		allRootItems.push(rootItem)
+		allRootItems.push({
+			label: folder.name,
+			value: rootUri.toString(),
+			icons: FOLDER_ICONS,
+			subItems,
+		})
 	}
 
-	return allRootItems
+	return { roots: allRootItems, truncated: budget.truncated }
+}
+
+export interface ListFilesResult {
+	uris: string[]
+	truncated: boolean
+}
+
+/**
+ * Lists file URIs under a folder URI (for select-all), respecting ignores and caps.
+ */
+export async function listFilesUnderUri(
+	targetUriString: string,
+	excludedDirs: string[],
+	options?: FileTreeOptions,
+): Promise<ListFilesResult> {
+	const signal = options?.signal
+	throwIfAborted(signal)
+
+	const targetUri = vscode.Uri.parse(targetUriString)
+	const stat = await vscode.workspace.fs.stat(targetUri)
+
+	const ctx = await createIgnoreContextForUri(targetUri, excludedDirs, options)
+	const uris: string[] = []
+	let truncated = false
+
+	const relativeSelf = path.relative(ctx.rootUri.fsPath, targetUri.fsPath)
+
+	if (stat.type === vscode.FileType.File) {
+		if (!shouldIgnorePath(relativeSelf, ctx)) {
+			uris.push(targetUri.toString())
+		}
+		return { uris, truncated: false }
+	}
+
+	const queue: vscode.Uri[] = [targetUri]
+	let visited = 0
+
+	while (queue.length > 0) {
+		throwIfAborted(signal)
+		const currentUri = queue.shift()!
+		let entries: [string, vscode.FileType][]
+		try {
+			entries = await vscode.workspace.fs.readDirectory(currentUri)
+		} catch {
+			continue
+		}
+
+		for (const [name, type] of entries) {
+			throwIfAborted(signal)
+			if (uris.length >= MAX_LIST_FILES) {
+				truncated = true
+				return { uris, truncated }
+			}
+
+			const entryUri = vscode.Uri.joinPath(currentUri, name)
+			const relativePathForIgnore = path.relative(
+				ctx.rootUri.fsPath,
+				entryUri.fsPath,
+			)
+
+			if (shouldIgnorePath(relativePathForIgnore, ctx)) {
+				continue
+			}
+
+			visited++
+			if (visited > MAX_TREE_NODES) {
+				truncated = true
+				return { uris, truncated }
+			}
+
+			if (type === vscode.FileType.File) {
+				uris.push(entryUri.toString())
+			} else if (type === vscode.FileType.Directory) {
+				queue.push(entryUri)
+			}
+		}
+	}
+
+	return { uris, truncated }
 }

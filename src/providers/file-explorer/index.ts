@@ -3,21 +3,26 @@ import * as vscode from 'vscode'
 import path from 'node:path'
 import {
 	generateFileContents,
-	generateFileMap,
+	generateFileMapFromSelections,
 	generatePrompt,
 } from '../../prompts'
 import { telemetry } from '../../services/telemetry'
 import { countManyWithInfo, encodeText } from '../../services/token-counter'
-import type { VscodeTreeItem } from '../../types'
-import { getWorkspaceFileTree } from '../../utils/file-system'
+import {
+	getDirectoryChildren,
+	getWorkspaceRoots,
+	listFilesUnderUri,
+} from '../../utils/file-system'
 import { getLanguageIdFromPath } from '../../utils/language-detection'
 import { parseXmlResponse } from '../../utils/xml-parser'
 import { applyFileActions } from './file-action-handler'
 import { getHtmlForWebview } from './html-generator'
 import type {
 	CopyContextPayload,
+	GetDirectoryChildrenPayload,
 	GetFileTreePayload,
 	GetTokenCountsPayload,
+	ListFilesUnderUriPayload,
 	OpenFilePayload,
 	SaveSettingsPayload,
 	UpdateSettingsPayload,
@@ -28,11 +33,25 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 
 	private _view?: vscode.WebviewView
 	private _context: vscode.ExtensionContext
-	private _fullTreeCache: VscodeTreeItem[] = [] // Cache for the full file tree
-	private _isBuildingTree = false // Prevent overlapping tree builds
-	private _treeBuildTimeout: NodeJS.Timeout | null = null // Timeout for tree building
-	// Always-excluded patterns that never show in the UI; keep minimal (.git only)
-	private readonly _excludedDirs = ['.git', '.hg', '.svn']
+	private _isBuildingTree = false
+	private _treeBuildAbort: AbortController | null = null
+	private _treeBuildTimeout: NodeJS.Timeout | null = null
+	private _pendingFileTreePayload: GetFileTreePayload | undefined
+	private readonly _excludedDirs = [
+		'.git',
+		'.hg',
+		'.svn',
+		'node_modules',
+		'dist',
+		'build',
+		'.next',
+		'out',
+		'vendor',
+		'target',
+		'.turbo',
+		'.cache',
+		'coverage',
+	]
 	private static readonly EXCLUDED_FOLDERS_KEY = 'overwrite.excludedFolders'
 	private static readonly READ_GITIGNORE_KEY = 'overwrite.readGitignore'
 
@@ -130,8 +149,17 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 						}
 						break
 					case 'getFileTree':
-						// Payload may contain excluded folders
 						await this._handleGetFileTree(message.payload as GetFileTreePayload)
+						break
+					case 'getDirectoryChildren':
+						await this._handleGetDirectoryChildren(
+							message.payload as GetDirectoryChildrenPayload,
+						)
+						break
+					case 'listFilesUnderUri':
+						await this._handleListFilesUnderUri(
+							message.payload as ListFilesUnderUriPayload,
+						)
 						break
 					case 'getSettings':
 						await this._handleGetSettings()
@@ -400,91 +428,161 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	private _resolveExcludedDirs(payload?: {
+		excludedFolders?: string
+	}): string[] {
+		const excludedFoldersArray = payload?.excludedFolders
+			? payload.excludedFolders
+					.split(/\r?\n/)
+					.map((line) => line.trim())
+					.filter((line) => line.length > 0 && !line.startsWith('#'))
+			: this._loadSettings()
+					.excludedFolders.split(/\r?\n/)
+					.map((line) => line.trim())
+					.filter((line) => line.length > 0 && !line.startsWith('#'))
+		return [...this._excludedDirs, ...excludedFoldersArray]
+	}
+
+	private _readGitignoreFromPayload(payload?: {
+		readGitignore?: boolean
+	}): boolean {
+		return payload?.readGitignore ?? this._loadSettings().readGitignore
+	}
+
 	/**
-	 * Fetches the file tree and sends it to the webview.
+	 * Fetches shallow workspace roots and sends them to the webview.
 	 */
 	private async _handleGetFileTree(
 		payload?: GetFileTreePayload,
 	): Promise<void> {
 		if (!this._view) return
 
+		if (this._isBuildingTree) {
+			this._pendingFileTreePayload = payload
+			return
+		}
+
+		await this._runGetFileTree(payload)
+	}
+
+	private async _runGetFileTree(payload?: GetFileTreePayload): Promise<void> {
+		if (!this._view) return
+
+		this._isBuildingTree = true
+		this._treeBuildAbort?.abort()
+		this._treeBuildAbort = new AbortController()
+		const signal = this._treeBuildAbort.signal
+
+		if (this._treeBuildTimeout) {
+			clearTimeout(this._treeBuildTimeout)
+		}
+		this._treeBuildTimeout = setTimeout(() => {
+			this._treeBuildAbort?.abort()
+		}, 30000)
+
 		try {
-			// Clear any existing timeout
-			if (this._treeBuildTimeout) {
-				clearTimeout(this._treeBuildTimeout)
-				this._treeBuildTimeout = null
-			}
+			const allExcludedDirs = this._resolveExcludedDirs(payload)
+			const result = await getWorkspaceRoots(allExcludedDirs, {
+				useGitignore: this._readGitignoreFromPayload(payload),
+				signal,
+			})
 
-			if (this._isBuildingTree) {
-				// Set a timeout to prevent infinite blocking
-				this._treeBuildTimeout = setTimeout(() => {
-					this._isBuildingTree = false
-					this._treeBuildTimeout = null
-					console.warn('Tree building operation timed out after 30 seconds')
-					this._view?.webview.postMessage({
-						command: 'showError',
-						message: 'Tree building operation timed out. Please try again.',
-					})
-					vscode.window.showErrorMessage(
-						'Tree building operation timed out. Please try again.',
-					)
-				}, 30000) // 30 second timeout
-
+			if (signal.aborted) {
 				return
 			}
 
-			this._isBuildingTree = true
-
-			// Set a timeout for this operation
-			const timeoutPromise = new Promise<never>((_, reject) => {
-				this._treeBuildTimeout = setTimeout(() => {
-					reject(
-						new Error('Tree building operation timed out after 30 seconds'),
-					)
-				}, 30000)
-			})
-
-			// Race the tree building against the timeout
-			const excludedFoldersArray = payload?.excludedFolders
-				? payload.excludedFolders
-						.split(/\r?\n/)
-						.map((line) => line.trim())
-						.filter((line) => line.length > 0 && !line.startsWith('#'))
-				: this._loadSettings()
-						.excludedFolders.split(/\r?\n/)
-						.map((line) => line.trim())
-						.filter((line) => line.length > 0 && !line.startsWith('#'))
-
-			// Combine with default excluded dirs
-			const allExcludedDirs = [...this._excludedDirs, ...excludedFoldersArray]
-
-			const workspaceFiles = await Promise.race([
-				getWorkspaceFileTree(allExcludedDirs, {
-					useGitignore:
-						payload?.readGitignore ?? this._loadSettings().readGitignore,
-				}),
-				timeoutPromise,
-			])
-
-			this._fullTreeCache = workspaceFiles // Cache the full tree
 			this._view.webview.postMessage({
 				command: 'updateFileTree',
-				payload: workspaceFiles,
+				payload: {
+					tree: result.roots,
+					truncated: result.truncated,
+				},
 			})
 		} catch (error) {
+			if (signal.aborted) {
+				this._view.webview.postMessage({
+					command: 'showError',
+					message: 'Tree building operation timed out. Please try again.',
+				})
+				return
+			}
 			this._handleError(error, 'Error getting workspace files')
-			// Optionally send specific error state to webview
 			this._view.webview.postMessage({
 				command: 'showError',
 				message: `Error getting workspace files: ${error instanceof Error ? error.message : String(error)}`,
 			})
 		} finally {
-			// Clear the flag and timeout
 			this._isBuildingTree = false
 			if (this._treeBuildTimeout) {
 				clearTimeout(this._treeBuildTimeout)
 				this._treeBuildTimeout = null
 			}
+			this._treeBuildAbort = null
+
+			const pending = this._pendingFileTreePayload
+			this._pendingFileTreePayload = undefined
+			if (pending !== undefined) {
+				await this._runGetFileTree(pending)
+			}
+		}
+	}
+
+	private async _handleGetDirectoryChildren(
+		payload: GetDirectoryChildrenPayload,
+	): Promise<void> {
+		if (!this._view || !payload?.parentUri) return
+
+		try {
+			const allExcludedDirs = this._resolveExcludedDirs(payload)
+			const result = await getDirectoryChildren(
+				payload.parentUri,
+				allExcludedDirs,
+				{
+					useGitignore: this._readGitignoreFromPayload(payload),
+				},
+			)
+
+			this._view.webview.postMessage({
+				command: 'updateDirectoryChildren',
+				parentUri: payload.parentUri,
+				children: result.roots,
+				truncated: result.truncated,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error loading directory children')
+		}
+	}
+
+	private async _handleListFilesUnderUri(
+		payload: ListFilesUnderUriPayload,
+	): Promise<void> {
+		if (!this._view || !payload?.parentUri || !payload.requestId) return
+
+		try {
+			const allExcludedDirs = this._resolveExcludedDirs(payload)
+			const result = await listFilesUnderUri(
+				payload.parentUri,
+				allExcludedDirs,
+				{
+					useGitignore: this._readGitignoreFromPayload(payload),
+				},
+			)
+
+			this._view.webview.postMessage({
+				command: 'listFilesUnderUriResponse',
+				requestId: payload.requestId,
+				uris: result.uris,
+				truncated: result.truncated,
+			})
+		} catch (error) {
+			this._handleError(error, 'Error listing files under folder')
+			this._view.webview.postMessage({
+				command: 'listFilesUnderUriResponse',
+				requestId: payload.requestId,
+				uris: [],
+				truncated: false,
+				error: error instanceof Error ? error.message : String(error),
+			})
 		}
 	}
 
@@ -550,23 +648,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 				includeXml,
 			})
 
-			// Ensure fullTreeCache is populated
-			if (this._fullTreeCache.length === 0) {
-				console.log('Full tree cache empty, fetching...')
-				// Refetch if cache is empty (should ideally not happen if getFileTree was called)
-				await this._handleGetFileTree()
-				if (this._fullTreeCache.length === 0) {
-					throw new Error('Failed to populate file tree cache.')
-				}
-			}
-
-			// Generate components using imported functions
-			// TODO: Update generateFileMap and generateFileContents to handle selectedUriStrings and multi-root logic
-			// For now, this will likely break or produce incorrect results until those functions are updated.
-			const fileMap = generateFileMap(
-				this._fullTreeCache, // Use cached tree, which is now multi-root
-				selectedUriStrings, // Pass Set of URI strings
-			)
+			const fileMap = generateFileMapFromSelections(selectedUriStrings)
 			const fileContents = await generateFileContents(
 				selectedUriStrings, // Pass Set of URI strings
 			)
