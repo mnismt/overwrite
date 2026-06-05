@@ -9,6 +9,8 @@ import {
 import { telemetry } from '../../services/telemetry'
 import { countManyWithInfo, encodeText } from '../../services/token-counter'
 import {
+	type ListFilesProgress,
+	type ListFilesResult,
 	getDirectoryChildren,
 	getWorkspaceRoots,
 	listFilesUnderUri,
@@ -28,6 +30,21 @@ import type {
 	UpdateSettingsPayload,
 } from './types'
 
+const LIST_FILES_TIMEOUT_MS = 45_000
+
+interface InFlightListFilesRequest {
+	key: string
+	controller: AbortController
+	timeout: NodeJS.Timeout
+	timedOut: boolean
+	requestIds: Set<string>
+	promise: Promise<ListFilesResult>
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error && error.name === 'AbortError'
+}
+
 export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'overwriteFilesWebview'
 
@@ -37,6 +54,10 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	private _treeBuildAbort: AbortController | null = null
 	private _treeBuildTimeout: NodeJS.Timeout | null = null
 	private _pendingFileTreePayload: GetFileTreePayload | undefined
+	private readonly _listFilesByParent = new Map<
+		string,
+		InFlightListFilesRequest
+	>()
 	private readonly _excludedDirs = [
 		'.git',
 		'.hg',
@@ -558,32 +579,113 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 	): Promise<void> {
 		if (!this._view || !payload?.parentUri || !payload.requestId) return
 
-		try {
-			const allExcludedDirs = this._resolveExcludedDirs(payload)
-			const result = await listFilesUnderUri(
-				payload.parentUri,
-				allExcludedDirs,
-				{
-					useGitignore: this._readGitignoreFromPayload(payload),
-				},
-			)
+		const parentUri = payload.parentUri
+		const requestId = payload.requestId
+		const allExcludedDirs = this._resolveExcludedDirs(payload)
+		const useGitignore = this._readGitignoreFromPayload(payload)
+		const requestKey = JSON.stringify({
+			parentUri,
+			excludedDirs: allExcludedDirs,
+			useGitignore,
+		})
+		const existing = this._listFilesByParent.get(parentUri)
 
-			this._view.webview.postMessage({
-				command: 'listFilesUnderUriResponse',
-				requestId: payload.requestId,
-				uris: result.uris,
-				truncated: result.truncated,
+		if (existing && existing.key === requestKey) {
+			existing.requestIds.add(requestId)
+			this._postListFilesProgress(existing, {
+				filesFound: 0,
+				nodesVisited: 0,
+				truncated: false,
 			})
+			try {
+				await this._respondWhenListFilesCompletes(existing, requestId)
+			} catch (error) {
+				this._view?.webview.postMessage({
+					command: 'listFilesUnderUriResponse',
+					requestId,
+					uris: [],
+					truncated: false,
+					aborted: isAbortError(error) && !existing.timedOut,
+					error: error instanceof Error ? error.message : String(error),
+				})
+			}
+			return
+		}
+
+		if (existing) {
+			existing.controller.abort()
+			clearTimeout(existing.timeout)
+			this._listFilesByParent.delete(parentUri)
+		}
+
+		const controller = new AbortController()
+		let inFlight: InFlightListFilesRequest
+		const timeout = setTimeout(() => {
+			if (inFlight) inFlight.timedOut = true
+			controller.abort()
+		}, LIST_FILES_TIMEOUT_MS)
+		const promise = listFilesUnderUri(parentUri, allExcludedDirs, {
+			useGitignore,
+			signal: controller.signal,
+			onProgress: (progress) => this._postListFilesProgress(inFlight, progress),
+		})
+		inFlight = {
+			key: requestKey,
+			controller,
+			timeout,
+			timedOut: false,
+			requestIds: new Set([requestId]),
+			promise,
+		}
+		this._listFilesByParent.set(parentUri, inFlight)
+
+		try {
+			await this._respondWhenListFilesCompletes(inFlight, requestId)
 		} catch (error) {
-			this._handleError(error, 'Error listing files under folder')
-			this._view.webview.postMessage({
+			const aborted = isAbortError(error) && !inFlight.timedOut
+			if (!aborted) {
+				this._handleError(error, 'Error listing files under folder')
+			}
+			this._view?.webview.postMessage({
 				command: 'listFilesUnderUriResponse',
-				requestId: payload.requestId,
+				requestId,
 				uris: [],
 				truncated: false,
+				aborted,
 				error: error instanceof Error ? error.message : String(error),
 			})
+		} finally {
+			if (this._listFilesByParent.get(parentUri) === inFlight) {
+				this._listFilesByParent.delete(parentUri)
+			}
+			clearTimeout(timeout)
 		}
+	}
+
+	private _postListFilesProgress(
+		request: InFlightListFilesRequest,
+		progress: ListFilesProgress,
+	): void {
+		for (const requestId of request.requestIds) {
+			this._view?.webview.postMessage({
+				command: 'listFilesUnderUriProgress',
+				requestId,
+				...progress,
+			})
+		}
+	}
+
+	private async _respondWhenListFilesCompletes(
+		request: InFlightListFilesRequest,
+		requestId: string,
+	): Promise<void> {
+		const result = await request.promise
+		this._view?.webview.postMessage({
+			command: 'listFilesUnderUriResponse',
+			requestId,
+			uris: result.uris,
+			truncated: result.truncated,
+		})
 	}
 
 	/**
@@ -1112,21 +1214,12 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			const urisToCount = Array.isArray(payload?.selectedUris)
 				? payload.selectedUris
 				: []
+			const tokenRequestId = payload?.requestId
 
 			const uris = urisToCount.map((uriString) => vscode.Uri.parse(uriString))
 
-			// Calculate total selected size for bucketing
-			let totalSizeBytes = 0
-			for (const uri of uris) {
-				try {
-					const stat = await vscode.workspace.fs.stat(uri)
-					if (stat.type === vscode.FileType.File) {
-						totalSizeBytes += stat.size
-					}
-				} catch {
-					// Skip files that can't be accessed
-				}
-			}
+			const { tokenCounts, skippedFiles, totalSizeBytes } =
+				await countManyWithInfo(uris)
 
 			// Track token count started
 			try {
@@ -1137,8 +1230,6 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			} catch (e) {
 				console.warn('[telemetry] failed to capture token_count_started', e)
 			}
-
-			const { tokenCounts, skippedFiles } = await countManyWithInfo(uris)
 
 			const duration = Date.now() - startTime
 			const totalTokens = Object.values(tokenCounts).reduce(
@@ -1160,7 +1251,7 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			// Send the results back to the webview
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts, skippedFiles },
+				payload: { requestId: tokenRequestId, tokenCounts, skippedFiles },
 			})
 
 			// Log skipped files for debugging
@@ -1184,7 +1275,11 @@ export class FileExplorerWebviewProvider implements vscode.WebviewViewProvider {
 			// Send empty counts back on error
 			this._view.webview.postMessage({
 				command: 'updateTokenCounts',
-				payload: { tokenCounts: {}, skippedFiles: [] },
+				payload: {
+					requestId: payload?.requestId,
+					tokenCounts: {},
+					skippedFiles: [],
+				},
 			})
 		}
 	}

@@ -46,6 +46,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [, setPrevFileTreeData] = useState<VscodeTreeItem[]>([])
 	const [expandedUris, setExpandedUris] = useState<Set<string>>(() => new Set())
+	const [listingFolderUris, setListingFolderUris] = useState<Set<string>>(
+		() => new Set(),
+	)
+	const [listingFileCounts, setListingFileCounts] = useState<
+		Map<string, number>
+	>(() => new Map())
 
 	const deferredSelectedUris = useDeferredValue(selectedUris)
 	const deferredTokenCounts = useDeferredValue(actualTokenCounts)
@@ -103,27 +109,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	}, [fileTreeData, searchQuery])
 
 	const index = useMemo(() => buildTreeIndex(visibleItems), [visibleItems])
+	const fullTreeIndex = useMemo(
+		() => buildTreeIndex(fileTreeData),
+		[fileTreeData],
+	)
 
 	const selectedUrisRef = useRef(selectedUris)
 	const indexRef = useRef(index)
-	const fileTreeRef = useRef(fileTreeData)
+	const fullTreeIndexRef = useRef(fullTreeIndex)
 	selectedUrisRef.current = selectedUris
 	indexRef.current = index
-	fileTreeRef.current = fileTreeData
-
-	const findItemByUri = useCallback(
-		(items: VscodeTreeItem[], uri: string): VscodeTreeItem | undefined => {
-			for (const item of items) {
-				if (item.value === uri) return item
-				if (item.subItems) {
-					const found = findItemByUri(item.subItems, uri)
-					if (found) return found
-				}
-			}
-			return undefined
-		},
-		[],
-	)
+	fullTreeIndexRef.current = fullTreeIndex
 
 	const toggleFolderExpanded = useCallback(
 		(uri: string) => {
@@ -133,7 +129,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					next.delete(uri)
 				} else {
 					next.add(uri)
-					const item = findItemByUri(fileTreeRef.current, uri)
+					const item = fullTreeIndexRef.current.nodes.get(uri)?.item
 					if (item && folderNeedsLoad(item)) {
 						onLoadChildren(uri)
 					}
@@ -141,7 +137,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 				return next
 			})
 		},
-		[findItemByUri, onLoadChildren],
+		[onLoadChildren],
 	)
 
 	const { selectedCountMap, tokenTotalsMap } = useMemo(() => {
@@ -180,19 +176,38 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	const selectAllInSubtree = useCallback(
 		(uri: string) => {
 			setTimeout(async () => {
+				setListingFolderUris((prev) => new Set(prev).add(uri))
 				try {
-					const { uris } = await listFilesUnderUriRemote(uri)
+					const { uris } = await listFilesUnderUriRemote(uri, (progress) => {
+						setListingFileCounts((prev) => {
+							const next = new Map(prev)
+							next.set(uri, progress.filesFound)
+							return next
+						})
+					})
 					const next = new Set(selectedUrisRef.current)
 					next.add(uri)
 					for (const u of uris) next.add(u)
 					startTransition(() => onSelect(next))
 				} catch (err) {
+					if (err instanceof Error && err.name === 'AbortError') return
 					console.error('selectAllInSubtree failed:', err)
 					const node = indexRef.current.nodes.get(uri)
 					if (!node) return
 					const next = new Set(selectedUrisRef.current)
 					for (const u of getAllDescendantPaths(node.item)) next.add(u)
 					startTransition(() => onSelect(next))
+				} finally {
+					setListingFolderUris((prev) => {
+						const next = new Set(prev)
+						next.delete(uri)
+						return next
+					})
+					setListingFileCounts((prev) => {
+						const next = new Map(prev)
+						next.delete(uri)
+						return next
+					})
 				}
 			}, 0)
 		},
@@ -202,8 +217,15 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 	const deselectAllInSubtree = useCallback(
 		(uri: string) => {
 			setTimeout(async () => {
+				setListingFolderUris((prev) => new Set(prev).add(uri))
 				try {
-					const { uris } = await listFilesUnderUriRemote(uri)
+					const { uris } = await listFilesUnderUriRemote(uri, (progress) => {
+						setListingFileCounts((prev) => {
+							const next = new Map(prev)
+							next.set(uri, progress.filesFound)
+							return next
+						})
+					})
 					const next = new Set(selectedUrisRef.current)
 					next.delete(uri)
 					for (const u of uris) next.delete(u)
@@ -212,12 +234,24 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 						for (const u of getAllDescendantPaths(node.item)) next.delete(u)
 					}
 					startTransition(() => onSelect(next))
-				} catch {
+				} catch (err) {
+					if (err instanceof Error && err.name === 'AbortError') return
 					const node = indexRef.current.nodes.get(uri)
 					if (!node) return
 					const next = new Set(selectedUrisRef.current)
 					for (const u of getAllDescendantPaths(node.item)) next.delete(u)
 					startTransition(() => onSelect(next))
+				} finally {
+					setListingFolderUris((prev) => {
+						const next = new Set(prev)
+						next.delete(uri)
+						return next
+					})
+					setListingFileCounts((prev) => {
+						const next = new Map(prev)
+						next.delete(uri)
+						return next
+					})
 				}
 			}, 0)
 		},
@@ -250,6 +284,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			const fileSelected = !isFolder && deferredSelectedUris.has(item.value)
 			const fileTokens = !isFolder ? deferredTokenCounts[item.value] || 0 : 0
 			const isOpen = expandedUris.has(item.value)
+			const isListingFiles = listingFolderUris.has(item.value)
+			const listingFileCount = listingFileCounts.get(item.value) ?? 0
 
 			return (
 				<TreeNode
@@ -259,6 +295,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 					isFolder={isFolder}
 					isOpen={isOpen}
 					isLoadingChildren={loadingFolderUris.has(item.value)}
+					isListingFiles={isListingFiles}
+					listingFileCount={listingFileCount}
 					totalDescendantFiles={totalDescFiles}
 					selectedDescendantFiles={selectedDescFiles}
 					folderSelectionState={folderState}
@@ -287,12 +325,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 			const uri = itemEl.getAttribute('data-uri')
 			if (!uri) return
 
-			const item = findItemByUri(fileTreeRef.current, uri)
-			if (!item || !isFolderItem(item)) return
+			const node = fullTreeIndexRef.current.nodes.get(uri)
+			if (!node?.isFolder) return
 
 			toggleFolderExpanded(uri)
 		},
-		[findItemByUri, toggleFolderExpanded],
+		[toggleFolderExpanded],
 	)
 
 	const handleTreeDoubleClick = useCallback((e: React.MouseEvent) => {

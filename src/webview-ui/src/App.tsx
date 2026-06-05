@@ -1,10 +1,13 @@
 import type { VscTabsSelectEvent } from '@vscode-elements/elements/dist/vscode-tabs/vscode-tabs'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VscodeTreeItem } from './types' // Import tree item type from local types
 import './App.css'
 import ApplyTab from './components/apply-tab/index'
 import ContextTab from './components/context-tab'
-import { mergeChildren } from './components/context-tab/file-explorer/tree-merge'
+import {
+	buildTreeIndex,
+	mergeChildrenIntoIndexedTree,
+} from './components/context-tab/file-explorer/tree-index'
 import SettingsTab from './components/settings-tab'
 import { getVsCodeApi } from './utils/vscode' // Import the new utility
 
@@ -65,6 +68,7 @@ function App() {
 	)
 	const [excludedFolders, setExcludedFolders] = useState<string>('') // Persisted excluded folders
 	const [readGitignore, setReadGitignore] = useState<boolean>(true)
+	const treeIndexRef = useRef(buildTreeIndex([]))
 
 	// Send message to extension using the utility
 	const sendMessage = useCallback((command: string, payload?: unknown) => {
@@ -158,6 +162,7 @@ function App() {
 					const { tree, truncated } = parseUpdateFileTreePayload(
 						message.payload,
 					)
+					treeIndexRef.current = buildTreeIndex(tree)
 					setFileTreeData(tree)
 					setTreeTruncated(truncated)
 					setLoadingFolderUris(new Set())
@@ -167,9 +172,16 @@ function App() {
 				case 'updateDirectoryChildren': {
 					const msg = message as unknown as UpdateDirectoryChildrenMessage
 					if (msg.parentUri && Array.isArray(msg.children)) {
-						setFileTreeData((prev) =>
-							mergeChildren(prev, msg.parentUri, msg.children),
-						)
+						setFileTreeData((prev) => {
+							const merged = mergeChildrenIntoIndexedTree(
+								prev,
+								treeIndexRef.current,
+								msg.parentUri,
+								msg.children,
+							)
+							treeIndexRef.current = merged.index
+							return merged.tree
+						})
 						setLoadingFolderUris((prev) => {
 							const next = new Set(prev)
 							next.delete(msg.parentUri)
@@ -180,6 +192,8 @@ function App() {
 					break
 				}
 				case 'listFilesUnderUriResponse':
+					break
+				case 'listFilesUnderUriProgress':
 					break
 				case 'showError':
 					// Display error message in a dismissible banner
