@@ -4,6 +4,11 @@ const LIST_FILES_TIMEOUT_MS = 60_000
 
 export function listFilesUnderUriRemote(
 	parentUri: string,
+	onProgress?: (progress: {
+		filesFound: number
+		nodesVisited: number
+		truncated: boolean
+	}) => void,
 ): Promise<{ uris: string[]; truncated: boolean }> {
 	return new Promise((resolve, reject) => {
 		const requestId = `list-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -18,6 +23,22 @@ export function listFilesUnderUriRemote(
 				requestId?: string
 				uris?: string[]
 				truncated?: boolean
+				filesFound?: number
+				nodesVisited?: number
+				error?: string
+				aborted?: boolean
+			}
+			if (
+				msg.command === 'listFilesUnderUriProgress' &&
+				msg.requestId === requestId
+			) {
+				onProgress?.({
+					filesFound: typeof msg.filesFound === 'number' ? msg.filesFound : 0,
+					nodesVisited:
+						typeof msg.nodesVisited === 'number' ? msg.nodesVisited : 0,
+					truncated: Boolean(msg.truncated),
+				})
+				return
 			}
 			if (
 				msg.command === 'listFilesUnderUriResponse' &&
@@ -25,6 +46,12 @@ export function listFilesUnderUriRemote(
 			) {
 				clearTimeout(timeout)
 				window.removeEventListener('message', handler)
+				if (msg.error) {
+					const error = new Error(msg.error)
+					if (msg.aborted) error.name = 'AbortError'
+					reject(error)
+					return
+				}
 				resolve({
 					uris: Array.isArray(msg.uris) ? msg.uris : [],
 					truncated: Boolean(msg.truncated),

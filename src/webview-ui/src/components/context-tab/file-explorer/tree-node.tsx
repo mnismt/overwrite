@@ -9,6 +9,8 @@ interface TreeNodeProps {
 	isFolder: boolean
 	isOpen: boolean
 	isLoadingChildren: boolean
+	isListingFiles: boolean
+	listingFileCount: number
 	totalDescendantFiles: number
 	selectedDescendantFiles: number
 	folderSelectionState: FolderSelectionState
@@ -27,6 +29,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 	isFolder,
 	isOpen,
 	isLoadingChildren,
+	isListingFiles,
+	listingFileCount,
 	totalDescendantFiles,
 	selectedDescendantFiles,
 	folderSelectionState,
@@ -56,6 +60,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 					<span className="truncate">{item.label}</span>
 					{isLoadingChildren ? (
 						<span className="text-muted text-xs ml-2">Loading…</span>
+					) : null}
+					{isListingFiles ? (
+						<span className="text-muted text-xs ml-2">
+							{listingFileCount > 0
+								? `Selecting ${listingFileCount}…`
+								: 'Selecting…'}
+						</span>
 					) : null}
 				</div>
 				<div className="flex items-center gap-2">
@@ -88,6 +99,8 @@ function areEqual(prev: TreeNodeProps, next: TreeNodeProps): boolean {
 		prev.isFolder === next.isFolder &&
 		prev.isOpen === next.isOpen &&
 		prev.isLoadingChildren === next.isLoadingChildren &&
+		prev.isListingFiles === next.isListingFiles &&
+		prev.listingFileCount === next.listingFileCount &&
 		prev.totalDescendantFiles === next.totalDescendantFiles &&
 		prev.selectedDescendantFiles === next.selectedDescendantFiles &&
 		prev.folderSelectionState === next.folderSelectionState &&

@@ -133,6 +133,7 @@ export async function countTokens(uri: vscode.Uri): Promise<number> {
  */
 export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 	tokens: number
+	sizeBytes: number
 	skipped?: SkippedFileInfo
 }> {
 	try {
@@ -140,24 +141,24 @@ export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 
 		// Only process files
 		if (stats.type !== vscode.FileType.File) {
-			return { tokens: 0 }
+			return { tokens: 0, sizeBytes: 0 }
 		}
 
-		const stats2 = await stat(uri.fsPath)
-		const mtime = Math.floor(stats2.mtime.getTime() / 1000)
-		const size = stats2.size
+		const mtime = Math.floor(stats.mtime / 1000)
+		const size = stats.size
 
 		// 1️⃣ Cache hit?
 		const key = uri.fsPath
 		const entry = cache.get(key)
 		if (entry && entry.mtime === mtime && entry.size === size) {
-			return { tokens: entry.tokens }
+			return { tokens: entry.tokens, sizeBytes: size }
 		}
 
 		// 2️⃣ Safeguards
 		if (size > MAX_BYTES) {
 			return {
 				tokens: 0,
+				sizeBytes: size,
 				skipped: {
 					uri: uri.toString(),
 					reason: 'too-large',
@@ -169,70 +170,74 @@ export async function countTokensWithInfo(uri: vscode.Uri): Promise<{
 		const encoder = await getEncoder()
 
 		// 3️⃣ Stream + incremental encode → memory stays flat
-		return new Promise<{ tokens: number; skipped?: SkippedFileInfo }>(
-			(resolve, reject) => {
-				let tokens = 0
-				let firstChunkProcessed = false
-				let hasError = false
+		return new Promise<{
+			tokens: number
+			sizeBytes: number
+			skipped?: SkippedFileInfo
+		}>((resolve, reject) => {
+			let tokens = 0
+			let firstChunkProcessed = false
+			let hasError = false
 
-				const stream = createReadStream(uri.fsPath, { highWaterMark: 64_000 })
+			const stream = createReadStream(uri.fsPath, { highWaterMark: 64_000 })
 
-				stream.on('data', (chunk: Buffer | string) => {
-					if (hasError) return
+			stream.on('data', (chunk: Buffer | string) => {
+				if (hasError) return
 
-					const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+				const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
 
-					if (!firstChunkProcessed) {
-						firstChunkProcessed = true
-						if (looksBinary(buf)) {
-							// early out for binaries
-							hasError = true
-							stream.destroy()
-							resolve({
-								tokens: 0,
-								skipped: {
-									uri: uri.toString(),
-									reason: 'binary',
-									message: 'Binary file detected',
-								},
-							})
-							return
-						}
-					}
-
-					try {
-						const text = buf.toString('utf8')
-						tokens += encoder.encode(text).length
-					} catch (error) {
+				if (!firstChunkProcessed) {
+					firstChunkProcessed = true
+					if (looksBinary(buf)) {
+						// early out for binaries
 						hasError = true
 						stream.destroy()
-						reject(error)
+						resolve({
+							tokens: 0,
+							sizeBytes: size,
+							skipped: {
+								uri: uri.toString(),
+								reason: 'binary',
+								message: 'Binary file detected',
+							},
+						})
+						return
 					}
-				})
+				}
 
-				stream.on('error', (error) => {
+				try {
+					const text = buf.toString('utf8')
+					tokens += encoder.encode(text).length
+				} catch (error) {
 					hasError = true
-					// Track token counting errors
-					try {
-						telemetry.trackUnhandled('backend', error)
-					} catch (e) {
-						console.warn('[telemetry] failed to track token counter error', e)
-					}
+					stream.destroy()
 					reject(error)
-				})
+				}
+			})
 
-				stream.on('end', () => {
-					if (!hasError) {
-						cache.set(key, { mtime, size, tokens })
-						resolve({ tokens })
-					}
-				})
-			},
-		)
+			stream.on('error', (error) => {
+				hasError = true
+				// Track token counting errors
+				try {
+					telemetry.trackUnhandled('backend', error)
+				} catch (e) {
+					console.warn('[telemetry] failed to track token counter error', e)
+				}
+				reject(error)
+			})
+
+			stream.on('end', () => {
+				if (!hasError) {
+					cache.set(key, { mtime, size, tokens })
+					resolve({ tokens, sizeBytes: size })
+				}
+			})
+		})
 	} catch (error) {
 		// File doesn't exist or can't be accessed
 		return {
 			tokens: 0,
+			sizeBytes: 0,
 			skipped: {
 				uri: uri.toString(),
 				reason: 'error',
@@ -261,6 +266,7 @@ export async function countMany(
 export async function countManyWithInfo(uris: vscode.Uri[]): Promise<{
 	tokenCounts: Record<string, number>
 	skippedFiles: SkippedFileInfo[]
+	totalSizeBytes: number
 }> {
 	const limit = await getLimit()
 	const results = await Promise.all(
@@ -269,19 +275,21 @@ export async function countManyWithInfo(uris: vscode.Uri[]): Promise<{
 
 	const tokenCounts: Record<string, number> = {}
 	const skippedFiles: SkippedFileInfo[] = []
+	let totalSizeBytes = 0
 
 	for (let i = 0; i < uris.length; i++) {
 		const uriString = uris[i].toString()
 		const result = results[i]
 
 		tokenCounts[uriString] = result.tokens
+		totalSizeBytes += result.sizeBytes
 
 		if (result.skipped) {
 			skippedFiles.push(result.skipped)
 		}
 	}
 
-	return { tokenCounts, skippedFiles }
+	return { tokenCounts, skippedFiles, totalSizeBytes }
 }
 
 /**

@@ -18,7 +18,7 @@ import type { VscodeTreeItem } from '../types'
 
 type ExcludedFoldersPayload = { excludedFolders: string }
 type SaveSettingsPayload = { excludedFolders: string; readGitignore: boolean }
-type TokenCountsPayload = { selectedUris: string[] }
+type TokenCountsPayload = { selectedUris: string[]; requestId?: string }
 type TokenCountPayload = { text: string; requestId: string }
 type OpenFilePayload = { fileUri: string }
 
@@ -475,10 +475,18 @@ export function createMockVsCodeApi(): VsCodeApi {
 						const parentUri = p?.parentUri ?? ''
 						const requestId = p?.requestId ?? ''
 						const item = findItemByUri(fileTree, parentUri)
+						const uris = item ? collectFileUrisUnder(item) : []
+						sendToWebview({
+							command: 'listFilesUnderUriProgress',
+							requestId,
+							filesFound: uris.length,
+							nodesVisited: uris.length,
+							truncated: false,
+						})
 						sendToWebview({
 							command: 'listFilesUnderUriResponse',
 							requestId,
-							uris: item ? collectFileUrisUnder(item) : [],
+							uris,
 							truncated: false,
 						})
 						break
@@ -524,13 +532,16 @@ export function createMockVsCodeApi(): VsCodeApi {
 						const selectedUris: string[] = isTokenCountsPayload(payload)
 							? payload.selectedUris
 							: []
+						const requestId = isTokenCountsPayload(payload)
+							? payload.requestId
+							: undefined
 						const tokenCounts: Record<string, number> = {}
 						for (const uri of selectedUris) {
 							tokenCounts[uri] = Math.max(10, estimateTokensFromText(uri) * 3)
 						}
 						sendToWebview({
 							command: 'updateTokenCounts',
-							payload: { tokenCounts, skippedFiles: [] },
+							payload: { requestId, tokenCounts, skippedFiles: [] },
 						})
 						break
 					}

@@ -13,6 +13,7 @@ export interface CopyContextPayload {
 // defining it here for clarity or future use if refactored.
 export interface GetTokenCountsPayload {
 	selectedUris: string[] // Array of URI strings
+	requestId?: string
 }
 
 export interface GetFileTreePayload {

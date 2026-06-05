@@ -119,6 +119,7 @@ const FILE_ICONS = {
 export interface FileTreeOptions {
 	useGitignore?: boolean
 	signal?: AbortSignal
+	onProgress?: (progress: ListFilesProgress) => void
 }
 
 export interface FileTreeResult {
@@ -730,6 +731,12 @@ export interface ListFilesResult {
 	truncated: boolean
 }
 
+export interface ListFilesProgress {
+	filesFound: number
+	nodesVisited: number
+	truncated: boolean
+}
+
 /**
  * Lists file URIs under a folder URI (for select-all), respecting ignores and caps.
  */
@@ -758,14 +765,31 @@ export async function listFilesUnderUri(
 	}
 
 	const queue: vscode.Uri[] = [targetUri]
+	let cursor = 0
 	let visited = 0
+	let lastProgressAt = Date.now()
 
-	while (queue.length > 0) {
+	const reportProgress = (force = false) => {
+		if (!options?.onProgress) return
+		const now = Date.now()
+		if (!force && now - lastProgressAt < 250) return
+		lastProgressAt = now
+		options.onProgress({
+			filesFound: uris.length,
+			nodesVisited: visited,
+			truncated,
+		})
+	}
+
+	reportProgress(true)
+
+	while (cursor < queue.length) {
 		throwIfAborted(signal)
-		const currentUri = queue.shift()!
+		const currentUri = queue[cursor++]
 		let entries: [string, vscode.FileType][]
 		try {
 			entries = await vscode.workspace.fs.readDirectory(currentUri)
+			reportProgress()
 		} catch {
 			continue
 		}
@@ -774,6 +798,7 @@ export async function listFilesUnderUri(
 			throwIfAborted(signal)
 			if (uris.length >= MAX_LIST_FILES) {
 				truncated = true
+				reportProgress(true)
 				return { uris, truncated }
 			}
 
@@ -790,16 +815,19 @@ export async function listFilesUnderUri(
 			visited++
 			if (visited > MAX_TREE_NODES) {
 				truncated = true
+				reportProgress(true)
 				return { uris, truncated }
 			}
 
 			if (type === vscode.FileType.File) {
 				uris.push(entryUri.toString())
+				reportProgress()
 			} else if (type === vscode.FileType.Directory) {
 				queue.push(entryUri)
 			}
 		}
 	}
 
+	reportProgress(true)
 	return { uris, truncated }
 }

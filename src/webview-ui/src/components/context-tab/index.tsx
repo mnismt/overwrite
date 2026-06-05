@@ -56,6 +56,7 @@ const ContextTab: React.FC<ContextTabProps> = ({
 
 	// Debounce timer for user instructions token counting (use ref to avoid re-renders)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const latestTokenRequestIdRef = useRef<string | null>(null)
 
 	// Constant for XML formatting instructions
 	const XML_INSTRUCTIONS_TOKENS = 5000 // This is an approximation
@@ -110,14 +111,19 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		const vscode = getVsCodeApi()
 		const urisArray = Array.from(selectedUris)
 		if (urisArray.length === 0) {
+			latestTokenRequestIdRef.current = null
 			setActualTokenCounts({})
 			setSkippedFiles([])
 			return
 		}
+		const requestId = `tokens-${Date.now()}-${Math.random()
+			.toString(36)
+			.slice(2)}`
+		latestTokenRequestIdRef.current = requestId
 		const handle = setTimeout(() => {
 			vscode.postMessage({
 				command: 'getTokenCounts',
-				payload: { selectedUris: urisArray },
+				payload: { selectedUris: urisArray, requestId },
 			})
 		}, 200)
 		return () => clearTimeout(handle)
@@ -128,31 +134,40 @@ const ContextTab: React.FC<ContextTabProps> = ({
 		const handleMessage = (event: MessageEvent) => {
 			const message = event.data
 			if (message.command === 'updateTokenCounts') {
+				const requestId = message.payload?.requestId
+				if (
+					typeof requestId === 'string' &&
+					requestId !== latestTokenRequestIdRef.current
+				) {
+					return
+				}
 				const incoming: Record<string, number> =
 					message.payload.tokenCounts || {}
 				// Shallow diff and only update if changed
-				let changed = false
-				const next: Record<string, number> = { ...actualTokenCounts }
-				for (const [k, v] of Object.entries(incoming)) {
-					if (next[k] !== v) {
-						next[k] = v
-						changed = true
+				setActualTokenCounts((current) => {
+					let changed = false
+					const next: Record<string, number> = { ...current }
+					for (const [k, v] of Object.entries(incoming)) {
+						if (next[k] !== v) {
+							next[k] = v
+							changed = true
+						}
 					}
-				}
-				// Remove keys that no longer exist
-				for (const k of Object.keys(next)) {
-					if (!(k in incoming)) {
-						delete next[k]
-						changed = true
+					// Remove keys that no longer exist
+					for (const k of Object.keys(next)) {
+						if (!(k in incoming)) {
+							delete next[k]
+							changed = true
+						}
 					}
-				}
-				if (changed) setActualTokenCounts(next)
+					return changed ? next : current
+				})
 				setSkippedFiles(message.payload.skippedFiles || [])
 			}
 		}
 		window.addEventListener('message', handleMessage)
 		return () => window.removeEventListener('message', handleMessage)
-	}, [actualTokenCounts])
+	}, [])
 
 	const handleRefreshClick = useCallback(() => {
 		// Reset skipped files and token counts when refreshing to clear any deleted files
